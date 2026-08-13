@@ -220,38 +220,91 @@ const PEST_SUR  = {"עכברים":150,"חולדות":150,"מכרסמים":150,"�
 // DATA
 // ═══════════════════════════════════════════════════════
 const initCustomers = [
-  {id:1,name:"דוד כהן",phone:"050-1234567",email:"david@gmail.com",address:"רחוב הרצל 12, תל אביב",propertyType:"דירה",rooms:"3",floor:"2",status:"פעיל",notes:"יש כלב בבית",lastTreatment:"2026-05-15",totalPaid:1240,source:""},
-  {id:2,name:"שרה לוי",phone:"052-9876543",email:"sarah@gmail.com",address:"שדרות רוטשילד 45, תל אביב",propertyType:"עסק",rooms:"",floor:"קרקע",status:"פעיל",notes:"לבוא אחרי 18:00",lastTreatment:"2026-06-01",totalPaid:2100},
-  {id:3,name:"יוסי אברהם",phone:"054-5555555",email:"yossi@gmail.com",address:"רחוב בן יהודה 7, חיפה",propertyType:"בית פרטי",rooms:"5",floor:"קרקע",status:"חוב",notes:"",lastTreatment:"2026-04-20",totalPaid:890},
-  {id:4,name:"רחל מזרחי",phone:"053-7777777",email:"rachel@gmail.com",address:"רחוב הנביאים 3, ירושלים",propertyType:"מסעדה",rooms:"",floor:"קרקע",status:"פעיל",notes:"תקנות משרד הבריאות",lastTreatment:"2026-06-10",totalPaid:3400},
+  {id:1,name:"דוד כהן",phone:"050-1234567",email:"david@gmail.com",address:"רחוב הרצל 12, תל אביב",propertyType:"דירה",rooms:"3",floor:"2",status:"פעיל",notes:"יש כלב בבית",lastTreatment:"2026-05-15",totalPaid:1240,source:"פה לפה / המלצה",tag:"vip"},
+  {id:2,name:"שרה לוי",phone:"052-9876543",email:"sarah@gmail.com",address:"שדרות רוטשילד 45, תל אביב",propertyType:"עסק",rooms:"",floor:"קרקע",status:"פעיל",notes:"לבוא אחרי 18:00",lastTreatment:"2026-06-01",totalPaid:2100,source:"גוגל",tag:"loyal"},
+  {id:3,name:"יוסי אברהם",phone:"054-5555555",email:"yossi@gmail.com",address:"רחוב בן יהודה 7, חיפה",propertyType:"בית פרטי",rooms:"5",floor:"קרקע",status:"פעיל",notes:"שמרו מרחק מהגינה",lastTreatment:"2026-04-20",totalPaid:890,source:"פייסבוק",tag:""},
+  {id:4,name:"מרים חדד",phone:"053-7777777",email:"miriam@walla.com",address:"רחוב יפו 88, ירושלים",propertyType:"דירה",rooms:"4",floor:"3",status:"חוב",notes:"חייבת 450 שח מטיפול אחרון",lastTreatment:"2026-03-10",totalPaid:650,source:"עלון / שלט",tag:"problem"},
+  {id:5,name:"אלי שמש",phone:"050-3333444",email:"eli@gmail.com",address:"רחוב ביאליק 22, רמת גן",propertyType:"עסק",rooms:"",floor:"1",status:"פעיל",notes:"מסעדה — לבוא בבוקר לפני פתיחה",lastTreatment:"2026-05-28",totalPaid:3200,source:"גוגל",tag:"vip"},
+  {id:6,name:"נורית כץ",phone:"052-1111222",email:"nurit@gmail.com",address:"רחוב הנשיא 5, חיפה",propertyType:"דירה",rooms:"2",floor:"4",status:"פעיל",notes:"",lastTreatment:"2026-02-14",totalPaid:450,source:"לקוח חוזר",tag:"new"},
+  {id:7,name:"מוחמד עלי",phone:"054-9999000",email:"mali@gmail.com",address:"שכונת וואדי ניסנאס, חיפה",propertyType:"בית פרטי",rooms:"6",floor:"קרקע",status:"פעיל",notes:"יש חצר גדולה",lastTreatment:"2026-05-05",totalPaid:1100,source:"פה לפה / המלצה",tag:""},
+  {id:8,name:"רינה גולד",phone:"050-6666777",email:"rina@yahoo.com",address:"רחוב הרב קוק 3, ראשון לציון",propertyType:"דירה",rooms:"3",floor:"1",status:"פעיל",notes:"",lastTreatment:"2026-06-08",totalPaid:520,source:"אינסטגרם",tag:"new"},
+  {id:9,name:"בניית אורן בעמ",phone:"03-5551234",email:"office@oren.co.il",address:"אזור תעשייה צפוני, נתניה",propertyType:"מפעל",rooms:"",floor:"קרקע",status:"פעיל",notes:"כניסה דרך שער ראשי לתאם מראש",lastTreatment:"2026-04-01",totalPaid:8500,source:"חיפוש אינטרנט",tag:"vip"},
+  {id:10,name:"גן הילדים צבעוני",phone:"09-7778888",email:"gan@savyon.co.il",address:"רחוב השושנים 14, סביון",propertyType:"גן ילדים",rooms:"",floor:"קרקע",status:"פעיל",notes:"טיפול רק בשישי אחהצ",lastTreatment:"2026-05-20",totalPaid:1800,source:"פה לפה / המלצה",tag:"loyal"},
+  {id:11,name:"עזרא מזרחי",phone:"052-4444555",email:"ezra@gmail.com",address:"רחוב הגפן 9, באר שבע",propertyType:"בית פרטי",rooms:"4",floor:"קרקע",status:"לא פעיל",notes:"עבר דירה",lastTreatment:"2025-11-10",totalPaid:680,source:"",tag:""},
+  {id:12,name:"סופרמרקט כוכב",phone:"08-6665555",email:"super@kochav.com",address:"שדרות ירושלים 120, אשדוד",propertyType:"עסק",rooms:"",floor:"קרקע",status:"פעיל",notes:"לטפל בלילה — אחרי 23:00",lastTreatment:"2026-06-10",totalPaid:4200,source:"גוגל",tag:"vip"},
 ];
-const initWorkers = [
-  {id:1,name:"אמיר חסן",role:"מדביר",phone:"050-1111111",license:"ה-12345",zone:"תל אביב והמרכז",status:"פעיל",color:"#2563eb"},
-  {id:2,name:"מוטי גרין",role:"מדביר",phone:"052-2222222",license:"ה-67890",zone:"חיפה והצפון",status:"פעיל",color:"#9333ea"},
-  {id:3,name:"נטלי שפירא",role:"פקידה",phone:"054-3333333",license:"",zone:"משרד",status:"פעיל",color:"#d97706"},
-];
+
 const initAppointments = [
-  {id:1,customerId:1,customerName:"דוד כהן",workerId:1,workerName:"אמיר חסן",date:"2026-06-10",time:"10:00",pestType:"ג'וקים",status:"ממתין",price:380,address:"רחוב הרצל 12, תל אביב",notes:"",executionLog:null},
-  {id:2,customerId:2,customerName:"שרה לוי",workerId:1,workerName:"אמיר חסן",date:"2026-06-10",time:"14:00",pestType:"עכברים",status:"בוצע",price:650,address:"שדרות רוטשילד 45, תל אביב",notes:"",
-    executionLog:{clientName:"שרה לוי",address:"שדרות רוטשילד 45, תל אביב",structureType:"עסק",pest:["עכברים"],pestLevel:"בינונית",materials:[{name:"רטרים בלוק",batch:"2003505"}],extermination_notes:"הוצבו 8 תחנות האכלה בפינות ובמחסן",warranty:"3",notes:"",paymentDone:true,paymentNote:"",safetyText:"• אין לגעת בתחנות האכלה\n• שמירה על ילדים וחיות מחמד"}},
-  {id:3,customerId:4,customerName:"רחל מזרחי",workerId:2,workerName:"מוטי גרין",date:"2026-06-11",time:"09:00",pestType:"זבובים",status:"בדרך",price:700,address:"רחוב הנביאים 3, ירושלים",notes:"",executionLog:null},
-  {id:4,customerId:3,customerName:"יוסי אברהם",workerId:2,workerName:"מוטי גרין",date:"2026-06-10",time:"11:00",pestType:"נמלים",status:"ממתין",price:320,address:"רחוב בן יהודה 7, חיפה",notes:"",executionLog:null},
-  {id:5,customerId:1,customerName:"דוד כהן",workerId:1,workerName:"אמיר חסן",date:"2026-06-12",time:"08:00",pestType:"יתושים",status:"ממתין",price:280,address:"רחוב הרצל 12, תל אביב",notes:"",executionLog:null},
+  {id:1,customerId:1,customerName:"דוד כהן",workerId:1,workerName:"אמיר חסן",date:"2026-06-20",time:"09:00",timeWindow:"09:00–11:00",pestType:"תיקנים",price:380,address:"רחוב הרצל 12, תל אביב",status:"ממתין",notes:""},
+  {id:2,customerId:2,customerName:"שרה לוי",workerId:2,workerName:"מוטי גרין",date:"2026-06-10",time:"14:00",timeWindow:"14:00–16:00",pestType:"עכברים",price:550,address:"שדרות רוטשילד 45, תל אביב",status:"בוצע",notes:""},
+  {id:3,customerId:3,customerName:"יוסי אברהם",workerId:1,workerName:"אמיר חסן",date:"2026-06-15",time:"10:00",timeWindow:"10:00–12:00",pestType:"נמלים",price:290,address:"רחוב בן יהודה 7, חיפה",status:"בוצע",notes:""},
+  {id:4,customerId:4,customerName:"מרים חדד",workerId:2,workerName:"מוטי גרין",date:"2026-06-18",time:"11:00",timeWindow:"11:00–13:00",pestType:"יתושים",price:320,address:"רחוב יפו 88, ירושלים",status:"ממתין",notes:"לקוחה עם חוב — לגבות תשלום"},
+  {id:5,customerId:5,customerName:"אלי שמש",workerId:1,workerName:"אמיר חסן",date:"2026-06-08",time:"08:00",timeWindow:"08:00–10:00",pestType:"מזיקי מזון",price:850,address:"רחוב ביאליק 22, רמת גן",status:"בוצע",notes:"מסעדה"},
+  {id:6,customerId:6,customerName:"נורית כץ",workerId:2,workerName:"מוטי גרין",date:"2026-06-21",time:"15:00",timeWindow:"15:00–17:00",pestType:"פרעושים",price:280,address:"רחוב הנשיא 5, חיפה",status:"ממתין",notes:""},
+  {id:7,customerId:7,customerName:"מוחמד עלי",workerId:1,workerName:"אמיר חסן",date:"2026-06-12",time:"09:00",timeWindow:"09:00–11:00",pestType:"עקרבים",price:420,address:"שכונת וואדי ניסנאס, חיפה",status:"בוצע",notes:"חצר גדולה"},
+  {id:8,customerId:8,customerName:"רינה גולד",workerId:2,workerName:"מוטי גרין",date:"2026-06-22",time:"10:00",timeWindow:"10:00–12:00",pestType:"תיקנים",price:350,address:"רחוב הרב קוק 3, ראשון לציון",status:"ממתין",notes:""},
+  {id:9,customerId:9,customerName:"בניית אורן בעמ",workerId:1,workerName:"אמיר חסן",date:"2026-06-05",time:"07:00",timeWindow:"07:00–10:00",pestType:"מכרסמים",price:1800,address:"אזור תעשייה צפוני, נתניה",status:"בוצע",notes:"מפעל גדול"},
+  {id:10,customerId:10,customerName:"גן הילדים צבעוני",workerId:2,workerName:"מוטי גרין",date:"2026-06-13",time:"15:00",timeWindow:"15:00–17:00",pestType:"נמלים",price:320,address:"רחוב השושנים 14, סביון",status:"בוצע",notes:"שישי אחהצ"},
+  {id:11,customerId:12,customerName:"סופרמרקט כוכב",workerId:1,workerName:"אמיר חסן",date:"2026-06-25",time:"23:00",timeWindow:"23:00–01:00",pestType:"מזיקי מזון",price:1200,address:"שדרות ירושלים 120, אשדוד",status:"ממתין",notes:"לילה בלבד"},
+  {id:12,customerId:1,customerName:"דוד כהן",workerId:2,workerName:"מוטי גרין",date:"2026-05-15",time:"10:00",timeWindow:"10:00–12:00",pestType:"תיקנים",price:380,address:"רחוב הרצל 12, תל אביב",status:"בוצע",notes:""},
+  {id:13,customerId:5,customerName:"אלי שמש",workerId:1,workerName:"אמיר חסן",date:"2026-06-23",time:"08:00",timeWindow:"08:00–10:00",pestType:"זבובים",price:450,address:"רחוב ביאליק 22, רמת גן",status:"ממתין",notes:"ביקור חוזר"},
+  {id:14,customerId:3,customerName:"יוסי אברהם",workerId:2,workerName:"מוטי גרין",date:"2026-06-24",time:"11:00",timeWindow:"11:00–13:00",pestType:"דבורים וצרעות",price:480,address:"רחוב בן יהודה 7, חיפה",status:"ממתין",notes:"קן בגג"},
+  {id:15,customerId:2,customerName:"שרה לוי",workerId:1,workerName:"אמיר חסן",date:"2026-06-17",time:"09:00",timeWindow:"09:00–11:00",pestType:"עכברים",price:550,address:"שדרות רוטשילד 45, תל אביב",status:"בוצע",notes:""},
+  {id:16,customerId:7,customerName:"מוחמד עלי",workerId:2,workerName:"מוטי גרין",date:"2026-06-26",time:"14:00",timeWindow:"14:00–16:00",pestType:"יתושים",price:290,address:"שכונת וואדי ניסנאס, חיפה",status:"ממתין",notes:""},
+  {id:17,customerId:9,customerName:"בניית אורן בעמ",workerId:1,workerName:"אמיר חסן",date:"2026-06-27",time:"07:00",timeWindow:"07:00–10:00",pestType:"עטלפים",price:950,address:"אזור תעשייה צפוני, נתניה",status:"ממתין",notes:""},
+  {id:18,customerId:10,customerName:"גן הילדים צבעוני",workerId:2,workerName:"מוטי גרין",date:"2026-05-20",time:"15:00",timeWindow:"15:00–17:00",pestType:"נמלים",price:320,address:"רחוב השושנים 14, סביון",status:"בוצע",notes:""},
+  {id:19,customerId:8,customerName:"רינה גולד",workerId:1,workerName:"אמיר חסן",date:"2026-06-08",time:"12:00",timeWindow:"12:00–14:00",pestType:"תיקנים",price:350,address:"רחוב הרב קוק 3, ראשון לציון",status:"בוצע",notes:""},
+  {id:20,customerId:12,customerName:"סופרמרקט כוכב",workerId:2,workerName:"מוטי גרין",date:"2026-06-10",time:"23:00",timeWindow:"23:00–01:00",pestType:"מזיקי מזון",price:1200,address:"שדרות ירושלים 120, אשדוד",status:"בוצע",notes:""},
 ];
+
 const initFinance = [
-  {id:1,type:"הכנסה",category:"חשבונית",customer:"שרה לוי",customerId:2,amount:650,date:"2026-06-01",status:"שולם",invoiceNum:"INV-001",apptId:2},
-  {id:2,type:"הכנסה",category:"חשבונית",customer:"רחל מזרחי",customerId:4,amount:700,date:"2026-06-10",status:"שולם",invoiceNum:"INV-002",apptId:null},
-  {id:3,type:"הוצאה",category:"חומרי הדברה",customer:"",customerId:null,amount:320,date:"2026-06-05",status:"שולם",invoiceNum:"",apptId:null},
-  {id:4,type:"הכנסה",category:"חשבונית",customer:"יוסי אברהם",customerId:3,amount:520,date:"2026-05-20",status:"חוב",invoiceNum:"INV-003",apptId:null},
-  {id:5,type:"הוצאה",category:"דלק",customer:"",customerId:null,amount:180,date:"2026-06-08",status:"שולם",invoiceNum:"",apptId:null},
+  {id:1,type:"הכנסה",category:"חשבונית",customer:"שרה לוי",customerId:2,amount:550,date:"2026-06-10",status:"שולם",invoiceNum:"INV-10001",apptId:2,phone:"052-9876543",address:"שדרות רוטשילד 45, תל אביב",pestType:"עכברים",workerName:"מוטי גרין",payMethod:"ביט"},
+  {id:2,type:"הכנסה",category:"חשבונית",customer:"יוסי אברהם",customerId:3,amount:290,date:"2026-06-15",status:"שולם",invoiceNum:"INV-10002",apptId:3,phone:"054-5555555",address:"רחוב בן יהודה 7, חיפה",pestType:"נמלים",workerName:"אמיר חסן",payMethod:"מזומן"},
+  {id:3,type:"הכנסה",category:"חשבונית",customer:"אלי שמש",customerId:5,amount:850,date:"2026-06-08",status:"שולם",invoiceNum:"INV-10003",apptId:5,phone:"050-3333444",address:"רחוב ביאליק 22, רמת גן",pestType:"מזיקי מזון",workerName:"אמיר חסן",payMethod:"העברה בנקאית"},
+  {id:4,type:"הכנסה",category:"חשבונית",customer:"מוחמד עלי",customerId:7,amount:420,date:"2026-06-12",status:"שולם",invoiceNum:"INV-10004",apptId:7,phone:"054-9999000",address:"שכונת וואדי ניסנאס, חיפה",pestType:"עקרבים",workerName:"אמיר חסן",payMethod:"מזומן"},
+  {id:5,type:"הכנסה",category:"חשבונית",customer:"בניית אורן בעמ",customerId:9,amount:1800,date:"2026-06-05",status:"שולם",invoiceNum:"INV-10005",apptId:9,phone:"03-5551234",address:"אזור תעשייה צפוני, נתניה",pestType:"מכרסמים",workerName:"אמיר חסן",payMethod:"העברה בנקאית"},
+  {id:6,type:"הכנסה",category:"חשבונית",customer:"גן הילדים צבעוני",customerId:10,amount:320,date:"2026-06-13",status:"שולם",invoiceNum:"INV-10006",apptId:10,phone:"09-7778888",address:"רחוב השושנים 14, סביון",pestType:"נמלים",workerName:"מוטי גרין",payMethod:"ביט"},
+  {id:7,type:"הכנסה",category:"חשבונית",customer:"מרים חדד",customerId:4,amount:450,date:"2026-03-10",status:"חוב",invoiceNum:"INV-10007",apptId:0,phone:"053-7777777",address:"רחוב יפו 88, ירושלים",pestType:"יתושים",workerName:"מוטי גרין",payMethod:""},
+  {id:8,type:"הכנסה",category:"חשבונית",customer:"סופרמרקט כוכב",customerId:12,amount:1200,date:"2026-06-10",status:"שולם",invoiceNum:"INV-10008",apptId:20,phone:"08-6665555",address:"שדרות ירושלים 120, אשדוד",pestType:"מזיקי מזון",workerName:"מוטי גרין",payMethod:"העברה בנקאית"},
+  {id:9,type:"הכנסה",category:"חשבונית",customer:"דוד כהן",customerId:1,amount:380,date:"2026-05-15",status:"שולם",invoiceNum:"INV-10009",apptId:12,phone:"050-1234567",address:"רחוב הרצל 12, תל אביב",pestType:"תיקנים",workerName:"מוטי גרין",payMethod:"מזומן"},
+  {id:10,type:"הוצאה",category:"דלק",customer:"",customerId:0,amount:350,date:"2026-06-01",status:"שולם",invoiceNum:"",apptId:0,phone:"",address:"",pestType:"",workerName:"אמיר חסן",payMethod:""},
+  {id:11,type:"הוצאה",category:"חומרים",customer:"",customerId:0,amount:680,date:"2026-06-05",status:"שולם",invoiceNum:"",apptId:0,phone:"",address:"",pestType:"",workerName:"",payMethod:""},
+  {id:12,type:"הכנסה",category:"חשבונית",customer:"שרה לוי",customerId:2,amount:550,date:"2026-06-17",status:"שולם",invoiceNum:"INV-10010",apptId:15,phone:"052-9876543",address:"שדרות רוטשילד 45, תל אביב",pestType:"עכברים",workerName:"אמיר חסן",payMethod:"ביט"},
 ];
+
 const initNotes = [
-  {id:1,date:"2026-06-07",type:"כללי",author:"נטלי שפירא",workerId:null,title:"עדכון מחירון יוני",content:"עודכן מחירון ג'וקים ב-10%.",private:false},
-  {id:2,date:"2026-06-07",type:"אישי",author:"אמיר חסן",workerId:1,title:"ביצוע אצל שרה לוי",content:"הוצבו 8 תחנות האכלה. שימוש ברטרים בלוק. לחזור עוד 3 שבועות.",private:true},
-  {id:3,date:"2026-06-06",type:"כללי",author:"נטלי שפירא",workerId:null,title:"לקוח חדש נרשם",content:"דוד כהן נרשם למנוי שנתי.",private:false},
+  {id:1,date:"2026-06-07",type:"כללי",author:"נטלי שפירא",workerId:0,text:"לזמן פגישת צוות שבועית בכל יום ראשון ב-8:00"},
+  {id:2,date:"2026-06-10",type:"לקוח",author:"אמיר חסן",workerId:1,text:"סופרמרקט כוכב — הבעלים ביקש לקבל הצעת מחיר לחוזה שנתי"},
+  {id:3,date:"2026-06-12",type:"ציוד",author:"מוטי גרין",workerId:2,text:"מלאי פרוג'ל תיקנים נמוך — להזמין לפחות 20 יחידות"},
+  {id:4,date:"2026-06-14",type:"לקוח",author:"נטלי שפירא",workerId:0,text:"מרים חדד — יצרה קשר לגבי תשלום החוב. הבטיחה לשלם עד סוף החודש"},
+  {id:5,date:"2026-06-15",type:"כללי",author:"נטלי שפירא",workerId:0,text:"קיבלנו 3 פניות חדשות מגוגל — צריך לעדכן את דף הנחיתה"},
 ];
+
 const initExecLogs = [
-  {id:1,apptId:2,date:"2026-06-10",clientName:"שרה לוי",address:"שדרות רוטשילד 45, תל אביב",structureType:"עסק",pest:["עכברים"],pestLevel:"בינונית",materials:[{name:"רטרים בלוק",batch:"2003505"}],extermination_notes:"הוצבו 8 תחנות האכלה בפינות ובמחסן",warranty:"3",notes:"",workerName:"אמיר חסן",workerLicense:"ה-12345",safetyText:"• אין לגעת בתחנות האכלה\n• שמירה על ילדים וחיות מחמד"},
+  {id:1,apptId:2,date:"2026-06-10",clientName:"שרה לוי",address:"שדרות רוטשילד 45, תל אביב",structureType:"עסק",pest:["עכברים"],pestLevel:"בינונית",materials:[{name:"רטרים בלוק",batch:"B2024-11"},{name:"רטרים פסטה",batch:"P2024-08"}],extermination_notes:"הונחו תיבות בפינות המטבח וחדר המאגרים",warranty:"3",notes:"לבדוק שוב בעוד חודש",workerId:2,workerName:"מוטי גרין",workerLicense:"ר-5678",paymentDone:true,paymentNote:""},
+  {id:2,apptId:3,date:"2026-06-15",clientName:"יוסי אברהם",address:"רחוב בן יהודה 7, חיפה",structureType:"בית פרטי",pest:["נמלים"],pestLevel:"קלה",materials:[{name:"אלפא ג'ל",batch:"AG2024-03"}],extermination_notes:"ג'ל הונח לאורך קירות המטבח",warranty:"2",notes:"",workerId:1,workerName:"אמיר חסן",workerLicense:"ר-1234",paymentDone:true,paymentNote:""},
+  {id:3,apptId:5,date:"2026-06-08",clientName:"אלי שמש",address:"רחוב ביאליק 22, רמת גן",structureType:"מסעדה",pest:["מזיקי מזון","זבובים"],pestLevel:"גבוהה",materials:[{name:"דלתא סופר",batch:"D2024-07"},{name:"ספיר",batch:"S2024-05"}],extermination_notes:"ריסוס מקיף של כל המטבח ואזורי האחסון",warranty:"6",notes:"להמליץ על ניקיון מחסנים",workerId:1,workerName:"אמיר חסן",workerLicense:"ר-1234",paymentDone:true,paymentNote:""},
+  {id:4,apptId:7,date:"2026-06-12",clientName:"מוחמד עלי",address:"שכונת וואדי ניסנאס, חיפה",structureType:"בית פרטי",pest:["עקרבים"],pestLevel:"בינונית",materials:[{name:"פרמנון",batch:"PR2024-09"}],extermination_notes:"ריסוס היקף החצר והמרפסות",warranty:"3",notes:"לסגור סדקים בקיר",workerId:1,workerName:"אמיר חסן",workerLicense:"ר-1234",paymentDone:true,paymentNote:""},
+  {id:5,apptId:9,date:"2026-06-05",clientName:"בניית אורן בעמ",address:"אזור תעשייה צפוני, נתניה",structureType:"מפעל",pest:["עכברים","חולדות"],pestLevel:"גבוהה",materials:[{name:"רטרים בלוק",batch:"B2024-11"},{name:"רטרים פסטה",batch:"P2024-08"}],extermination_notes:"הונחו 18 תיבות לאורך קירות המפעל וחצר האחורית",warranty:"6",notes:"לבדוק כל שבועיים",workerId:1,workerName:"אמיר חסן",workerLicense:"ר-1234",paymentDone:true,paymentNote:""},
+  {id:6,apptId:10,date:"2026-06-13",clientName:"גן הילדים צבעוני",address:"רחוב השושנים 14, סביון",structureType:"גן ילדים",pest:["נמלים"],pestLevel:"קלה",materials:[{name:"קוינור ג'ל",batch:"KG2024-06"}],extermination_notes:"ג'ל ממוקד בפינות רחוקות מהילדים",warranty:"3",notes:"חומרים בטוחים לילדים בלבד",workerId:2,workerName:"מוטי גרין",workerLicense:"ר-5678",paymentDone:true,paymentNote:""},
+  {id:7,apptId:12,date:"2026-05-15",clientName:"דוד כהן",address:"רחוב הרצל 12, תל אביב",structureType:"דירה",pest:["תיקנים"],pestLevel:"בינונית",materials:[{name:"פרוג'ל תיקנים",batch:"FG2024-02"}],extermination_notes:"ג'ל הונח בכל ארונות המטבח ותחת המקרר",warranty:"12",notes:"כלב הוצא לחצר בזמן הטיפול",workerId:2,workerName:"מוטי גרין",workerLicense:"ר-5678",paymentDone:true,paymentNote:""},
+  {id:8,apptId:20,date:"2026-06-10",clientName:"סופרמרקט כוכב",address:"שדרות ירושלים 120, אשדוד",structureType:"עסק",pest:["מזיקי מזון"],pestLevel:"גבוהה",materials:[{name:"אודם",batch:"A2024-10"},{name:"דלתא סופר",batch:"D2024-07"}],extermination_notes:"ריסוס מחסנים ואזורי הכנת מזון",warranty:"6",notes:"לבצע מדי חודש",workerId:2,workerName:"מוטי גרין",workerLicense:"ר-5678",paymentDone:true,paymentNote:""},
+];
+
+const initMaintenance = [
+  {id:1,customerName:"אלי שמש",address:"רחוב ביאליק 22, רמת גן",phone:"050-3333444",frequency:"אחזקה חודשית",status:"פעיל",startDate:"2026-01-01",price:450,notes:"מסעדה — ניטור חודשי"},
+  {id:2,customerName:"בניית אורן בעמ",address:"אזור תעשייה צפוני, נתניה",phone:"03-5551234",frequency:"כל חודשיים",status:"פעיל",startDate:"2026-02-01",price:900,notes:"מפעל — כולל ביובים"},
+  {id:3,customerName:"גן הילדים צבעוני",address:"רחוב השושנים 14, סביון",phone:"09-7778888",frequency:"רבעוני (כל 3 חודשים)",status:"פעיל",startDate:"2026-03-01",price:320,notes:"חומרים בטוחים בלבד"},
+  {id:4,customerName:"סופרמרקט כוכב",address:"שדרות ירושלים 120, אשדוד",phone:"08-6665555",frequency:"אחזקה חודשית",status:"פעיל",startDate:"2026-01-01",price:1200,notes:"לילה בלבד"},
+  {id:5,customerName:"דוד כהן",address:"רחוב הרצל 12, תל אביב",phone:"050-1234567",frequency:"כל 6 חודשים",status:"פעיל",startDate:"2026-01-15",price:380,notes:""},
+];
+
+const initProjects = [
+  {id:1,name:"חוזה שנתי — בניית אורן",customer:"בניית אורן בעמ",customerId:9,startDate:"2026-01-01",endDate:"2026-12-31",value:21600,status:"פעיל",notes:"12 ביקורים בשנה — כל חודש",workerId:1,workerName:"אמיר חסן"},
+  {id:2,name:"חוזה שנתי — סופרמרקט כוכב",customer:"סופרמרקט כוכב",customerId:12,startDate:"2026-01-01",endDate:"2026-12-31",value:14400,status:"פעיל",notes:"12 ביקורים בשנה — לילה",workerId:2,workerName:"מוטי גרין"},
+  {id:3,name:"ניקיון מלאי — נמלים בסביון",customer:"גן הילדים צבעוני",customerId:10,startDate:"2026-03-01",endDate:"2026-09-30",value:1920,status:"פעיל",notes:"4 ביקורים — אביב/קיץ",workerId:2,workerName:"מוטי גרין"},
+  {id:4,name:"טיפול מקיף — אזור תעשייה נתניה",customer:"בניית אורן בעמ",customerId:9,startDate:"2026-06-01",endDate:"2026-06-30",value:3600,status:"פעיל",notes:"פרויקט חד פעמי — ריסוס מלא",workerId:1,workerName:"אמיר חסן"},
+  {id:5,name:"חוזה עונתי — מסעדת אלי שמש",customer:"אלי שמש",customerId:5,startDate:"2026-04-01",endDate:"2026-10-31",value:3150,status:"פעיל",notes:"7 חודשי קיץ — ניטור שבועי",workerId:1,workerName:"אמיר חסן"},
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -1504,17 +1557,18 @@ function PricingCalculator({onApply,embedded=false,initialProperty={},externalSt
       })}
     </div>
 
-    {/* Pest list */}
-    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+    {/* Pest list — compact grid */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:14}}>
       {catPests.map(pest=>{
         const on=(T.pests||[]).includes(pest.id);
-        return <div key={pest.id} onClick={()=>togglePest(pest.id)} style={{border:`2px solid ${on?CLR.primary:CLR.border}`,borderRadius:10,padding:"10px 14px",background:on?CLR.primaryLight:"#fff",cursor:"pointer",userSelect:"none"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:18,flexShrink:0}}>{on?"✅":"⬜"}</span>
-            <span style={{flex:1,fontWeight:600,fontSize:14}}>{pest.name}</span>
-            {on&&!pest.isCustom&&<span style={{fontSize:11,color:CLR.primary,background:CLR.primaryLight,padding:"2px 8px",borderRadius:10}}>✓ נבחר</span>}
-          </div>
-          {pest.info&&<div style={{fontSize:11,color:CLR.muted,marginTop:5}}>{pest.info}</div>}
+        return <div key={pest.id} style={{position:"relative"}}>
+          <div onClick={()=>togglePest(pest.id)}
+            style={{border:`2px solid ${on?CLR.primary:CLR.border}`,borderRadius:10,padding:"8px 10px",background:on?CLR.primaryLight:"#fff",cursor:"pointer",userSelect:"none",minHeight:56,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:14,flexShrink:0}}>{on?"✅":"⬜"}</span>
+              <span style={{fontWeight:600,fontSize:13,lineHeight:1.2}}>{pest.name}</span>
+            </div>
+            {pest.info&&<div style={{fontSize:10,color:CLR.muted,marginTop:3,lineHeight:1.2}}>{pest.info.slice(0,40)}{pest.info.length>40?"...":""}</div>}
           {on&&<div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
             {pest.isCustom&&<input type="number" placeholder={pest.customLabel||"מחיר ₪"} value={T.customPrices[pest.id]||""} onChange={e=>setCustomPrice(pest.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{...numInput,width:140}}/>}
             {pest.isFreeTextName&&<input placeholder="שם השירות" value={T.customPestNames[pest.id]||""} onChange={e=>setCustomName(pest.id,e.target.value)} onClick={e=>e.stopPropagation()} style={{...numInput,textAlign:"right",width:160}}/>}
@@ -1538,16 +1592,20 @@ function PricingCalculator({onApply,embedded=false,initialProperty={},externalSt
             </div>
           </div>}
           {/* Client guidance */}
-          {on&&(pest.prep||pest.during||pest.returnTime||pest.washing)&&<div style={{marginTop:10,background:"#fff",border:`1px solid ${CLR.border}`,borderRight:`4px solid ${CLR.primary}`,borderRadius:8,padding:"10px 12px"}}>
-            <div style={{fontSize:12,fontWeight:700,color:CLR.primary,marginBottom:6}}>ℹ️ הנחיות ללקוח (להקריא בשיחה):</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px",fontSize:11,lineHeight:1.6}}>
-              {pest.prep&&<div><b>לפני:</b> <span style={{color:CLR.muted}}>{pest.prep}</span></div>}
-              {pest.during&&<div><b>בזמן:</b> <span style={{color:CLR.muted}}>{pest.during}</span></div>}
-              {pest.returnTime&&<div><b>חזרה:</b> <span style={{color:CLR.muted}}>{pest.returnTime}</span></div>}
-              {pest.washing&&<div><b>שטיפה:</b> <span style={{color:CLR.muted}}>{pest.washing}</span></div>}
-            </div>
-            {pest.warranty&&<div style={{marginTop:6,fontSize:11}}><b>אחריות:</b> <span style={{color:CLR.primary,fontWeight:600}}>{pest.warranty}</span></div>}
-          </div>}
+          {on&&(pest.prep||pest.during||pest.returnTime||pest.washing)&&<button type="button"
+            onClick={e=>{e.stopPropagation();
+              const lines=[];
+              if(pest.prep) lines.push("📋 לפני: "+pest.prep);
+              if(pest.during) lines.push("⏱️ בזמן: "+pest.during);
+              if(pest.returnTime) lines.push("🏠 חזרה: "+pest.returnTime);
+              if(pest.washing) lines.push("🧹 שטיפה: "+pest.washing);
+              if(pest.warranty) lines.push("🛡️ אחריות: "+pest.warranty);
+              alert("הנחיות ללקוח — "+pest.name+":\n\n"+lines.join("\n\n"));
+            }}
+            style={{marginTop:6,background:CLR.info+"22",color:CLR.info,border:"1px solid "+CLR.info+"44",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontWeight:600,width:"100%"}}>
+            ℹ️ הנחיות ללקוח
+          </button>}
+        </div>
         </div>;
       })}
     </div>
@@ -4275,7 +4333,7 @@ function Collabs({collabs,setCollabs,appointments=[]}){
           </div>
         </div>;
       })()}
-    </Modal>}}
+    </Modal>}
     {editCollab&&<CollabModal collab={editCollab} onClose={()=>setEditCollab(null)} onSave={f=>{saveCollab(f);setEditCollab(null);}}/>}
   </div>;
 }
@@ -5035,8 +5093,8 @@ function App(){
   const [appointments,setAppointments]=useLS("appointments", initAppointments);
   const [finance,setFinance]=useLS("finance", initFinance);
   const [notes,setNotes]=useLS("notes", initNotes);
-  const [maintenance,setMaintenance]=useLS("maintenance",[]);
-  const [projects,setProjects]=useLS("projects",[]);
+  const [maintenance,setMaintenance]=useLS("maintenance",initMaintenance);
+  const [projects,setProjects]=useLS("projects",initProjects);
   const [collabs,setCollabs]=useLS("collabs",[]);
   const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs",[]);
   const [msgTemplates,setMsgTemplates]=useLS("msgTemplates",[
@@ -5050,7 +5108,7 @@ function App(){
   const TABS=[
     {id:"dashboard",label:"📊 דשבורד",short:"📊"},
     {id:"neworder",label:"📝 הזמנת עבודה",short:"📝",hideFor:"מדביר"},
-    {id:"calculator",label:"🧮 מחשבון תמחור",short:"🧮",hideFor:"מדביר"},
+
     {id:"customers",label:"👤 לקוחות",short:"👤"},
     {id:"calendar",label:"📅 יומן תורים",short:"📅"},
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
