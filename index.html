@@ -255,6 +255,11 @@ const initAppointments = [
   {id:18,customerId:10,customerName:"גן הילדים צבעוני",workerId:2,workerName:"מוטי גרין",date:"2026-05-20",time:"15:00",timeWindow:"15:00–17:00",pestType:"נמלים",price:320,address:"רחוב השושנים 14, סביון",status:"בוצע",notes:""},
   {id:19,customerId:8,customerName:"רינה גולד",workerId:1,workerName:"אמיר חסן",date:"2026-06-08",time:"12:00",timeWindow:"12:00–14:00",pestType:"תיקנים",price:350,address:"רחוב הרב קוק 3, ראשון לציון",status:"בוצע",notes:""},
   {id:20,customerId:12,customerName:"סופרמרקט כוכב",workerId:2,workerName:"מוטי גרין",date:"2026-06-10",time:"23:00",timeWindow:"23:00–01:00",pestType:"מזיקי מזון",price:1200,address:"שדרות ירושלים 120, אשדוד",status:"בוצע",notes:""},
+  {id:21,customerId:4,customerName:"מרים חדד",workerId:1,workerName:"אמיר חסן",date:"2026-08-14",time:"10:00",timeWindow:"10:00–12:00",pestType:"יתושים",price:320,address:"רחוב יפו 88, ירושלים",status:"ממתין",notes:""},
+  {id:22,customerId:6,customerName:"נורית כץ",workerId:2,workerName:"מוטי גרין",date:"2026-08-14",time:"14:00",timeWindow:"14:00–16:00",pestType:"פרעושים",price:280,address:"רחוב הנשיא 5, חיפה",status:"ממתין",notes:""},
+  {id:23,customerId:1,customerName:"דוד כהן",workerId:1,workerName:"אמיר חסן",date:"2026-08-15",time:"09:00",timeWindow:"09:00–11:00",pestType:"תיקנים",price:380,address:"רחוב הרצל 12, תל אביב",status:"ממתין",notes:""},
+  {id:24,customerId:5,customerName:"אלי שמש",workerId:2,workerName:"מוטי גרין",date:"2026-08-15",time:"11:00",timeWindow:"11:00–13:00",pestType:"זבובים",price:450,address:"רחוב ביאליק 22, רמת גן",status:"ממתין",notes:""},
+  {id:25,customerId:9,customerName:"בניית אורן בעמ",workerId:1,workerName:"אמיר חסן",date:"2026-08-16",time:"07:00",timeWindow:"07:00–10:00",pestType:"מכרסמים",price:1800,address:"אזור תעשייה צפוני, נתניה",status:"ממתין",notes:""},
 ];
 
 const initFinance = [
@@ -305,6 +310,22 @@ const initProjects = [
   {id:3,name:"ניקיון מלאי — נמלים בסביון",customer:"גן הילדים צבעוני",customerId:10,startDate:"2026-03-01",endDate:"2026-09-30",value:1920,status:"פעיל",notes:"4 ביקורים — אביב/קיץ",workerId:2,workerName:"מוטי גרין"},
   {id:4,name:"טיפול מקיף — אזור תעשייה נתניה",customer:"בניית אורן בעמ",customerId:9,startDate:"2026-06-01",endDate:"2026-06-30",value:3600,status:"פעיל",notes:"פרויקט חד פעמי — ריסוס מלא",workerId:1,workerName:"אמיר חסן"},
   {id:5,name:"חוזה עונתי — מסעדת אלי שמש",customer:"אלי שמש",customerId:5,startDate:"2026-04-01",endDate:"2026-10-31",value:3150,status:"פעיל",notes:"7 חודשי קיץ — ניטור שבועי",workerId:1,workerName:"אמיר חסן"},
+];
+
+const initCollabs = [
+  {id:1,name:"יצחק פרץ",phone:"050-8881111",specialty:"הדברה כללית",zone:"תל אביב",commission:20,notes:"פרילנסר אמין — עובד איתנו שנתיים"},
+  {id:2,name:"כרמית שלום",phone:"052-7774444",specialty:"מכרסמים",zone:"חיפה והצפון",commission:25,notes:"מומחית בעכברים וחולדות"},
+  {id:3,name:"דני ביטון",phone:"054-6663333",specialty:"עופות ויונים",zone:"ירושלים",commission:22,notes:"מטפל בפינוי קנים ורשתות"},
+  {id:4,name:"ענת מור",phone:"053-5552222",specialty:"הדברה אורגנית",zone:"מרכז",commission:18,notes:"מתמחה בחומרים ידידותיים לסביבה"},
+  {id:5,name:"רון אזולאי",phone:"050-4449999",specialty:"טרמיטים ופשפשים",zone:"דרום",commission:30,notes:"מומחה טרמיטים — ניסיון 10 שנים"},
+];
+
+const initScheduledMsgs = [
+  {id:1,name:"דוד כהן",phone:"050-1234567",text:"שלום דוד! תזכורת: מחר 20/06 יגיע המדביר אמיר חסן לטיפול בתיקנים. 09:00-11:00. רחוב הרצל 12.",sendDate:"2026-06-19",sendTime:"17:00",status:"ממתין",createdAt:"2026-06-18"},
+  {id:2,name:"מרים חדד",phone:"053-7777777",text:"שלום מרים, הגיע הזמן להסדיר את יתרת החוב של 450 שח. נשמח לעדכן. הדברה 360.",sendDate:"2026-06-20",sendTime:"10:00",status:"ממתין",createdAt:"2026-06-18"},
+  {id:3,name:"אלי שמש",phone:"050-3333444",text:"שלום אלי! תזכורת לביקור מחר 23/06 ב-08:00. טיפול בזבובים. מסעדת אלי שמש.",sendDate:"2026-06-22",sendTime:"16:00",status:"ממתין",createdAt:"2026-06-18"},
+  {id:4,name:"סופרמרקט כוכב",phone:"08-6665555",text:"שלום! תזכורת: ביקור לילי מחר 25/06 ב-23:00. אנא הכינו גישה למחסנים. הדברה 360.",sendDate:"2026-06-24",sendTime:"15:00",status:"ממתין",createdAt:"2026-06-18"},
+  {id:5,name:"נורית כץ",phone:"052-1111222",text:"שלום נורית! תזכורת: ביקור מחר 21/06 ב-15:00 לטיפול בפרעושים. רחוב הנשיא 5 חיפה.",sendDate:"2026-06-20",sendTime:"09:00",status:"ממתין",createdAt:"2026-06-18"},
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -5095,8 +5116,8 @@ function App(){
   const [notes,setNotes]=useLS("notes", initNotes);
   const [maintenance,setMaintenance]=useLS("maintenance",initMaintenance);
   const [projects,setProjects]=useLS("projects",initProjects);
-  const [collabs,setCollabs]=useLS("collabs",[]);
-  const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs",[]);
+  const [collabs,setCollabs]=useLS("collabs",initCollabs);
+  const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs",initScheduledMsgs);
   const [msgTemplates,setMsgTemplates]=useLS("msgTemplates",[
     {id:1,name:"תזכורת לתור",emoji:"📅",text:"שלום *{שם}* 👋\n\nתזכורת: מחר {תאריך} יגיע המדביר *{מדביר}* לטיפול ב*{מזיק}*.\n📍 {כתובת}\n🕐 {שעה}\n\nלשאלות — "+COMPANY.name+" 🦟"},
     {id:2,name:"אישור הזמנה",emoji:"✅",text:"שלום *{שם}* 👋\n\nקיבלנו את הזמנתך!\n📅 {תאריך} · 🕐 {שעה}\n📍 {כתובת}\n🐛 טיפול: {מזיק}\n\nלשאלות — "+COMPANY.name+" 🦟"},
