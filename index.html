@@ -82,10 +82,12 @@ function loadScript(urls,cb,i){
   ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}
   input,select,textarea{font-size:16px}
   @media(max-width:768px){
-    table{font-size:12px}
-    table td,table th{padding:8px 10px}
+    table{font-size:11px;width:100%}
+    table td,table th{padding:6px 8px;word-break:break-word}
+    *{max-width:100%;word-wrap:break-word}
     .mob-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   }
+  body{overflow-x:hidden}
 </style>
 </head>
 <body>
@@ -1073,7 +1075,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setFormKey(k=>k+1);setMode("new");};
 
   if(viewLog) return(
-    <div style={{background:CLR.dk_bg,minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       <div style={{display:"flex",gap:10,marginBottom:16}}>
         <DkBtn variant="ghost" onClick={()=>setViewLog(null)}>← חזרה לרשימה</DkBtn>
       </div>
@@ -1082,22 +1084,22 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   );
 
   if(mode==="preview"&&previewData) return(
-    <div style={{background:CLR.dk_bg,minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       <ExecLogPreview data={previewData} onBack={()=>setMode("new")} onApprove={()=>handleSave(previewData)}/>
     </div>
   );
 
   if(mode==="new") return(
-    <div style={{background:CLR.dk_bg,minHeight:"100%",color:CLR.dk_text,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",color:"#0f172a",direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       {/* Sub-header */}
-      <div style={{background:CLR.dk_card,borderBottom:`1px solid ${CLR.dk_border}`,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+      <div style={{background:"#ffffff",borderBottom:`1px solid ${"#e2e8f0"}`,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
         <DkBtn variant="ghost" onClick={()=>{setMode("list");setPrefillAppt(null);}} style={{padding:"6px 14px",fontSize:13}}>← חזרה</DkBtn>
-        {prefillAppt&&<div style={{background:CLR.dk_dim,borderRadius:8,padding:"6px 14px",fontSize:13,color:CLR.dk_primary}}>
+        {prefillAppt&&<div style={{background:"#f1f5f9",borderRadius:8,padding:"6px 14px",fontSize:13,color:CLR.primary}}>
           📅 {prefillAppt.customerName} | {prefillAppt.address} | {prefillAppt.pestType}
         </div>}
       </div>
       <div style={{maxWidth:720,margin:"0 auto",padding:"24px"}}>
-        <div style={{fontSize:15,fontWeight:600,color:CLR.dk_primary,marginBottom:16}}>📋 מילוי יומן ביצוע</div>
+        <div style={{fontSize:15,fontWeight:600,color:CLR.primary,marginBottom:16}}>📋 מילוי יומן ביצוע</div>
         <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={d=>{setPreviewData(d);setMode("preview");}}/>
       </div>
     </div>
@@ -1105,17 +1107,17 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
 
   // LIST MODE
   return(
-    <div style={{background:CLR.dk_bg,minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif",color:CLR.dk_text}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:isMobile?12:20,direction:"rtl",fontFamily:"system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
       {/* Pending appts */}
       {pendingAppts.length>0&&(
-        <div style={{background:CLR.dk_card,border:`1px solid ${CLR.dk_border}`,borderRadius:12,padding:18,marginBottom:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:CLR.dk_accent,marginBottom:12}}>⏳ תורים ממתינים ליומן ביצוע ({pendingAppts.length})</div>
+        <div style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:18,marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,color:CLR.accent,marginBottom:12}}>⏳ תורים ממתינים ליומן ביצוע ({pendingAppts.length})</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {pendingAppts.slice(0,5).map(a=>(
-              <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:CLR.dk_surface,borderRadius:8,border:`1px solid ${CLR.dk_border}`}}>
+              <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#f8fafc",borderRadius:8,border:`1px solid ${"#e2e8f0"}`}}>
                 <div>
-                  <span style={{fontWeight:600,color:CLR.dk_text}}>{a.customerName}</span>
-                  <span style={{color:CLR.dk_muted,fontSize:12,marginRight:8}}>{a.pestType} | {fmtDate(a.date)} {a.time}</span>
+                  <span style={{fontWeight:600,color:"#0f172a"}}>{a.customerName}</span>
+                  <span style={{color:CLR.muted,fontSize:12,marginRight:8}}>{a.pestType} | {fmtDate(a.date)} {a.time}</span>
                 </div>
                 <DkBtn onClick={()=>startNew(a)} style={{padding:"5px 14px",fontSize:12}}>✍️ מלא יומן</DkBtn>
               </div>
@@ -1126,37 +1128,37 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
 
       {/* Logs list */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <h2 style={{margin:0,fontSize:17,color:CLR.dk_primary}}>📋 יומני ביצוע {currentUser.role==="מדביר"?"שלי":"– כל המדבירים"}</h2>
+        <h2 style={{margin:0,fontSize:17,color:CLR.primary}}>📋 יומני ביצוע {currentUser.role==="מדביר"?"שלי":"– כל המדבירים"}</h2>
         <DkBtn onClick={()=>startNew(null)}>+ יומן ביצוע חדש</DkBtn>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:currentUser.role==="מדביר"?"1fr":"1fr 320px",gap:18,alignItems:"start"}}>
         <div>
-        {myLogs.length===0?<div style={{textAlign:"center",color:CLR.dk_muted,padding:40,fontSize:15}}>אין יומני ביצוע עדיין</div>:
+        {myLogs.length===0?<div style={{textAlign:"center",color:CLR.muted,padding:40,fontSize:15}}>אין יומני ביצוע עדיין</div>:
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {myLogs.map(l=>(
-            <div key={l.id} style={{background:CLR.dk_card,border:`1px solid ${CLR.dk_border}`,borderRadius:12,padding:"14px 18px"}}>
+            <div key={l.id} style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:"14px 18px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",flexWrap:"wrap",gap:8}}>
                 <div>
-                  <div style={{fontWeight:700,fontSize:15,color:CLR.dk_text,marginBottom:4}}>{l.clientName}</div>
-                  <div style={{fontSize:12,color:CLR.dk_muted,marginBottom:4}}>📍 {l.address} | 🏠 {l.structureType}</div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#0f172a",marginBottom:4}}>{l.clientName}</div>
+                  <div style={{fontSize:12,color:CLR.muted,marginBottom:4}}>📍 {l.address} | 🏠 {l.structureType}</div>
                   <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:4}}>
-                    {l.pest?.map(p=><span key={p} style={{background:CLR.dk_accent+"22",color:CLR.dk_accent,border:`1px solid ${CLR.dk_accent}44`,padding:"2px 8px",borderRadius:20,fontSize:11}}>{p}</span>)}
-                    {l.pestLevel&&<span style={{background:CLR.dk_dim,color:CLR.dk_primary,padding:"2px 8px",borderRadius:20,fontSize:11}}>{l.pestLevel}</span>}
+                    {l.pest?.map(p=><span key={p} style={{background:CLR.accent+"22",color:CLR.accent,border:`1px solid ${CLR.accent}44`,padding:"2px 8px",borderRadius:20,fontSize:11}}>{p}</span>)}
+                    {l.pestLevel&&<span style={{background:"#f1f5f9",color:CLR.primary,padding:"2px 8px",borderRadius:20,fontSize:11}}>{l.pestLevel}</span>}
                   </div>
-                  <div style={{fontSize:12,color:CLR.dk_muted}}>
+                  <div style={{fontSize:12,color:CLR.muted}}>
                     🧪 {l.materials?.map(m=>m.name).join(", ")||"—"}
                     {l.warranty&&<span style={{marginRight:12}}>| אחריות: {l.warranty} חודשים</span>}
                   </div>
-                  {l.extermination_notes&&<div style={{fontSize:12,color:CLR.dk_muted,marginTop:3}}>📝 {l.extermination_notes}</div>}
+                  {l.extermination_notes&&<div style={{fontSize:12,color:CLR.muted,marginTop:3}}>📝 {l.extermination_notes}</div>}
                   {!l.paymentDone&&l.paymentNote&&<div style={{fontSize:12,color:CLR.dk_danger,marginTop:4}}>💳 {l.paymentNote}</div>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8}}>
-                  <div style={{fontSize:12,color:CLR.dk_muted}}>{fmtDate(l.date)}</div>
-                  <div style={{fontSize:12,color:CLR.dk_primary}}>{l.workerName}</div>
+                  <div style={{fontSize:12,color:CLR.muted}}>{fmtDate(l.date)}</div>
+                  <div style={{fontSize:12,color:CLR.primary}}>{l.workerName}</div>
                   <div style={{display:"flex",gap:6}}>
                     <DkBtn variant="ghost" onClick={()=>setViewLog(l)} style={{padding:"4px 12px",fontSize:12}}>👁 צפה</DkBtn>
-                    <button onClick={()=>printExecLog(l)} style={{background:"none",border:`1px solid ${CLR.dk_border}`,color:CLR.dk_muted,borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📄 PDF</button>
+                    <button onClick={()=>printExecLog(l)} style={{background:"none",border:`1px solid ${"#e2e8f0"}`,color:CLR.muted,borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📄 PDF</button>
                   </div>
                 </div>
               </div>
@@ -1167,22 +1169,22 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
 
         {/* Invoice history side panel (office/manager only) */}
         {currentUser.role!=="מדביר"&&(
-          <div style={{background:CLR.dk_card,border:`1px solid ${CLR.dk_border}`,borderRadius:12,padding:"16px 18px",position:"sticky",top:16}}>
-            <div style={{fontWeight:700,color:CLR.dk_accent,fontSize:14,marginBottom:12}}>🧾 היסטוריית חשבוניות</div>
+          <div style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:"16px 18px",position:"sticky",top:16}}>
+            <div style={{fontWeight:700,color:CLR.accent,fontSize:14,marginBottom:12}}>🧾 היסטוריית חשבוניות</div>
             {(() => {
               const invs=(finance||[]).filter(f=>f.category==="חשבונית");
-              if(invs.length===0) return <div style={{fontSize:12,color:CLR.dk_muted}}>אין חשבוניות עדיין</div>;
+              if(invs.length===0) return <div style={{fontSize:12,color:CLR.muted}}>אין חשבוניות עדיין</div>;
               return <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:480,overflowY:"auto"}}>
                 {invs.map(f=>(
-                  <div key={f.id} style={{background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"8px 10px"}}>
+                  <div key={f.id} style={{background:"#f8fafc",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"8px 10px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-                      <span style={{fontWeight:600,color:CLR.dk_primary}}>{f.invoiceNum}</span>
-                      <span style={{color:f.status==="שולם"?"#3ddc84":CLR.dk_accent}}>{f.status}</span>
+                      <span style={{fontWeight:600,color:CLR.primary}}>{f.invoiceNum}</span>
+                      <span style={{color:f.status==="שולם"?CLR.primary:CLR.accent}}>{f.status}</span>
                     </div>
-                    <div style={{fontSize:12,color:CLR.dk_text,marginTop:2}}>{f.customer} · ₪{f.amount}</div>
+                    <div style={{fontSize:12,color:"#0f172a",marginTop:2}}>{f.customer} · ₪{f.amount}</div>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
-                      <span style={{fontSize:11,color:CLR.dk_muted}}>{fmtDate(f.date)}</span>
-                      <button onClick={()=>printInvoice(f)} style={{background:"none",border:`1px solid ${CLR.dk_border}`,color:CLR.dk_muted,borderRadius:6,padding:"2px 8px",fontSize:11,cursor:"pointer"}}>📄 PDF</button>
+                      <span style={{fontSize:11,color:CLR.muted}}>{fmtDate(f.date)}</span>
+                      <button onClick={()=>printInvoice(f)} style={{background:"none",border:`1px solid ${"#e2e8f0"}`,color:CLR.muted,borderRadius:6,padding:"2px 8px",fontSize:11,cursor:"pointer"}}>📄 PDF</button>
                     </div>
                   </div>
                 ))}
@@ -5343,7 +5345,7 @@ function App(){
 
         {/* Content */}
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%"}}>
-              {tab==="execlog"&&<div style={{margin:"-24px",minHeight:"calc(100vh - 56px)",background:"#0f1a14"}}><ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/></div>}
+              {tab==="execlog"&&<ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
