@@ -5208,6 +5208,7 @@ function App(){
       {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
 
       {/* ── SIDEBAR (desktop only) ── */}
+      {!isMobile&&<div style={{width:230,flexShrink:0}}/> /* spacer for fixed sidebar */}
       {!isFullTab&&!isMobile&&<aside style={{position:"fixed",top:0,right:0,bottom:0,width:230,background:"#0f172a",display:"flex",flexDirection:"column",zIndex:200,overflow:"hidden"}}>
         {/* Logo */}
         <div style={{padding:"16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
@@ -5255,7 +5256,7 @@ function App(){
       </aside>}
 
       {/* ── MAIN AREA ── */}
-      <div style={{marginRight:isMobile?0:230,minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f8fafc"}}>
+      <div style={{flex:1,minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f8fafc",minWidth:0}}>
 
         {/* Topbar (desktop) */}
         {!isFullTab&&!isMobile&&<div style={{height:56,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 24px",gap:10,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
