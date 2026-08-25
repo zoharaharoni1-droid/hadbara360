@@ -146,9 +146,9 @@ const CLR = {
   accent:"#f59e0b", danger:"#ef4444", info:"#3b82f6",
   muted:"#64748b", border:"#e2e8f0", surface:"#f8fafc", white:"#ffffff",
   // dark theme for exec log tab
-  dk_bg:"#0f1a14", dk_card:"#1a2820", dk_border:"#2a4035",
-  dk_primary:"#3ddc84", dk_dim:"#1a4d30", dk_text:"#e8f5ee",
-  dk_muted:"#7aab8a", dk_accent:"#f0b429", dk_danger:"#ff6b6b", dk_surface:"#141f1a",
+  dk_bg:"#f8fafc", dk_card:"#ffffff", dk_border:"#e2e8f0",
+  dk_primary:"#3ddc84", dk_dim:"#f0fdf4", dk_text:"#e8f5ee",
+  dk_muted:CLR.muted, dk_accent:"#f0b429", dk_danger:"#ff6b6b", dk_surface:"#f8fafc",
 };
 
 const PEST_TYPES_CRM = ["ג'וקים","תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים וצרעות","שלשולים"];
@@ -855,15 +855,15 @@ const D = CLR; // alias for dark theme keys (dk_*)
 
 function DkInput({label,value,onChange,placeholder="",type="text"}){
   return <div style={{marginBottom:14}}>
-    {label&&<label style={{fontSize:11,color:CLR.dk_muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
+    {label&&<label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
     <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-      style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"9px 13px",color:CLR.dk_text,fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}/>
+      style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"9px 13px",color:"#0f172a",fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}/>
   </div>;
 }
 function DkSelect({label,value,onChange,options}){
   return <div style={{marginBottom:14}}>
-    {label&&<label style={{fontSize:11,color:CLR.dk_muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
-    <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"9px 13px",color:CLR.dk_text,fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}>
+    {label&&<label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
+    <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"9px 13px",color:"#0f172a",fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}>
       <option value="">-- בחר --</option>
       {options.map(o=><option key={o} value={o}>{o}</option>)}
     </select>
@@ -871,13 +871,13 @@ function DkSelect({label,value,onChange,options}){
 }
 function DkTextarea({label,value,onChange,placeholder,rows=3}){
   return <div style={{marginBottom:14}}>
-    {label&&<label style={{fontSize:11,color:CLR.dk_muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
+    {label&&<label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</label>}
     <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
-      style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"9px 13px",color:CLR.dk_text,fontSize:14,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+      style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"9px 13px",color:"#0f172a",fontSize:14,resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
   </div>;
 }
 function DkBtn({children,onClick,variant="primary",disabled=false,style={}}){
-  const vs={primary:{background:CLR.dk_primary,color:"#000"},ghost:{background:"transparent",color:CLR.dk_primary,border:`1px solid ${CLR.dk_primary}`},accent:{background:CLR.dk_accent,color:"#000"}};
+  const vs={primary:{background:CLR.primary,color:"#fff"},ghost:{background:"transparent",color:CLR.primary,border:`1px solid ${CLR.primary}`},accent:{background:CLR.accent,color:"#fff"}};
   return <button onClick={onClick} disabled={disabled} style={{...vs[variant],borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontSize:14,opacity:disabled?0.5:1,fontFamily:"inherit",...style}}>{children}</button>;
 }
 
@@ -963,7 +963,7 @@ function PestPickerDk({selected,onChange}){
     {PEST_TYPES_LOG.map(p=>{
       const on=selected.includes(p);
       return <button key={p} onClick={()=>toggle(p)}
-        style={{background:on?CLR.dk_accent+"33":"transparent",color:on?CLR.dk_accent:CLR.dk_muted,border:`1px solid ${on?CLR.dk_accent:CLR.dk_border}`,borderRadius:8,padding:"4px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+        style={{background:on?CLR.accent+"33":"transparent",color:on?CLR.accent:CLR.muted,border:`1px solid ${on?CLR.accent:"#e2e8f0"}`,borderRadius:8,padding:"4px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
         {on?"✓ ":""}{p}
       </button>;
     })}
@@ -1129,8 +1129,8 @@ function ExecLogPreview({data,onBack,onApprove}){
   const docNum=`EL-${Date.now().toString().slice(-6)}`;
   return <div>
     <div style={{display:"flex",gap:10,marginBottom:20}}>
-      <DkBtn variant="ghost" onClick={onBack}>← חזרה לעריכה</DkBtn>
-      <DkBtn variant="accent" onClick={onApprove} style={{flex:1}}>✅ אשר ושמור יומן ביצוע</DkBtn>
+      <Btn v="ghost" sm onClick={onBack}>← חזרה לעריכה</Btn>
+      <Btn onClick={onApprove} style={{flex:1}}>✅ אשר ושמור יומן ביצוע</Btn>
     </div>
     <div style={{background:"#fff",color:"#111",borderRadius:12,padding:"28px 32px",fontFamily:"Arial,sans-serif",direction:"rtl",lineHeight:1.7}}>
       <div style={{display:"flex",justifyContent:"space-between",borderBottom:"2px solid #1a5c3a",paddingBottom:14,marginBottom:18}}>
@@ -1223,7 +1223,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   if(viewLog) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       <div style={{display:"flex",gap:10,marginBottom:16}}>
-        <DkBtn variant="ghost" onClick={()=>setViewLog(null)}>← חזרה לרשימה</DkBtn>
+        <Btn v="ghost" sm onClick={()=>setViewLog(null)}>← חזרה</Btn>
       </div>
       <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} onBack={()=>setViewLog(null)} onApprove={()=>setViewLog(null)}/>
     </div>
@@ -2033,12 +2033,12 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
   };
 
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-    <div style={{background:CLR.dk_bg,border:`1px solid ${CLR.dk_border}`,borderRadius:16,padding:24,width:680,maxWidth:"98vw",maxHeight:"92vh",overflow:"auto",direction:"rtl",color:CLR.dk_text}} onClick={e=>e.stopPropagation()}>
+    <div style={{background:"#f8fafc",border:`1px solid ${"#e2e8f0"}`,borderRadius:16,padding:24,width:680,maxWidth:"98vw",maxHeight:"92vh",overflow:"auto",direction:"rtl",color:"#0f172a"}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <h2 style={{margin:0,color:CLR.dk_primary,fontSize:17}}>📋 יומן ביצוע</h2>
-        <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:CLR.dk_muted}}>✕</button>
+        <h2 style={{margin:0,color:CLR.primary,fontSize:17}}>📋 יומן ביצוע</h2>
+        <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:CLR.muted}}>✕</button>
       </div>
-      <div style={{background:CLR.dk_dim,borderRadius:8,padding:"8px 14px",marginBottom:16,fontSize:13,color:CLR.dk_primary}}>
+      <div style={{background:"#f1f5f9",borderRadius:8,padding:"8px 14px",marginBottom:16,fontSize:13,color:CLR.primary}}>
         📅 <b>{appt.customerName}</b> | {appt.address} | {appt.pestType} | {fmtDate(appt.date)} {appt.time}
       </div>
 
@@ -2049,28 +2049,28 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
       {step==="done"&&<div>
         <div style={{textAlign:"center",padding:"10px 0 20px"}}>
           <div style={{fontSize:48}}>✅</div>
-          <div style={{fontSize:18,fontWeight:700,color:CLR.dk_primary,marginTop:8}}>יומן הביצוע נשמר!</div>
+          <div style={{fontSize:18,fontWeight:700,color:CLR.primary,marginTop:8}}>יומן הביצוע נשמר!</div>
         </div>
 
         {/* Invoice section */}
-        <div style={{background:CLR.dk_card,border:`1px solid ${CLR.dk_border}`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
-          <div style={{fontWeight:700,color:CLR.dk_accent,fontSize:15,marginBottom:12}}>🧾 חשבונית</div>
+        <div style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
+          <div style={{fontWeight:700,color:CLR.accent,fontSize:15,marginBottom:12}}>🧾 חשבונית</div>
           {!savedInvoice ? <>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:12,color:CLR.dk_text}}>
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:12,color:"#0f172a"}}>
               <input type="checkbox" checked={makeInvoice} onChange={e=>setMakeInvoice(e.target.checked)}/> להפיק חשבונית עבור טיפול זה (₪{appt.price} + מע"מ)
             </label>
             {makeInvoice&&<div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                <div><label style={{fontSize:12,color:CLR.dk_muted,display:"block",marginBottom:4}}>אמצעי תשלום</label>
-                  <select value={payMethod} onChange={e=>setPayMethod(e.target.value)} style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"8px 10px",color:CLR.dk_text,fontSize:14,fontFamily:"inherit"}}>
+                <div><label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:4}}>אמצעי תשלום</label>
+                  <select value={payMethod} onChange={e=>setPayMethod(e.target.value)} style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"8px 10px",color:"#0f172a",fontSize:14,fontFamily:"inherit"}}>
                     {["מזומן","העברה בנקאית","ביט","PayBox","צ'ק","אשראי"].map(m=><option key={m}>{m}</option>)}
                   </select></div>
-                <div><label style={{fontSize:12,color:CLR.dk_muted,display:"block",marginBottom:4}}>סטטוס תשלום</label>
-                  <select value={payNow?"שולם":"חוב"} onChange={e=>setPayNow(e.target.value==="שולם")} style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"8px 10px",color:CLR.dk_text,fontSize:14,fontFamily:"inherit"}}>
+                <div><label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:4}}>סטטוס תשלום</label>
+                  <select value={payNow?"שולם":"חוב"} onChange={e=>setPayNow(e.target.value==="שולם")} style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"8px 10px",color:"#0f172a",fontSize:14,fontFamily:"inherit"}}>
                     <option value="שולם">התקבל תשלום</option><option value="חוב">טרם שולם (חוב)</option>
                   </select></div>
               </div>
-              <DkBtn onClick={handleCreateInvoice} style={{width:"100%"}}>🧾 הפק חשבונית</DkBtn>
+              <Btn onClick={handleCreateInvoice} style={{width:"100%"}}>🧾 הפק חשבונית</Btn>
             </div>}
           </> : <div style={{textAlign:"center",color:"#3ddc84",fontWeight:600,fontSize:14}}>
             ✅ חשבונית {savedInvoice.invoiceNum} נוצרה ({savedInvoice.status})
@@ -2078,23 +2078,23 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
         </div>
 
         {/* Two PDF buttons */}
-        <div style={{fontWeight:700,color:CLR.dk_text,fontSize:14,marginBottom:10}}>📄 הפקת מסמכים</div>
+        <div style={{fontWeight:700,color:"#0f172a",fontSize:14,marginBottom:10}}>📄 הפקת מסמכים</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          <DkBtn variant="ghost" onClick={()=>printExecLog(savedLog||previewData)} style={{padding:"14px"}}>
+          <Btn v="ghost" onClick={()=>printExecLog(savedLog||previewData)} style={{padding:"14px"}}>
             📋 PDF — יומן ביצוע
-          </DkBtn>
-          <DkBtn variant="ghost" onClick={()=>{
+          </Btn>
+          <Btn v="ghost" onClick={()=>{
             if(!savedInvoice){alert("צריך להפיק חשבונית קודם");return;}
             printInvoice(savedInvoice);
           }} style={{padding:"14px",opacity:savedInvoice?1:0.5}}>
             🧾 PDF — חשבונית
-          </DkBtn>
+          </Btn>
         </div>
-        <div style={{fontSize:12,color:CLR.dk_muted,textAlign:"center",marginBottom:16}}>
+        <div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginBottom:16}}>
           כל מסמך נפתח בחלון נפרד — לחץ "🖨️ הדפס / שמור PDF" כדי לשמור או לשלוח ללקוח.
         </div>
 
-        <DkBtn onClick={onClose} style={{width:"100%"}}>סיום</DkBtn>
+        <Btn onClick={onClose} style={{width:"100%"}}>סיום</Btn>
       </div>}
     </div>
   </div>;
