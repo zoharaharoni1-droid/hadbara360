@@ -5192,7 +5192,7 @@ function App(){
   ].filter(t=>(!t.adminOnly||user.role!=="מדביר")&&(t.hideFor!==user.role));
 
   // exec log tab has its own dark bg – no padding wrapper
-  const isFullTab=tab==="execlog";
+  const isFullTab=false; // exec log now uses sidebar like other tabs
 
   // Ctrl+K global search shortcut
   React.useEffect(()=>{
@@ -5204,7 +5204,7 @@ function App(){
   const tabLabel={dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   return(
-    <div style={{direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:isFullTab?"#0f1a14":"#f8fafc",display:"flex"}}>
+    <div style={{direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:"#f8fafc",display:"flex",width:"100%"}}>
       {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
 
       {/* ── SIDEBAR (desktop only) ── */}
@@ -5255,7 +5255,7 @@ function App(){
       </aside>}
 
       {/* ── MAIN AREA ── */}
-      <div style={isFullTab?{flex:1,minHeight:"100vh",display:"flex",flexDirection:"column"}:{marginRight:isMobile?0:230,minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f8fafc"}}>
+      <div style={{marginRight:isMobile?0:230,minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f8fafc"}}>
 
         {/* Topbar (desktop) */}
         {!isFullTab&&!isMobile&&<div style={{height:56,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 24px",gap:10,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
@@ -5277,10 +5277,9 @@ function App(){
         </div>}
 
         {/* Content */}
-        {isFullTab
-          ? <ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>
-          : <div style={{padding:isMobile?"12px 12px 80px":"24px",maxWidth:1200,margin:"0 auto",width:"100%"}}>
-              {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
+        <div style={{padding:isMobile?"12px 12px 80px":"24px",width:"100%"}}>
+              {tab==="execlog"&&<div style={{margin:"-24px",minHeight:"calc(100vh - 56px)",background:"#0f1a14"}}><ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/></div>}
+            {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} collabs={collabs} finance={finance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
@@ -5296,7 +5295,6 @@ function App(){
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={appointments}/>}
             {tab==="workers"&&<Workers workers={workers} setWorkers={setWorkers} appointments={appointments}/>}
             </div>
-        }
 
         {/* Mobile bottom nav */}
         {!isFullTab&&isMobile&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0f172a",zIndex:300,display:"flex",flexDirection:"row",justifyContent:"space-around",padding:"6px 0 8px",borderTop:"1px solid #1e293b"}}>
