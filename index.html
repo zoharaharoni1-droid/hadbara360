@@ -1230,28 +1230,25 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   );
 
   if(mode==="preview"&&previewData) return(
-    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a"}}>
       <ExecLogPreview data={previewData} onBack={()=>setMode("new")} onApprove={()=>handleSave(previewData)}/>
     </div>
   );
 
   if(mode==="new") return(
-    <div style={{background:"#f8fafc",minHeight:"100%",color:"#0f172a",direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
-      {/* Sub-header */}
-      <div style={{background:"#ffffff",borderBottom:`1px solid ${"#e2e8f0"}`,padding:"12px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-        <DkBtn variant="ghost" onClick={()=>{setMode("list");setPrefillAppt(null);}} style={{padding:"6px 14px",fontSize:13}}>← חזרה</DkBtn>
-        {prefillAppt&&<div style={{background:"#f1f5f9",borderRadius:8,padding:"6px 14px",fontSize:13,color:CLR.primary}}>
-          📅 {prefillAppt.customerName} | {prefillAppt.address} | {prefillAppt.pestType}
-        </div>}
+    <div style={{background:"#f8fafc",minHeight:"100%",color:"#0f172a",direction:"rtl",fontFamily:"'Inter',system-ui,sans-serif"}}>
+      <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",position:"sticky",top:0,zIndex:50,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
+        <Btn v="ghost" sm onClick={()=>{setMode("list");setPrefillAppt(null);}}>← חזרה</Btn>
+        <h2 style={{margin:0,fontSize:15,fontWeight:700,flex:1}}>📋 מילוי יומן ביצוע</h2>
+        {prefillAppt&&<span style={{background:CLR.primaryLight,color:CLR.primary,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>
+          {prefillAppt.customerName} · {prefillAppt.pestType}
+        </span>}
       </div>
-      <div style={{maxWidth:720,margin:"0 auto",padding:"24px"}}>
-        <div style={{fontSize:15,fontWeight:600,color:CLR.primary,marginBottom:16}}>📋 מילוי יומן ביצוע</div>
-        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={d=>{setPreviewData(d);setMode("preview");}}/>
+      <div style={{maxWidth:700,margin:"0 auto",padding:"20px"}}>
+        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={handlePreview} workers={workers} appointments={appointments}/>
       </div>
     </div>
-  );
-
-  // LIST MODE
+  );  // LIST MODE
   return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
 
