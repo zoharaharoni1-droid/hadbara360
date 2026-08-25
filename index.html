@@ -5208,15 +5208,17 @@ function App(){
       {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
 
       {/* ── SIDEBAR (desktop only) ── */}
-      {!isFullTab&&<aside className="saas-sidebar">
-        <div className="sb-logo">
-          <div className="sb-logo-icon">🦟</div>
+      {!isFullTab&&!isMobile&&<aside style={{position:"fixed",top:0,right:0,bottom:0,width:230,background:"#0f172a",display:"flex",flexDirection:"column",zIndex:200,overflow:"hidden"}}>
+        {/* Logo */}
+        <div style={{padding:"16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <div style={{width:34,height:34,background:"#16a34a",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🦟</div>
           <div>
-            <div className="sb-logo-name">הדברה 360</div>
-            <div className="sb-logo-sub">מערכת CRM</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#fff",letterSpacing:"-0.3px"}}>הדברה 360</div>
+            <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>מערכת CRM</div>
           </div>
         </div>
-        <nav className="sb-nav">
+        {/* Nav */}
+        <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
             {lbl:"ראשי",items:[{id:"dashboard",icon:"📊",name:"דשבורד",hide:null},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null}]},
             {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
@@ -5224,48 +5226,50 @@ function App(){
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true}]},
           ].map(group=>(
-            <div key={group.lbl} className="sb-section">
-              <div className="sb-section-label">{group.lbl}</div>
+            <div key={group.lbl} style={{marginBottom:16}}>
+              <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
               {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")).map(t=>(
-                <button key={t.id} className={"sb-item"+(tab===t.id?" active":"")} onClick={()=>setTab(t.id)}>
-                  <span className="sb-icon">{t.icon}</span>{t.name}
+                <button key={t.id} onClick={()=>setTab(t.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:13,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:1,fontFamily:"inherit",transition:"all 0.15s"}}
+                  onMouseEnter={e=>{if(tab!==t.id){e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#cbd5e1";}}}
+                  onMouseLeave={e=>{if(tab!==t.id){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#94a3b8";}}}>
+                  <span style={{fontSize:14,width:18,textAlign:"center",flexShrink:0}}>{t.icon}</span>{t.name}
                 </button>
               ))}
             </div>
           ))}
         </nav>
-        <div className="sb-user">
-          <div className="sb-avatar" style={{background:user.role==="מנהל"?"#7c3aed":user.role==="מדביר"?"#16a34a":"#2563eb"}}>
+        {/* User */}
+        <div style={{padding:"12px 14px",borderTop:"1px solid #1e293b",display:"flex",alignItems:"center",gap:9,flexShrink:0}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:user.role==="מנהל"?"#7c3aed":user.role==="מדביר"?"#16a34a":"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:"#fff",flexShrink:0}}>
             {user.name.charAt(0)}
           </div>
           <div style={{flex:1,minWidth:0}}>
-            <div className="sb-uname">{user.name}</div>
-            <div className="sb-urole">{user.role}</div>
+            <div style={{fontSize:"12.5px",fontWeight:600,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div>
+            <div style={{fontSize:"10.5px",color:"#94a3b8",marginTop:1}}>{user.role}</div>
           </div>
           <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
-            style={{background:"none",border:"none",color:"#94a3b8",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}
-            title="החלף משתמש">
+            style={{background:"none",border:"none",color:"#94a3b8",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}} title="החלף משתמש">
             {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`} style={{background:"#1e293b"}}>{u.name}</option>)}
           </select>
         </div>
       </aside>}
 
       {/* ── MAIN AREA ── */}
-      <div className={isFullTab?"":"saas-main"} style={isFullTab?{flex:1,minHeight:"100vh",display:"flex",flexDirection:"column"}:{}}>
+      <div style={isFullTab?{flex:1,minHeight:"100vh",display:"flex",flexDirection:"column"}:{marginRight:isMobile?0:230,minHeight:"100vh",display:"flex",flexDirection:"column",background:"#f8fafc"}}>
 
         {/* Topbar (desktop) */}
-        {!isFullTab&&!isMobile&&<div className="saas-topbar">
-          <div className="tb-title">{tabLabel[tab]||tab}</div>
-          <button onClick={()=>setShowSearch(true)} className="tb-btn ghost">🔍 חיפוש</button>
-          <button onClick={exportBackup} className="tb-btn ghost" title="גיבוי נתונים">💾 גיבוי</button>
-          <button onClick={importBackup} className="tb-btn ghost" title="שחזר מגיבוי">📂 שחזר</button>
-          <button onClick={resetAllData} className="tb-btn" style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס</button>
+        {!isFullTab&&!isMobile&&<div style={{height:56,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 24px",gap:10,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
+          <div style={{fontSize:15,fontWeight:700,color:"#0f172a",flex:1}}>{tabLabel[tab]||tab}</div>
+          <button onClick={()=>setShowSearch(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>🔍 חיפוש</button>
+          <button onClick={exportBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>💾 גיבוי</button>
+          <button onClick={importBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>📂 שחזר</button>
+          <button onClick={resetAllData} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #fca5a5",background:"#fef2f2",color:"#dc2626",fontFamily:"inherit"}}>↺ איפוס</button>
         </div>}
 
         {/* Topbar (mobile) */}
-        {!isFullTab&&isMobile&&<div className="saas-topbar">
-          <div className="tb-title" style={{fontSize:14}}>{tabLabel[tab]||tab}</div>
-          <button onClick={()=>setShowSearch(true)} className="tb-btn ghost" style={{padding:"5px 10px",fontSize:12}}>🔍</button>
+        {!isFullTab&&isMobile&&<div style={{height:50,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 14px",gap:8,position:"sticky",top:0,zIndex:100}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#0f172a",flex:1}}>{tabLabel[tab]||tab}</div>
+          <button onClick={()=>setShowSearch(true)} style={{padding:"5px 10px",borderRadius:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>🔍</button>
           <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
             style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 8px",fontSize:12,color:"#0f172a",fontFamily:"inherit"}}>
             {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`}>{u.name} ({u.role})</option>)}
@@ -5295,12 +5299,12 @@ function App(){
         }
 
         {/* Mobile bottom nav */}
-        {!isFullTab&&<div className="mob-tabs">
+        {!isFullTab&&isMobile&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0f172a",zIndex:300,display:"flex",flexDirection:"row",justifyContent:"space-around",padding:"6px 0 8px",borderTop:"1px solid #1e293b"}}>
           {[{id:"dashboard",icon:"📊",name:"ראשי"},{id:"calendar",icon:"📅",name:"יומן"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"execlog",icon:"📋",name:"ביצוע"},{id:"neworder",icon:"📝",name:"הזמנה",hide:"מדביר"}]
             .filter(t=>!t.hide||t.hide!==user.role)
             .map(t=>(
-              <button key={t.id} className={"mob-tab-btn"+(tab===t.id?" active":"")} onClick={()=>setTab(t.id)}>
-                <span className="mt-icon">{t.icon}</span>{t.name}
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",color:tab===t.id?"#22c55e":"#94a3b8",fontSize:"9.5px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",fontFamily:"inherit"}}>
+                <span style={{fontSize:20}}>{t.icon}</span>{t.name}
               </button>
           ))}
         </div>}
