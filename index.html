@@ -96,9 +96,9 @@ const { useState } = React;
 const COMPANY = { name: "הדברה 360", licensePrefix: "ח.פ. 12-345678" };
 
 const CLR = {
-  primary:"#1a5c3a", primaryLight:"#e8f5ee", primaryMid:"#2d7a50",
-  accent:"#f59e0b", danger:"#dc2626", info:"#2563eb",
-  muted:"#6b7280", border:"#e5e7eb", surface:"#f9fafb", white:"#ffffff",
+  primary:"#16a34a", primaryLight:"#f0fdf4", primaryMid:"#22c55e",
+  accent:"#f59e0b", danger:"#ef4444", info:"#3b82f6",
+  muted:"#64748b", border:"#e2e8f0", surface:"#f8fafc", white:"#ffffff",
   // dark theme for exec log tab
   dk_bg:"#0f1a14", dk_card:"#1a2820", dk_border:"#2a4035",
   dk_primary:"#3ddc84", dk_dim:"#1a4d30", dk_text:"#e8f5ee",
@@ -5162,95 +5162,82 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  return(
-    <div style={{direction:"rtl",fontFamily:"system-ui,sans-serif",minHeight:"100vh",background:isFullTab?CLR.dk_bg:"#f0f4f2"}}>
-      {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
-      {/* Header */}
-      <div style={{background:CLR.primary,color:"#fff",position:isMobile?"sticky":"relative",top:0,zIndex:200,direction:"rtl"}}>
-        {isMobile ? (
-          /* ── MOBILE header ── */
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 10px",height:50}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0,overflow:"hidden"}}>
-              <img src={LOGO_SRC} alt="הדברה 360" style={{height:34,width:"auto",objectFit:"contain",flexShrink:0}}/>
-              <select value={`${user.role}-${user.id}`}
-                onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
-                style={{background:"rgba(255,255,255,0.18)",color:"#fff",border:"1px solid rgba(255,255,255,0.35)",borderRadius:6,padding:"5px 6px",fontSize:12,maxWidth:120,flexShrink:0,cursor:"pointer"}}>
-                {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`} style={{background:CLR.primary}}>{u.name} ({u.role})</option>)}
-              </select>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <button onClick={()=>setShowSearch(true)} style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:8,padding:"6px 10px",fontSize:14,cursor:"pointer"}}>🔍</button>
-              <span style={{background:"rgba(34,197,94,0.25)",color:"#86efac",borderRadius:6,padding:"4px 7px",fontSize:11,fontWeight:700}}>💾</span>
-              <button onClick={exportBackup} title="גיבוי" style={{background:"rgba(255,255,255,0.1)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:6,padding:"5px 8px",fontSize:13,cursor:"pointer"}}>📦</button>
-              <button onClick={importBackup} title="שחזר" style={{background:"rgba(255,255,255,0.1)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:6,padding:"5px 8px",fontSize:13,cursor:"pointer"}}>📂</button>
-              <button onClick={resetAllData} title="איפוס" style={{background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,padding:"5px 8px",fontSize:13,cursor:"pointer"}}>↺</button>
-            </div>
-          </div>
-        ) : (
-          /* ── DESKTOP header ── */
-          <div style={{padding:"0 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0"}}>
-              <img src={LOGO_SRC} alt="הדברה 360" style={{height:44,width:"auto",objectFit:"contain"}}/>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0"}}>
-              <span style={{fontSize:11,opacity:0.8}}>משתמש:</span>
-              <select value={`${user.role}-${user.id}`}
-                onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
-                style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",borderRadius:6,padding:"4px 8px",fontSize:12}}>
-                {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`} style={{background:CLR.primary}}>{u.name} ({u.role})</option>)}
-              </select>
-              <div style={{background:"rgba(255,255,255,0.2)",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:600}}>👤 {user.name}</div>
-              <button onClick={()=>setShowSearch(true)} style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.35)",borderRadius:8,padding:"5px 13px",fontSize:12,cursor:"pointer",fontWeight:600}}>🔍 חיפוש</button>
-              <span style={{background:"rgba(34,197,94,0.2)",color:"#86efac",borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>💾 נשמר</span>
-              <button onClick={exportBackup} title="ייצא גיבוי של כל הנתונים" style={{background:"rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.75)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer"}}>📦 גיבוי</button>
-              <button onClick={importBackup} title="שחזר מגיבוי" style={{background:"rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.75)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer"}}>📂 שחזר</button>
-              <button onClick={resetAllData} style={{background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.55)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer"}}>↺ איפוס</button>
-            </div>
-          </div>
-        )}
-      </div>
-      {/* Tabs */}
-      {isMobile ? (
-        /* ── MOBILE tabs: emoji + short label ── */
-        <div style={{background:isFullTab?CLR.dk_card:CLR.white,borderBottom:`1px solid ${isFullTab?CLR.dk_border:CLR.border}`,display:"flex",overflowX:"auto",overflowY:"hidden",position:"sticky",top:50,zIndex:190,WebkitOverflowScrolling:"touch",direction:"rtl",scrollbarWidth:"none"}}>
-          {TABS.map(t=>{
-            const isActive=tab===t.id;
-            const activeColor=isFullTab?CLR.dk_primary:CLR.primary;
-            const mutedColor=isFullTab?CLR.dk_muted:CLR.muted;
-            return <button key={t.id} onClick={()=>setTab(t.id)} title={t.label}
-              style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,
-                padding:"6px 10px 5px",border:"none",cursor:"pointer",flexShrink:0,
-                borderBottom:isActive?`3px solid ${activeColor}`:"3px solid transparent",
-                borderTop:"3px solid transparent",
-                background:isActive?(isFullTab?"rgba(61,220,132,0.08)":"rgba(26,92,58,0.06)"):"none"}}>
-              <span style={{fontSize:18,lineHeight:1}}>{t.short}</span>
-              <span style={{fontSize:9,fontWeight:isActive?700:400,color:isActive?activeColor:mutedColor,whiteSpace:"nowrap"}}>
-                {t.label.split(" ").slice(1).join(" ")}
-              </span>
-            </button>;
-          })}
-        </div>
-      ) : (
-        /* ── DESKTOP tabs: full text ── */
-        <div style={{background:isFullTab?CLR.dk_card:CLR.white,borderBottom:`1px solid ${isFullTab?CLR.dk_border:CLR.border}`,display:"flex",paddingRight:12,overflowX:"auto",direction:"rtl"}}>
-          {TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
-              style={{padding:"12px 16px",border:"none",background:"none",cursor:"pointer",fontSize:13,
-                fontWeight:tab===t.id?700:400,
-                color:tab===t.id?(isFullTab?CLR.dk_primary:CLR.primary):(isFullTab?CLR.dk_muted:CLR.muted),
-                borderBottom:tab===t.id?`3px solid ${isFullTab?CLR.dk_primary:CLR.primary}`:"3px solid transparent",
-                whiteSpace:"nowrap"}}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
+  const tabLabel={dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
-      {/* Content */}
-      {isFullTab
-        ? <ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} execLogs={execLogs} setExecLogs={setExecLogs} finance={finance} setFinance={setFinance}/>
-        : <div style={{padding:isMobile?"12px":"20px",maxWidth:1180,margin:"0 auto"}}>
-            {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
+  return(
+    <div style={{direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:isFullTab?"#0f1a14":"#f8fafc",display:"flex"}}>
+      {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
+
+      {/* ── SIDEBAR (desktop only) ── */}
+      {!isFullTab&&<aside className="saas-sidebar">
+        <div className="sb-logo">
+          <div className="sb-logo-icon">🦟</div>
+          <div>
+            <div className="sb-logo-name">הדברה 360</div>
+            <div className="sb-logo-sub">מערכת CRM</div>
+          </div>
+        </div>
+        <nav className="sb-nav">
+          {[
+            {lbl:"ראשי",items:[{id:"dashboard",icon:"📊",name:"דשבורד",hide:null},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null}]},
+            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+            {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
+            {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
+            {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true}]},
+          ].map(group=>(
+            <div key={group.lbl} className="sb-section">
+              <div className="sb-section-label">{group.lbl}</div>
+              {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")).map(t=>(
+                <button key={t.id} className={"sb-item"+(tab===t.id?" active":"")} onClick={()=>setTab(t.id)}>
+                  <span className="sb-icon">{t.icon}</span>{t.name}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="sb-user">
+          <div className="sb-avatar" style={{background:user.role==="מנהל"?"#7c3aed":user.role==="מדביר"?"#16a34a":"#2563eb"}}>
+            {user.name.charAt(0)}
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div className="sb-uname">{user.name}</div>
+            <div className="sb-urole">{user.role}</div>
+          </div>
+          <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
+            style={{background:"none",border:"none",color:"#94a3b8",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}
+            title="החלף משתמש">
+            {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`} style={{background:"#1e293b"}}>{u.name}</option>)}
+          </select>
+        </div>
+      </aside>}
+
+      {/* ── MAIN AREA ── */}
+      <div className={isFullTab?"":"saas-main"} style={isFullTab?{flex:1,minHeight:"100vh",display:"flex",flexDirection:"column"}:{}}>
+
+        {/* Topbar (desktop) */}
+        {!isFullTab&&!isMobile&&<div className="saas-topbar">
+          <div className="tb-title">{tabLabel[tab]||tab}</div>
+          <button onClick={()=>setShowSearch(true)} className="tb-btn ghost">🔍 חיפוש</button>
+          <button onClick={exportBackup} className="tb-btn ghost" title="גיבוי נתונים">💾 גיבוי</button>
+          <button onClick={importBackup} className="tb-btn ghost" title="שחזר מגיבוי">📂 שחזר</button>
+          <button onClick={resetAllData} className="tb-btn" style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,padding:"6px 12px",fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס</button>
+        </div>}
+
+        {/* Topbar (mobile) */}
+        {!isFullTab&&isMobile&&<div className="saas-topbar">
+          <div className="tb-title" style={{fontSize:14}}>{tabLabel[tab]||tab}</div>
+          <button onClick={()=>setShowSearch(true)} className="tb-btn ghost" style={{padding:"5px 10px",fontSize:12}}>🔍</button>
+          <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
+            style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 8px",fontSize:12,color:"#0f172a",fontFamily:"inherit"}}>
+            {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`}>{u.name} ({u.role})</option>)}
+          </select>
+        </div>}
+
+        {/* Content */}
+        {isFullTab
+          ? <ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>
+          : <div style={{padding:isMobile?"12px 12px 80px":"24px",maxWidth:1200,margin:"0 auto",width:"100%"}}>
+              {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} collabs={collabs} finance={finance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
@@ -5265,8 +5252,21 @@ function App(){
             {tab==="finance"&&<Finance finance={finance} setFinance={setFinance} customers={customers} appointments={appointments} workers={workers}/>}
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={appointments}/>}
             {tab==="workers"&&<Workers workers={workers} setWorkers={setWorkers} appointments={appointments}/>}
-          </div>
-      }
+            </div>
+        }
+
+        {/* Mobile bottom nav */}
+        {!isFullTab&&<div className="mob-tabs">
+          {[{id:"dashboard",icon:"📊",name:"ראשי"},{id:"calendar",icon:"📅",name:"יומן"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"execlog",icon:"📋",name:"ביצוע"},{id:"neworder",icon:"📝",name:"הזמנה",hide:"מדביר"}]
+            .filter(t=>!t.hide||t.hide!==user.role)
+            .map(t=>(
+              <button key={t.id} className={"mob-tab-btn"+(tab===t.id?" active":"")} onClick={()=>setTab(t.id)}>
+                <span className="mt-icon">{t.icon}</span>{t.name}
+              </button>
+          ))}
+        </div>}
+
+      </div>
     </div>
   );
 }
@@ -5275,8 +5275,9 @@ const root=ReactDOM.createRoot(document.getElementById("root"));
 try{
   root.render(<App />);
 }catch(e){
-  document.getElementById("root").innerHTML=`<div style="padding:40px;color:#dc2626;font-family:sans-serif;direction:rtl"><h2>❌ שגיאה בטעינה</h2><pre style="margin-top:16px;font-size:12px;white-space:pre-wrap">${e.message}\n${e.stack}</pre></div>`;
+  document.getElementById("root").innerHTML=`<div style="padding:40px;color:#dc2626;font-family:sans-serif;direction:rtl"><h2>שגיאה בטעינה</h2><pre style="font-size:12px;margin-top:12px;white-space:pre-wrap">${e.stack}</pre></div>`;
 }
+
 </script>
 </body>
 </html>
