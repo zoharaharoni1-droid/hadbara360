@@ -282,8 +282,8 @@ const initCustomers = [
 
 
 const initWorkers = [
-  {id:1,name:"אמיר חסן",role:"מדביר",phone:"050-1111111",licenseNum:"ר-1234",licenseExpiry:"2027-03-01",specialty:"חרקים ועקרבים",zone:"תל אביב והמרכז",status:"פעיל",color:"#2563eb",notes:""},
-  {id:2,name:"מוטי גרין",role:"מדביר",phone:"050-2222222",licenseNum:"ר-5678",licenseExpiry:"2026-09-15",specialty:"מכרסמים",zone:"חיפה והצפון",status:"פעיל",color:"#16a34a",notes:"רישיון מתחדש בספטמבר"},
+  {id:1,name:"אמיר חסן",role:"מדביר",phone:"050-1111111",licenseNum:"ר-1234",license:"מדביר דירות ושטח פתוח",licenseExpiry:"2027-03-01",specialty:"חרקים ועקרבים",zone:"תל אביב והמרכז",status:"פעיל",color:"#2563eb",notes:""},
+  {id:2,name:"מוטי גרין",role:"מדביר",phone:"050-2222222",licenseNum:"ר-5678",license:"מדביר דירות",licenseExpiry:"2026-09-15",specialty:"מכרסמים",zone:"חיפה והצפון",status:"פעיל",color:"#16a34a",notes:"רישיון מתחדש בספטמבר"},
   {id:3,name:"נטלי שפירא",role:"פקידה",phone:"050-3333333",licenseNum:"",licenseExpiry:"",specialty:"",zone:"",status:"פעיל",color:"#9333ea",notes:""},
 ];
 
@@ -881,28 +881,79 @@ function DkBtn({children,onClick,variant="primary",disabled=false,style={}}){
   return <button onClick={onClick} disabled={disabled} style={{...vs[variant],borderRadius:8,padding:"10px 20px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontSize:14,opacity:disabled?0.5:1,fontFamily:"inherit",...style}}>{children}</button>;
 }
 
-function ChemPicker({selected,onChange}){
-  const [srch,setSrch]=useState("");
-  const filtered=CHEMICALS.filter(c=>!srch||c.name.includes(srch)||c.targets.some(t=>t.includes(srch)));
-  const toggle=n=>{const ex=selected.find(s=>s.name===n);ex?onChange(selected.filter(s=>s.name!==n)):onChange([...selected,{name:n,batch:""}]);};
-  const setBatch=(n,b)=>onChange(selected.map(s=>s.name===n?{...s,batch:b}:s));
+function ChemPicker({selected,onChange,treatMethod={}}){
+  const [customChem,setCustomChem]=useState("");
+  const [customBatch,setCustomBatch]=useState("");
+  const [showCustom,setShowCustom]=useState(false);
+
+  const TREAT_OPTIONS=["ריסוס","ג'ל","תחנת האכלה","ירפול","אבקה","אחר"];
+
+  const toggle=(name,batch)=>{
+    const exists=selected.find(m=>m.name===name);
+    if(exists) onChange(selected.filter(m=>m.name!==name));
+    else {
+      const method=treatMethod[name]||"ריסוס";
+      onChange([...selected,{name,batch:batch||"",method}]);
+    }
+  };
+
+  const updateField=(name,field,val)=>{
+    onChange(selected.map(m=>m.name===name?{...m,[field]:val}:m));
+  };
+
+  const addCustom=()=>{
+    if(!customChem.trim()) return;
+    const method=treatMethod[customChem]||"ריסוס";
+    onChange([...selected,{name:customChem,batch:customBatch,method,custom:true}]);
+    setCustomChem(""); setCustomBatch(""); setShowCustom(false);
+  };
+
   return <div>
-    <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="🔍 חפש חומר או מזיק..."
-      style={{width:"100%",background:CLR.dk_surface,border:`1px solid ${CLR.dk_border}`,borderRadius:8,padding:"7px 12px",color:CLR.dk_text,fontSize:13,marginBottom:10,boxSizing:"border-box",fontFamily:"inherit"}}/>
-    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-      {filtered.map(c=>{
-        const on=selected.find(s=>s.name===c.name);
-        return <button key={c.name} onClick={()=>toggle(c.name)}
-          style={{background:on?CLR.dk_primary+"33":"transparent",color:on?CLR.dk_primary:CLR.dk_muted,border:`1px solid ${on?CLR.dk_primary:CLR.dk_border}`,borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
-          {on?"✓ ":""}{c.name} <span style={{opacity:0.6,fontSize:10}}>{c.method}</span>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+      {CHEMICALS.map(c=>{
+        const sel=selected.find(m=>m.name===c.name);
+        return <button key={c.name} type="button" onClick={()=>toggle(c.name,"")}
+          style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid "+(sel?CLR.primary:CLR.border),background:sel?CLR.primaryLight:"#fff",color:sel?CLR.primary:CLR.muted,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",fontFamily:"inherit"}}>
+          {sel?"✓ ":""}{c.name}
         </button>;
       })}
+      <button type="button" onClick={()=>setShowCustom(s=>!s)}
+        style={{padding:"5px 12px",borderRadius:20,border:"1.5px dashed "+CLR.border,background:"#f9fafb",color:CLR.primary,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+        + חומר נוסף
+      </button>
     </div>
-    {selected.map(s=><div key={s.name} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
-      <span style={{fontSize:13,color:CLR.dk_primary,minWidth:130,flexShrink:0}}>{s.name}</span>
-      <input value={s.batch} onChange={e=>setBatch(s.name,e.target.value)} placeholder="מס׳ אצווה"
-        style={{flex:1,padding:"5px 10px",borderRadius:6,border:`1px solid ${CLR.dk_border}`,background:CLR.dk_surface,color:CLR.dk_text,fontSize:13,fontFamily:"inherit"}}/>
-    </div>)}
+
+    {showCustom&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <Inp label="שם חומר" value={customChem} onChange={setCustomChem} placeholder="שם החומר"/>
+        <Inp label="מספר אצווה" value={customBatch} onChange={setCustomBatch} placeholder="B2024-XX"/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn sm onClick={addCustom}>+ הוסף</Btn>
+        <Btn sm v="ghost" onClick={()=>setShowCustom(false)}>ביטול</Btn>
+      </div>
+    </div>}
+
+    {selected.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
+      {selected.map((m,i)=>(
+        <div key={i} style={{background:"#f8fafc",borderRadius:10,padding:"10px 12px",border:"1px solid "+CLR.border}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontWeight:600,fontSize:13,color:CLR.primary}}>✓ {m.name}</span>
+            <button onClick={()=>onChange(selected.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:16}}>✕</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <Inp label="מספר אצווה" value={m.batch||""} onChange={v=>updateField(m.name,"batch",v)} placeholder="B2024-XX"/>
+            <div>
+              <label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:4,fontWeight:600}}>צורת טיפול</label>
+              <select value={m.method||"ריסוס"} onChange={e=>updateField(m.name,"method",e.target.value)}
+                style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid "+CLR.border,fontSize:13,fontFamily:"inherit",background:"#fff"}}>
+                {TREAT_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>}
   </div>;
 }
 
@@ -919,63 +970,158 @@ function PestPickerDk({selected,onChange}){
   </div>;
 }
 
-function ExecLogForm({worker,prefillAppt,initialData,onPreview}){
+function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[]}){
+  // Auto-detect worker from appointment
+  const apptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
+  const defaultWorker = apptWorker || worker || {};
+
   const [f,setF]=useState({
-    clientName:  initialData?.clientName  || prefillAppt?.customerName || "",
-    address:     initialData?.address     || prefillAppt?.address      || "",
-    structureType:initialData?.structureType || prefillAppt?.structureType || "",
-    pest:        initialData?.pest        || (prefillAppt?.pestType?[prefillAppt.pestType]:[]),
-    pestLevel:   initialData?.pestLevel   || "",
-    materials:   initialData?.materials_raw || initialData?.materials  || [],
+    clientName:    initialData?.clientName    || prefillAppt?.customerName || "",
+    address:       initialData?.address       || prefillAppt?.address      || "",
+    structureType: initialData?.structureType || prefillAppt?.structureType || prefillAppt?.propertyType || "",
+    pest:          initialData?.pest          || (prefillAppt?.pestType?[prefillAppt.pestType]:[]),
+    customPest:    initialData?.customPest    || "",
+    pestLevel:     initialData?.pestLevel     || "",
+    materials:     initialData?.materials_raw || initialData?.materials || [],
     extermination_notes: initialData?.extermination_notes || "",
-    warranty:    initialData?.warranty    || "",
-    notes:       initialData?.notes       || prefillAppt?.notes        || "",
-    paymentDone: initialData?.paymentDone ?? true,
-    paymentNote: initialData?.paymentNote || "",
-    date:        prefillAppt?.date        || todayStr(),
+    warranty:      initialData?.warranty      || "",
+    notes:         initialData?.notes         || prefillAppt?.notes || "",
+    paymentDone:   initialData?.paymentDone   ?? true,
+    paymentNote:   initialData?.paymentNote   || "",
+    date:          prefillAppt?.date          || todayStr(),
+    workerName:    initialData?.workerName    || defaultWorker.name || "",
+    workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
+    workerLicenseType: initialData?.workerLicenseType || defaultWorker.license || "",
+    extraWorkers:  initialData?.extraWorkers  || [],
   });
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
-  const safety=f.pest.length&&f.structureType?f.pest.map(p=>getSafety(p,f.structureType)).join("\n\n"):"";
-  const valid=f.clientName&&f.address&&f.structureType&&f.pest.length>0&&f.materials.length>0;
 
-  return <div style={{color:CLR.dk_text}}>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <DkInput label="שם לקוח *" value={f.clientName} onChange={v=>set("clientName",v)}/>
-      <DkInput label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/>
+  const addExtraWorker=()=>set("extraWorkers",[...f.extraWorkers,{name:"",license:"",licenseType:""}]);
+  const updateExtraWorker=(i,k,v)=>setF(x=>({...x,extraWorkers:x.extraWorkers.map((w,j)=>j===i?{...w,[k]:v}:w)}));
+  const removeExtraWorker=(i)=>setF(x=>({...x,extraWorkers:x.extraWorkers.filter((_,j)=>j!==i)}));
+
+  const TREAT_METHOD={
+    "דלתא סופר":"ריסוס","ספיר":"ריסוס","אודם":"ריסוס","פרמנון":"ריסוס",
+    "פרוג'ל תיקנים":"ג'ל","פרוג'ל נמלים":"ג'ל","אלפא ג'ל":"ג'ל","קוינור ג'ל":"ג'ל",
+    "ברקת":"ריסוס","שוהם":"ריסוס",
+    "אינוויקט גולד":"ג'ל",
+    "רטרים בלוק":"תחנת האכלה","רטרים פסטה":"תחנת האכלה",
+  };
+
+  const safety=f.pest.length&&f.structureType?f.pest.map(p=>getSafety(p,f.structureType)).join("\n\n"):null;
+  const allPests=[...f.pest,...(f.customPest?[f.customPest]:[])];
+  const valid=f.clientName&&f.address&&f.structureType&&allPests.length>0&&f.materials.length>0;
+
+  const PEST_LEVELS=["קלה","בינונית","גבוהה","חמורה"];
+  const LICENSE_TYPES=["","מדביר דירות","מדביר דירות ושטח פתוח","מדביר חקלאי"];
+
+  return <div style={{color:"#0f172a"}}>
+
+    {/* Worker section */}
+    <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,color:CLR.primary,marginBottom:10}}>👷 פרטי מדביר</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:4,fontWeight:600}}>שם מדביר *</label>
+          <select value={f.workerName} onChange={e=>{
+            const w=workers.find(x=>x.name===e.target.value);
+            set("workerName",e.target.value);
+            if(w){set("workerLicense",w.licenseNum||"");set("workerLicenseType",w.licenseType||"");}
+          }} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,fontFamily:"inherit",background:"#fff"}}>
+            <option value="">-- בחר מדביר --</option>
+            {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{w.name}</option>)}
+            <option value="אחר">אחר</option>
+          </select>
+        </div>
+        <Inp label="מספר רישיון" value={f.workerLicense} onChange={v=>set("workerLicense",v)} placeholder="ר-XXXX"/>
+      </div>
+      <Sel label="סוג רישיון" value={f.workerLicenseType} onChange={v=>set("workerLicenseType",v)} options={LICENSE_TYPES}/>
+
+      {/* Extra workers */}
+      {f.extraWorkers.map((ew,i)=>(
+        <div key={i} style={{marginTop:10,padding:"10px 12px",background:"#fff",borderRadius:8,border:"1px solid #e2e8f0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:600,color:CLR.muted}}>מדביר נוסף {i+1}</span>
+            <button onClick={()=>removeExtraWorker(i)} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:18}}>✕</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <Inp label="שם" value={ew.name} onChange={v=>updateExtraWorker(i,"name",v)}/>
+            <Inp label="מספר רישיון" value={ew.license} onChange={v=>updateExtraWorker(i,"license",v)}/>
+          </div>
+          <Sel label="סוג רישיון" value={ew.licenseType} onChange={v=>updateExtraWorker(i,"licenseType",v)} options={LICENSE_TYPES}/>
+        </div>
+      ))}
+      <button onClick={addExtraWorker} style={{marginTop:10,background:"none",border:"1px dashed #86efac",borderRadius:8,padding:"6px 14px",fontSize:12,color:CLR.primary,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>+ הוסף מדביר נוסף</button>
     </div>
-    <DkInput label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <DkSelect label="סוג מבנה *" value={f.structureType} onChange={v=>set("structureType",v)} options={PROPERTY_TYPES}/>
-      <DkSelect label="רמת נגיעות" value={f.pestLevel} onChange={v=>set("pestLevel",v)} options={["קלה","בינונית","גבוהה"]}/>
+
+    {/* Client + Date */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+      <Inp label="שם לקוח *" value={f.clientName} onChange={v=>set("clientName",v)}/>
+      <Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/>
     </div>
+    <div style={{marginBottom:14}}><Inp label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/></div>
+
+    {/* Structure + Pest level */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+      <Sel label="סוג מבנה *" value={f.structureType} onChange={v=>set("structureType",v)}
+        options={["","דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"]}/>
+      <div>
+        <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>רמת נגיעות</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {PEST_LEVELS.map(lv=>(
+            <button key={lv} type="button" onClick={()=>set("pestLevel",lv)}
+              style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid "+(f.pestLevel===lv?CLR.primary:CLR.border),background:f.pestLevel===lv?CLR.primary:"#fff",color:f.pestLevel===lv?"#fff":CLR.muted,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              {lv}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Pests */}
     <div style={{marginBottom:14}}>
-      <label style={{fontSize:11,color:CLR.dk_muted,display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>מזיקים שטופלו *</label>
+      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>מזיקים *</label>
       <PestPickerDk selected={f.pest} onChange={v=>set("pest",v)}/>
+      <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center"}}>
+        <input value={f.customPest} onChange={e=>set("customPest",e.target.value)} placeholder="מזיק אחר (הקלד בחופשי)..."
+          style={{flex:1,padding:"7px 10px",borderRadius:8,border:"1.5px solid "+CLR.border,fontSize:13,fontFamily:"inherit"}}/>
+        {f.customPest&&<span style={{background:CLR.primaryLight,color:CLR.primary,padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>✓ {f.customPest}</span>}
+      </div>
     </div>
+
+    {/* Chemicals */}
     <div style={{marginBottom:14}}>
-      <label style={{fontSize:11,color:CLR.dk_muted,display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>חומרי הדברה *</label>
-      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)}/>
+      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>חומרי הדברה *</label>
+      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD}/>
     </div>
-    <DkTextarea label="אזורי יישום / תיאור הטיפול" value={f.extermination_notes} onChange={v=>set("extermination_notes",v)} placeholder="הדברה בחצר, ביובים, מטבח..." rows={2}/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <DkInput label="אחריות (חודשים)" value={f.warranty} onChange={v=>set("warranty",v)} placeholder="3"/>
-      <DkInput label="הערות" value={f.notes} onChange={v=>set("notes",v)} placeholder="יש כלב בבית..."/>
+
+    <div style={{marginBottom:14}}><Inp label="אזורי יישום / תיאור הטיפול" value={f.extermination_notes} onChange={v=>set("extermination_notes",v)} placeholder="ג'ל הונח בארונות מטבח..."/></div>
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+      <Inp label="אחריות (חודשים)" value={f.warranty} onChange={v=>set("warranty",v)} placeholder="3"/>
+      <Inp label="הערות" value={f.notes} onChange={v=>set("notes",v)} placeholder="יש כלב בבית..."/>
     </div>
-    <div style={{background:"#2d1515",border:"1px solid #7f1d1d",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-      <div style={{fontWeight:600,fontSize:13,color:CLR.dk_danger,marginBottom:8}}>💳 סטטוס תשלום</div>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:8,color:CLR.dk_text}}>
-        <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)}/> תשלום התקבל בשטח
+
+    {/* Payment */}
+    <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+      <div style={{fontWeight:600,fontSize:13,color:CLR.danger,marginBottom:8}}>💳 סטטוס תשלום</div>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:4}}>
+        <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)} style={{width:16,height:16}}/>
+        <span style={{color:"#0f172a"}}>תשלום התקבל בשטח</span>
       </label>
-      {!f.paymentDone&&<DkTextarea label="הערה לפקידה לגבי תשלום" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder='לדוג׳ – לקוח יעביר ביט מחר' rows={2}/>}
+      {!f.paymentDone&&<Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="ישלם בהעברה..."/>}
     </div>
-    {safety&&<div style={{background:"#2d1f00",border:"1px solid #854d0e",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-      <div style={{fontWeight:700,color:CLR.dk_accent,fontSize:13,marginBottom:6}}>⚠️ הנחיות בטיחות (לטופס)</div>
-      <pre style={{margin:0,fontSize:12,fontFamily:"inherit",whiteSpace:"pre-wrap",lineHeight:1.8,color:"#fde68a"}}>{safety}</pre>
+
+    {/* Safety instructions */}
+    {safety&&<div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+      <div style={{fontWeight:700,color:"#92400e",fontSize:13,marginBottom:6}}>⚠️ הנחיות בטיחות ללקוח</div>
+      <pre style={{margin:0,fontSize:12,fontFamily:"inherit",whiteSpace:"pre-wrap",lineHeight:1.8,color:"#78350f"}}>{safety}</pre>
     </div>}
-    <DkBtn onClick={()=>{if(!valid)return alert("שם, כתובת, מבנה, מזיקים וחומרים – חובה");onPreview({...f,safety,worker});}} disabled={!valid} style={{width:"100%"}}>
+
+    <Btn full onClick={()=>{if(!valid)return alert("שם, כתובת, מבנה, מזיקים וחומרים – חובה");onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers});}}>
       👁 טיוטה לאישור →
-    </DkBtn>
-    {!valid&&<div style={{fontSize:12,color:CLR.dk_muted,textAlign:"center",marginTop:6}}>* שדות חובה חסרים</div>}
+    </Btn>
+    {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* שדות חובה: שם, כתובת, מבנה, מזיקים, חומרים</div>}
   </div>;
 }
 
@@ -1107,7 +1253,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
 
   // LIST MODE
   return(
-    <div style={{background:"#f8fafc",minHeight:"100%",padding:16,direction:"rtl",fontFamily:"system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
       {/* Pending appts */}
       {pendingAppts.length>0&&(
         <div style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:18,marginBottom:20}}>
@@ -3078,7 +3224,7 @@ function NewWorkerModal({onClose,onSave}){
     </FieldCard>
     {f.role==="מדביר"&&<FieldCard title="פרטי רישיון">
       <G2>
-        <Inp label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} placeholder="רישיון א׳, ב׳..."/>
+        <Sel label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} options={["","מדביר דירות","מדביר דירות ושטח פתוח","מדביר חקלאי","אחר"]}/>
         <Inp label="מספר רישיון" value={f.licenseNum} onChange={v=>set("licenseNum",v)} placeholder="12345678"/>
       </G2>
       <G2>
