@@ -81,6 +81,11 @@ function loadScript(urls,cb,i){
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}
   input,select,textarea{font-size:16px}
+  @media(max-width:768px){
+    table{font-size:12px}
+    table td,table th{padding:8px 10px}
+    .mob-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  }
 </style>
 </head>
 <body>
@@ -5150,6 +5155,7 @@ function App(){
   const [tab,setTab]=useState("dashboard");
   const [showSearch,setShowSearch]=useState(false);
   const [isMobile,setIsMobile]=React.useState(()=>window.innerWidth<900);
+  const [drawerOpen,setDrawerOpen]=React.useState(false);
   React.useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<900);
     window.addEventListener("resize",check);
@@ -5267,17 +5273,76 @@ function App(){
         </div>}
 
         {/* Topbar (mobile) */}
-        {!isFullTab&&isMobile&&<div style={{height:50,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 14px",gap:8,position:"sticky",top:0,zIndex:100}}>
-          <div style={{fontSize:14,fontWeight:700,color:"#0f172a",flex:1}}>{tabLabel[tab]||tab}</div>
-          <button onClick={()=>setShowSearch(true)} style={{padding:"5px 10px",borderRadius:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>🔍</button>
-          <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");}}}
-            style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 8px",fontSize:12,color:"#0f172a",fontFamily:"inherit"}}>
-            {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`}>{u.name} ({u.role})</option>)}
-          </select>
+        {isMobile&&<div style={{height:52,background:"#0f172a",display:"flex",alignItems:"center",padding:"0 14px",gap:10,position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
+          {/* Hamburger */}
+          <button onClick={()=>setDrawerOpen(true)} style={{background:"none",border:"none",cursor:"pointer",padding:"6px",borderRadius:8,display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
+            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
+            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
+          </button>
+          {/* Logo */}
+          <div style={{fontSize:16,fontWeight:800,color:"#fff",flex:1,letterSpacing:"-0.3px"}}>🦟 הדברה 360</div>
+          {/* Page name */}
+          <div style={{fontSize:12,color:"#94a3b8",fontWeight:600}}>{tabLabel[tab]||tab}</div>
+          {/* Search */}
+          <button onClick={()=>setShowSearch(true)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>🔍</button>
+          {/* User avatar */}
+          <div style={{width:32,height:32,borderRadius:"50%",background:"#16a34a",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:"#fff",flexShrink:0,cursor:"pointer"}}
+            onClick={()=>setDrawerOpen(true)}>
+            {user.name.charAt(0)}
+          </div>
         </div>}
 
+        {/* Mobile Drawer */}
+        {isMobile&&drawerOpen&&<>
+          {/* Overlay */}
+          <div onClick={()=>setDrawerOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+          {/* Drawer panel */}
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:260,background:"#0f172a",zIndex:500,display:"flex",flexDirection:"column",boxShadow:"-4px 0 20px rgba(0,0,0,0.3)"}}>
+            {/* Drawer header */}
+            <div style={{padding:"16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:36,height:36,background:"#16a34a",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🦟</div>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>הדברה 360</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{user.name} · {user.role}</div>
+                </div>
+              </div>
+              <button onClick={()=>setDrawerOpen(false)} style={{background:"#1e293b",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",color:"#94a3b8",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+            {/* Nav items */}
+            <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
+              {[
+                {lbl:"ראשי",items:[{id:"dashboard",icon:"📊",name:"דשבורד"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"}]},
+                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+                {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"finance",icon:"💰",name:"כספים"}]},
+                {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
+                {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true}]},
+              ].map(group=>(
+                <div key={group.lbl} style={{marginBottom:16}}>
+                  <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
+                  {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")).map(t=>(
+                    <button key={t.id} onClick={()=>{setTab(t.id);setDrawerOpen(false);}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:14,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:2,fontFamily:"inherit"}}>
+                      <span style={{fontSize:16,width:20,textAlign:"center"}}>{t.icon}</span>{t.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            {/* User switch */}
+            <div style={{padding:"12px 14px",borderTop:"1px solid #1e293b"}}>
+              <div style={{fontSize:11,color:"#475569",marginBottom:6,fontWeight:600}}>החלף משתמש</div>
+              <select value={`${user.role}-${user.id}`} onChange={e=>{const u=USER_LIST.find(u=>`${u.role}-${u.id}`===e.target.value);if(u){setUser(u);setTab("dashboard");setDrawerOpen(false);}}}
+                style={{width:"100%",background:"#1e293b",border:"1px solid #334155",borderRadius:8,padding:"8px 10px",fontSize:13,color:"#e2e8f0",fontFamily:"inherit"}}>
+                {USER_LIST.map(u=><option key={`${u.role}-${u.id}`} value={`${u.role}-${u.id}`} style={{background:"#1e293b"}}>{u.name} ({u.role})</option>)}
+              </select>
+            </div>
+          </div>
+        </>}
+
         {/* Content */}
-        <div style={{padding:isMobile?"12px 12px 80px":"24px",width:"100%"}}>
+        <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%"}}>
               {tab==="execlog"&&<div style={{margin:"-24px",minHeight:"calc(100vh - 56px)",background:"#0f1a14"}}><ExecLogTab currentUser={user} workers={workers} appointments={appointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={finance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/></div>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={appointments} finance={finance} workers={workers} execLogs={execLogs} maintenance={maintenance} scheduledMsgs={scheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={appointments} setAppointments={setAppointments} workers={workers} goToCustomers={()=>setTab("customers")}/>}
@@ -5296,16 +5361,7 @@ function App(){
             {tab==="workers"&&<Workers workers={workers} setWorkers={setWorkers} appointments={appointments}/>}
             </div>
 
-        {/* Mobile bottom nav */}
-        {!isFullTab&&isMobile&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:"#0f172a",zIndex:300,display:"flex",flexDirection:"row",justifyContent:"space-around",padding:"6px 0 8px",borderTop:"1px solid #1e293b"}}>
-          {[{id:"dashboard",icon:"📊",name:"ראשי"},{id:"calendar",icon:"📅",name:"יומן"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"execlog",icon:"📋",name:"ביצוע"},{id:"neworder",icon:"📝",name:"הזמנה",hide:"מדביר"}]
-            .filter(t=>!t.hide||t.hide!==user.role)
-            .map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",color:tab===t.id?"#22c55e":"#94a3b8",fontSize:"9.5px",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",fontFamily:"inherit"}}>
-                <span style={{fontSize:20}}>{t.icon}</span>{t.name}
-              </button>
-          ))}
-        </div>}
+        
 
       </div>
     </div>
