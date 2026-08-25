@@ -29,19 +29,58 @@ function loadScript(urls,cb,i){
 }
 </script>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: system-ui, "Segoe UI", Arial, sans-serif; background:#f0f4f2; }
-  #root { min-height:100vh; }
-  #loading { display:flex; align-items:center; justify-content:center; height:100vh; font-size:18px; color:#1a5c3a; direction:rtl; }
-  /* Mobile improvements */
-  @media (max-width: 640px) {
-    input, select, textarea { font-size: 16px !important; } /* Prevent iOS zoom */
-    button { min-height: 40px; min-width: 40px; }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;direction:rtl;color:#0f172a}
+  #root{min-height:100vh}
+  #loading{display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#16a34a;direction:rtl}
+
+  /* ── Sidebar ── */
+  .saas-sidebar{position:fixed;top:0;right:0;bottom:0;width:230px;background:#0f172a;display:flex;flex-direction:column;z-index:200}
+  .sb-logo{padding:16px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .sb-logo-icon{width:34px;height:34px;background:#16a34a;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .sb-logo-name{font-size:14px;font-weight:700;color:#fff;letter-spacing:-0.3px}
+  .sb-logo-sub{font-size:10px;color:#94a3b8;margin-top:1px}
+  .sb-nav{flex:1;padding:10px 8px;overflow-y:auto}
+  .sb-section{margin-bottom:16px}
+  .sb-section-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.9px;color:#475569;padding:0 10px;margin-bottom:4px}
+  .sb-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:500;border:none;background:none;width:100%;text-align:right;transition:all 0.15s;margin-bottom:1px;font-family:inherit}
+  .sb-item:hover{background:#1e293b;color:#cbd5e1}
+  .sb-item.active{background:#16a34a;color:#fff;font-weight:600}
+  .sb-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+  .sb-user{padding:12px 14px;border-top:1px solid #1e293b;display:flex;align-items:center;gap:9px;flex-shrink:0}
+  .sb-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;flex-shrink:0}
+  .sb-uname{font-size:12.5px;font-weight:600;color:#e2e8f0}
+  .sb-urole{font-size:10.5px;color:#94a3b8;margin-top:1px}
+
+  /* ── Main ── */
+  .saas-main{margin-right:230px;min-height:100vh;display:flex;flex-direction:column}
+  .saas-topbar{height:56px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;padding:0 24px;gap:10px;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,0.05)}
+  .tb-title{font-size:15px;font-weight:700;color:#0f172a;flex:1}
+  .tb-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;font-family:inherit}
+  .tb-btn.ghost{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0}
+  .tb-btn.ghost:hover{background:#e2e8f0}
+  .tb-btn.primary{background:#16a34a;color:#fff}
+  .tb-btn.primary:hover{background:#15803d}
+  .saas-content{padding:24px;flex:1}
+
+  /* ── Mobile ── */
+  @media(max-width:768px){
+    .saas-sidebar{display:none}
+    .saas-main{margin-right:0}
+    .mob-tabs{display:flex!important}
+    .saas-topbar{padding:0 14px;height:50px}
   }
-  /* Smooth tab scrolling */
-  ::-webkit-scrollbar { height: 3px; width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(26,92,58,0.3); border-radius: 2px; }
+  @media(min-width:769px){.mob-tabs{display:none!important}}
+  .mob-tabs{position:fixed;bottom:0;left:0;right:0;background:#0f172a;z-index:300;justify-content:space-around;padding:6px 0 8px;border-top:1px solid #1e293b}
+  .mob-tab-btn{background:none;border:none;color:#94a3b8;font-size:9.5px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;cursor:pointer;min-height:0;font-family:inherit;transition:color 0.15s}
+  .mob-tab-btn.active{color:#22c55e}
+  .mt-icon{font-size:20px}
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar{height:3px;width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px}
+  input,select,textarea{font-size:16px}
 </style>
 </head>
 <body>
