@@ -1219,6 +1219,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   };
 
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setFormKey(k=>k+1);setMode("new");};
+  const handlePreview=(data)=>{setPreviewData(data);setMode("preview");};
 
   if(viewLog) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
