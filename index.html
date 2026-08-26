@@ -1008,7 +1008,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     "רטרים בלוק":"תחנת האכלה","רטרים פסטה":"תחנת האכלה",
   };
 
-  const safety=f.pest.length&&f.structureType?f.pest.map(p=>getSafety(p,f.structureType)).join("\n\n"):null;
+  const safety=null; // הנחיות בטיחות
   const allPests=[...f.pest,...(f.customPest?[f.customPest]:[])];
   const valid=f.clientName&&f.address&&f.structureType&&allPests.length>0&&f.materials.length>0;
 
