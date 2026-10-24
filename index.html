@@ -5566,14 +5566,12 @@ function App(){
     try{localStorage.removeItem('crm_auth');}catch{}
   };
 
-  if(!authUser) return <LoginScreen onLogin={doLogin}/>;
-
-  // Map authUser to legacy user object
-  const user = {
+  // Map authUser to legacy user object (used after all hooks)
+  const user = authUser ? {
     id: authUser.id,
     name: authUser.name,
     role: authUser.role,
-  };
+  } : {id:null,name:"",role:""};
   const [tab,setTab]=useState("dashboard");
   const [showSearch,setShowSearch]=useState(false);
   const [isMobile,setIsMobile]=React.useState(()=>window.innerWidth<900);
@@ -5641,6 +5639,8 @@ function App(){
   },[]);
 
   const tabLabel={dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+
+  if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
   return(
     <div style={{direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:"#f8fafc"}}>
