@@ -2269,7 +2269,7 @@ function InvoiceModal({appt,customers,onClose,onSave}){
         <div style={{textAlign:"left"}}><div style={{fontWeight:700,color:CLR.primary}}>חשבונית מס׳ {docNum}</div><div style={{fontSize:12,color:CLR.muted}}>{fmtDate(todayStr())}</div></div>
       </div>
       <G2>
-        <div style={{background:CLR.surface,borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:11,color:CLR.muted,marginBottom:4}}>לקוח</div><div style={{fontWeight:600}}>{c.name||appt.customerName}</div><div style={{fontSize:12,color:CLR.muted}}>{c.phone}</div><div style={{fontSize:12,color:CLR.muted}}>{appt.address}</div></div>
+        <div style={{background:CLR.surface,borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:11,color:CLR.muted,marginBottom:4}}>לקוח</div><div style={{fontWeight:600}}>{c.name||appt.customerName}</div>{c.phone&&<a href={`tel:${c.phone}`} style={{fontSize:12,color:CLR.primary,textDecoration:"none",display:"block"}}>{c.phone}</a>}{appt.address&&<a href={`https://waze.com/ul?q=${encodeURIComponent(appt.address)}&navigate=yes`} target="_blank" rel="noreferrer" style={{fontSize:12,color:CLR.primary,textDecoration:"none",display:"block"}}>{appt.address}</a>}</div>
         <div style={{background:CLR.surface,borderRadius:8,padding:"10px 12px"}}><div style={{fontSize:11,color:CLR.muted,marginBottom:4}}>שירות</div><div style={{fontWeight:600}}>הדברת {appt.pestType}</div><div style={{fontSize:12,color:CLR.muted}}>{fmtDate(appt.date)} | {appt.time}</div><div style={{fontSize:12,color:CLR.muted}}>{appt.workerName}</div></div>
       </G2>
       <div style={{marginTop:12,border:`1px solid ${CLR.border}`,borderRadius:8,overflow:"hidden"}}>
@@ -2442,14 +2442,25 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </div>
     </div>}
     <G2 gap={8}>
-      {[["👤 לקוח",appt.customerName],["📞 טלפון",cust.phone||"—"],["📍 כתובת",appt.address],
-        ["🏠 סוג נכס",cust.propertyType?`${cust.propertyType}${cust.rooms?" | "+cust.rooms+" חד'":""}${cust.floors?" | "+cust.floors+" קומות":""}`:"—"],
-        ["🐛 מזיק",appt.pestType],["💰 מחיר",`₪${appt.price}`],
-        ["👷 מדביר",appt.workerName],["🕐 חלון הגעה",appt.timeWindow||appt.time]
-      ].map(([l,v])=>(
+      {[
+        ["👤 לקוח", appt.customerName, null],
+        ["📞 טלפון", cust.phone||"—", cust.phone?`tel:${cust.phone}`:null],
+        ["📍 כתובת", appt.address, appt.address?`https://waze.com/ul?q=${encodeURIComponent(appt.address)}&navigate=yes`:null],
+        ["🏠 סוג נכס", cust.propertyType?`${cust.propertyType}${cust.rooms?" | "+cust.rooms+" חד'":""}${cust.floors?" | "+cust.floors+" קומות":""}`:"—", null],
+        ["🐛 מזיק", appt.pestType, null],
+        ["💰 מחיר", `₪${appt.price}`, null],
+        ["👷 מדביר", appt.workerName, null],
+        ["🕐 חלון הגעה", appt.timeWindow||appt.time, null],
+      ].map(([l,v,href])=>(
         <div key={l} style={{background:CLR.surface,borderRadius:8,padding:"8px 12px",fontSize:13}}>
           <div style={{fontSize:11,color:CLR.muted,marginBottom:2}}>{l}</div>
-          <div style={{fontWeight:500}}>{v}</div>
+          {href
+            ? <a href={href} target={href.startsWith('tel:')?'_self':'_blank'} rel="noreferrer"
+                style={{fontWeight:600,color:CLR.primary,textDecoration:"none",display:"flex",alignItems:"center",gap:4}}>
+                {v}
+                <span style={{fontSize:10,opacity:0.6}}>{href.startsWith('tel:')?"↗":"🗺"}</span>
+              </a>
+            : <div style={{fontWeight:500}}>{v}</div>}
         </div>
       ))}
     </G2>
@@ -2759,7 +2770,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       const vc=customers.find(c=>c.id===viewCustId)||null; if(!vc) return null;
       const vcAppts=appointments.filter(a=>a.customerId===viewCustId);
       return <Modal title={"🗂️ "+vc.name} onClose={()=>setViewCustId(null)} width={520}>
-        <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}><Badge status={vc.status}/><span style={{fontSize:13,color:CLR.muted}}>{vc.phone}</span></div>
+        <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}><Badge status={vc.status}/>{vc.phone?<a href={"tel:"+vc.phone} style={{fontSize:13,color:CLR.primary,textDecoration:"none"}}>📞 {vc.phone}</a>:<span style={{fontSize:13,color:CLR.muted}}>—</span>}</div>
         <G2 gap={8}>{[["📍 כתובת",vc.address||"—"],["🏠 נכס",vc.propertyType||"—"],["🐛 מזיק",vc.pestType||"—"],["💰 שולם","₪"+(vc.totalPaid||0)]].map(([l,v])=>(
           <div key={l} style={{background:CLR.surface,borderRadius:8,padding:"8px 12px",fontSize:13}}><div style={{fontSize:11,color:CLR.muted,marginBottom:2}}>{l}</div><div style={{fontWeight:500}}>{v}</div></div>
         ))}</G2>
@@ -3030,7 +3041,10 @@ function ExistingCustomerSearch({customers, onSelect, onClose}){
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:600,fontSize:14,color:"#111"}}>{c.name}</div>
-              <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{c.phone} · {c.address}</div>
+              <div style={{fontSize:12,color:"#6b7280",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",display:"flex",gap:4,alignItems:"center"}}>
+                {c.phone?<a href={"tel:"+c.phone} style={{color:"#6b7280",textDecoration:"none"}} onClick={e=>e.stopPropagation()}>{c.phone}</a>:<span>—</span>}
+                {c.address&&<><span>·</span><a href={"https://waze.com/ul?q="+encodeURIComponent(c.address)+"&navigate=yes"} target="_blank" rel="noreferrer" style={{color:"#6b7280",textDecoration:"none"}} onClick={e=>e.stopPropagation()}>{c.address}</a></>}
+              </div>
               <div style={{fontSize:11,color:CLR.primary,marginTop:2}}>{c.propertyType}{c.pests&&c.pests.length?" · "+c.pests.join(", "):""}{c.lastTreatment?" · טיפול אחרון: "+fmtDate(c.lastTreatment):""}</div>
             </div>
             <div style={{fontSize:12,color:CLR.primary,fontWeight:600,flexShrink:0}}>בחר →</div>
@@ -5437,7 +5451,7 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
           return <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",borderRadius:8,padding:"8px 12px",border:"1px solid #c4b5fd"}}>
             <div>
               <span style={{fontWeight:600,fontSize:13}}>{c.name}</span>
-              <span style={{fontSize:12,color:"#6b7280",marginRight:8}}>{" · "}{c.phone}{" · "}{c.pestType||""}{lastAppt?" · טיפול אחרון: "+fmtDate(lastAppt.date):""}</span>
+              <span style={{fontSize:12,color:"#6b7280",marginRight:8}}>{" · "}{c.phone?<a href={"tel:"+c.phone} style={{color:"#6b7280",textDecoration:"none"}}>{c.phone}</a>:"—"}{" · "}{c.pestType||""}{lastAppt?" · טיפול אחרון: "+fmtDate(lastAppt.date):""}</span>
             </div>
             <div style={{display:"flex",gap:6}}>
               {phone&&<a href={"https://wa.me/"+phone+"?text="+encodeURIComponent(waText)} target="_blank" rel="noopener"
