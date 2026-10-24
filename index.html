@@ -5616,6 +5616,7 @@ function App(){
     {id:"collabs",label:"🤝 שיתופי פעולה",short:"🤝",hideFor:"מדביר"},
     {id:"workers",label:"👥 עובדים",short:"👥",adminOnly:true},
   ].filter(t=>{
+    if(!user || !user.role) return true;
     if(t.hideFor===user.role) return false;
     if(t.adminOnly && user.role==="מדביר") return false;
     // Check permissions from authUser
