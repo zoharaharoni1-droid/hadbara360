@@ -5335,23 +5335,17 @@ function useLS(key, init){
   React.useEffect(()=>{
     if(!sb || !tbl) return;
 
-    // מיזוג חכם: Supabase הוא source of truth — החלף לגמרי
-    // אבל רק כשיש נתונים (לא מחק נתונים מקומיים אם Supabase ריק)
+    // סנכרון מ-Supabase: מיזוג לפי updated_at
+    // Supabase הוא source of truth — כל שורה שב-Supabase מנצחת
     const syncFromSupabase = () => {
       sb.from(tbl).select('*').order('updated_at', {ascending:true})
         .then(({data, error})=>{
           if(error || !data || data.length === 0) return;
           const sbRows = data.map(r => r.data);
-          // השווה לנתונים המקומיים — עדכן רק אם יש שינוי
-          setVal(prev => {
-            const prevStr = JSON.stringify((prev||[]).map(r=>r.id).sort());
-            const sbStr = JSON.stringify(sbRows.map(r=>r.id).sort());
-            // אם הרשימה שונה → קח מ-Supabase
-            // Supabase הוא תמיד ה-source of truth כי כל כתיבה עוברת דרכו
-            const merged = sbRows;
-            try { localStorage.setItem('h360_' + key, JSON.stringify(merged)); } catch(e){}
-            return merged;
-          });
+          // החלף לגמרי במה שב-Supabase — הוא ה-source of truth
+          // הכתיבה שלנו כבר עלתה לשם, אז זה בטוח
+          setVal(sbRows);
+          try { localStorage.setItem('h360_' + key, JSON.stringify(sbRows)); } catch(e){}
         });
     };
 
@@ -5365,27 +5359,33 @@ function useLS(key, init){
       const next = typeof v === 'function' ? v(prev) : v;
       // Save to localStorage immediately
       try { localStorage.setItem('h360_' + key, JSON.stringify(next)); } catch(e){}
-      // Sync to Supabase
+
       if(sb && tbl){
-        const rows = Array.isArray(next) ? next : [next];
+        const nextRows = Array.isArray(next) ? next : [next];
         const prevRows = Array.isArray(prev) ? prev : (prev ? [prev] : []);
 
-        // Upsert רק את השורות ב-next
-        const upsertData = rows.map(item => ({
-          id: String(item.id),
-          data: item,
-          updated_at: new Date().toISOString()
-        }));
-        console.log('[SB] upserting', tbl, upsertData.length, 'rows');
-        sb.from(tbl).upsert(upsertData, {onConflict:'id'})
-          .then(({error})=>{
-            if(error) console.warn('[SB] sync error:', tbl, error);
-            else console.log('[SB] saved OK:', tbl);
-          });
+        // מצא רק שורות שהשתנו או נוספו (השווה לפי JSON)
+        const prevMap = new Map(prevRows.map(r => [String(r.id), JSON.stringify(r)]));
+        const changed = nextRows.filter(r => prevMap.get(String(r.id)) !== JSON.stringify(r));
+
+        // Upsert רק שורות שהשתנו
+        if(changed.length > 0){
+          const upsertData = changed.map(item => ({
+            id: String(item.id),
+            data: item,
+            updated_at: new Date().toISOString()
+          }));
+          console.log('[SB] upserting changed', tbl, changed.length, 'rows');
+          sb.from(tbl).upsert(upsertData, {onConflict:'id'})
+            .then(({error})=>{
+              if(error) console.warn('[SB] sync error:', tbl, error);
+              else console.log('[SB] saved OK:', tbl);
+            });
+        }
 
         // מחק רק שורות שהמשתמש מחק במפורש (היו ב-prev, אינן ב-next)
         const prevIds = new Set(prevRows.map(r => String(r.id)));
-        const nextIds = new Set(rows.map(r => String(r.id)));
+        const nextIds = new Set(nextRows.map(r => String(r.id)));
         const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
         if(deletedIds.length > 0){
           console.log('[SB] deleting', tbl, deletedIds);
