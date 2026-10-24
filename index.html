@@ -5331,28 +5331,32 @@ function useLS(key, init){
     } catch(e){ return initVal; }
   });
 
-  // Load from Supabase on mount
+  // Load from Supabase on mount + poll every 10s
   React.useEffect(()=>{
     if(!sb || !tbl) return;
-    sb.from(tbl).select('*').order('updated_at', {ascending:true})
-      .then(({data, error})=>{
-        if(error || !data) return;
-        if(data.length === 0) return; // Keep local data if Supabase empty
-        const rows = data.map(r => r.data);
-        setVal(rows);
-        try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
-      });
 
-    // Poll every 10 seconds for changes from other devices
-    const poll = setInterval(()=>{
+    // מיזוג חכם: Supabase הוא source of truth — החלף לגמרי
+    // אבל רק כשיש נתונים (לא מחק נתונים מקומיים אם Supabase ריק)
+    const syncFromSupabase = () => {
       sb.from(tbl).select('*').order('updated_at', {ascending:true})
-        .then(({data})=>{
-          if(!data || data.length === 0) return;
-          const rows = data.map(r => r.data);
-          setVal(rows);
-          try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
+        .then(({data, error})=>{
+          if(error || !data || data.length === 0) return;
+          const sbRows = data.map(r => r.data);
+          // השווה לנתונים המקומיים — עדכן רק אם יש שינוי
+          setVal(prev => {
+            const prevStr = JSON.stringify((prev||[]).map(r=>r.id).sort());
+            const sbStr = JSON.stringify(sbRows.map(r=>r.id).sort());
+            // אם הרשימה שונה → קח מ-Supabase
+            // Supabase הוא תמיד ה-source of truth כי כל כתיבה עוברת דרכו
+            const merged = sbRows;
+            try { localStorage.setItem('h360_' + key, JSON.stringify(merged)); } catch(e){}
+            return merged;
+          });
         });
-    }, 10000);
+    };
+
+    syncFromSupabase();
+    const poll = setInterval(syncFromSupabase, 10000);
     return () => clearInterval(poll);
   }, [tbl]);
 
@@ -5361,43 +5365,32 @@ function useLS(key, init){
       const next = typeof v === 'function' ? v(prev) : v;
       // Save to localStorage immediately
       try { localStorage.setItem('h360_' + key, JSON.stringify(next)); } catch(e){}
-      // Sync to Supabase — MERGE strategy (no delete of unknown rows)
+      // Sync to Supabase
       if(sb && tbl){
         const rows = Array.isArray(next) ? next : [next];
-        // 1. קודם משוך מ-Supabase את כל השורות הקיימות
-        sb.from(tbl).select('*').then(({data: sbRows}) => {
-          // 2. בנה מפה של מה שב-Supabase
-          const sbMap = new Map();
-          (sbRows || []).forEach(r => sbMap.set(r.id, r));
+        const prevRows = Array.isArray(prev) ? prev : (prev ? [prev] : []);
 
-          // 3. בנה מפה של מה שיש לנו עכשיו (next)
-          const localMap = new Map();
-          rows.forEach(item => localMap.set(String(item.id), item));
+        // Upsert רק את השורות ב-next
+        const upsertData = rows.map(item => ({
+          id: String(item.id),
+          data: item,
+          updated_at: new Date().toISOString()
+        }));
+        console.log('[SB] upserting', tbl, upsertData.length, 'rows');
+        sb.from(tbl).upsert(upsertData, {onConflict:'id'})
+          .then(({error})=>{
+            if(error) console.warn('[SB] sync error:', tbl, error);
+            else console.log('[SB] saved OK:', tbl);
+          });
 
-          // 4. Upsert — רק שורות שאנחנו מכירים (הוסף/עדכן)
-          const upsertData = rows.map(item => ({
-            id: String(item.id),
-            data: item,
-            updated_at: new Date().toISOString()
-          }));
-          console.log('[SB] upserting', tbl, upsertData.length, 'rows');
-          sb.from(tbl).upsert(upsertData, {onConflict:'id'})
-            .then(({error})=>{
-              if(error) console.warn('[SB] sync error:', tbl, error);
-              else console.log('[SB] saved OK:', tbl);
-            });
-
-          // 5. מחק רק שורות שה-prev הכיר אבל next לא (=מחיקה מכוונת)
-          const prevRows = Array.isArray(prev) ? prev : (prev ? [prev] : []);
-          const prevIds = new Set(prevRows.map(r => String(r.id)));
-          const nextIds = new Set(rows.map(r => String(r.id)));
-          // שורות שהיו ב-prev אבל אינן ב-next → נמחקו בכוונה
-          const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
-          if(deletedIds.length > 0){
-            console.log('[SB] deleting', tbl, deletedIds);
-            sb.from(tbl).delete().in('id', deletedIds).then(()=>{});
-          }
-        });
+        // מחק רק שורות שהמשתמש מחק במפורש (היו ב-prev, אינן ב-next)
+        const prevIds = new Set(prevRows.map(r => String(r.id)));
+        const nextIds = new Set(rows.map(r => String(r.id)));
+        const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
+        if(deletedIds.length > 0){
+          console.log('[SB] deleting', tbl, deletedIds);
+          sb.from(tbl).delete().in('id', deletedIds).then(()=>{});
+        }
       }
       return next;
     });
