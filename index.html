@@ -5306,20 +5306,90 @@ const USER_LIST=[
 // ═══════════════════════════════════════════════════════
 // LOCALSTORAGE
 // ═══════════════════════════════════════════════════════
+// Table mapping: JS key -> Supabase table name
+const SB_TABLES = {
+  customers: "customers",
+  workers: "workers",
+  appointments: "appointments",
+  finance: "finance",
+  notes: "notes",
+  maintenance: "maintenance",
+  projects: "projects",
+  execLogs: "exec_logs",
+};
+
+// useSB: like useLS but syncs with Supabase in real-time
 function useLS(key, init){
+  const tbl = SB_TABLES[key];
+  const initVal = typeof init === 'function' ? init() : init;
+
   const [val, setVal] = React.useState(()=>{
+    // Start with localStorage cache for instant load
     try {
       const s = localStorage.getItem('h360_' + key);
-      return s ? JSON.parse(s) : (typeof init === 'function' ? init() : init);
-    } catch(e){ return typeof init === 'function' ? init() : init; }
+      return s ? JSON.parse(s) : initVal;
+    } catch(e){ return initVal; }
   });
+
+  // Load from Supabase on mount
+  React.useEffect(()=>{
+    if(!sb || !tbl) return;
+    sb.from(tbl).select('*').order('updated_at', {ascending:true})
+      .then(({data, error})=>{
+        if(error || !data) return;
+        if(data.length === 0) return; // Keep local data if Supabase empty
+        const rows = data.map(r => r.data);
+        setVal(rows);
+        try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
+      });
+
+    // Real-time subscription
+    if(!sb.channel) return;
+    const channel = sb.channel('realtime_' + tbl)
+      .on('postgres_changes', {event:'*', schema:'public', table:tbl}, payload=>{
+        // Reload all data on any change
+        sb.from(tbl).select('*').order('updated_at', {ascending:true})
+          .then(({data})=>{
+            if(!data) return;
+            const rows = data.map(r => r.data);
+            setVal(rows);
+            try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
+          });
+      })
+      .subscribe();
+    return () => { sb.removeChannel && sb.removeChannel(channel); };
+  }, [tbl]);
+
   const set = React.useCallback(v => {
     setVal(prev => {
       const next = typeof v === 'function' ? v(prev) : v;
+      // Save to localStorage immediately
       try { localStorage.setItem('h360_' + key, JSON.stringify(next)); } catch(e){}
+      // Sync to Supabase
+      if(sb && tbl){
+        // Upsert all rows
+        const rows = Array.isArray(next) ? next : [next];
+        const upsertData = rows.map(item => ({
+          id: String(item.id),
+          data: item,
+          updated_at: new Date().toISOString()
+        }));
+        sb.from(tbl).upsert(upsertData, {onConflict:'id'})
+          .then(({error})=>{ if(error) console.warn('Supabase sync error:', tbl, error); });
+        // Delete removed rows
+        sb.from(tbl).select('id').then(({data:allRows})=>{
+          if(!allRows) return;
+          const currentIds = new Set(rows.map(r=>String(r.id)));
+          const toDelete = allRows.filter(r=>!currentIds.has(r.id)).map(r=>r.id);
+          if(toDelete.length > 0){
+            sb.from(tbl).delete().in('id', toDelete).then(()=>{});
+          }
+        });
+      }
       return next;
     });
-  }, [key]);
+  }, [key, tbl]);
+
   return [val, set];
 }
 
@@ -5721,6 +5791,10 @@ function App(){
         {/* Topbar (desktop) */}
         {!isFullTab&&!isMobile&&<div style={{height:56,background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",padding:"0 24px",gap:10,position:"sticky",top:0,zIndex:100,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
           <div style={{fontSize:15,fontWeight:700,color:"#0f172a",flex:1}}>{tabLabel[tab]||tab}</div>
+          <div id="sync-indicator" style={{fontSize:11,color:"#16a34a",display:"flex",alignItems:"center",gap:4,marginLeft:4}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:"#16a34a",display:"inline-block"}}></span>
+            מסונכרן
+          </div>
           <button onClick={()=>setShowSearch(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>🔍 חיפוש</button>
           <button onClick={exportBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>💾 גיבוי</button>
           <button onClick={importBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>📂 שחזר</button>
@@ -5833,6 +5907,22 @@ try{
 
 </script>
 <script>
+// Online/offline indicator
+function updateOnlineStatus(){
+  const ind = document.getElementById('sync-indicator');
+  if(!ind) return;
+  if(navigator.onLine){
+    ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> מסונכרן';
+    ind.style.color = '#16a34a';
+  } else {
+    ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block"></span> ללא קליטה';
+    ind.style.color = '#f59e0b';
+  }
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+setTimeout(updateOnlineStatus, 1000);
+
 // Register Service Worker
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
