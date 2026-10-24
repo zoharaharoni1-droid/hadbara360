@@ -5912,21 +5912,119 @@ function updateOnlineStatus(){
   const ind = document.getElementById('sync-indicator');
   if(!ind) return;
   if(navigator.onLine){
-    ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> מסונכרן';
-    ind.style.color = '#16a34a';
+    // בדוק אם יש תור offline ממתין
+    try {
+      const dbReq = indexedDB.open('h360-offline-queue', 1);
+      dbReq.onsuccess = e => {
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('queue')){ db.close(); return; }
+        const tx = db.transaction('queue', 'readonly');
+        const countReq = tx.objectStore('queue').count();
+        countReq.onsuccess = () => {
+          db.close();
+          if(countReq.result > 0){
+            ind.innerHTML = `<span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block"></span> מסנכרן (${countReq.result})`;
+            ind.style.color = '#f59e0b';
+          } else {
+            ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> מסונכרן';
+            ind.style.color = '#16a34a';
+          }
+        };
+      };
+      dbReq.onerror = () => {
+        ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> מסונכרן';
+        ind.style.color = '#16a34a';
+      };
+    } catch(e){
+      ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> מסונכרן';
+      ind.style.color = '#16a34a';
+    }
   } else {
-    ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block"></span> ללא קליטה';
+    ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block"></span> ללא קליטה — נשמר מקומית';
     ind.style.color = '#f59e0b';
   }
 }
-window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('online', () => { updateOnlineStatus(); });
 window.addEventListener('offline', updateOnlineStatus);
 setTimeout(updateOnlineStatus, 1000);
 
-// Unregister any old Service Workers to avoid cache issues
+// ─── Service Worker — עדכון אוטומטי + Offline Queue ─────────────────────
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(reg => reg.unregister());
+  navigator.serviceWorker.register('/hadbara360/sw.js?v=2').then(reg => {
+    console.log('[App] SW registered', reg.scope);
+
+    // אם יש worker חדש שמחכה — הצג בנר
+    const showUpdateBanner = () => {
+      let banner = document.getElementById('sw-update-banner');
+      if(!banner){
+        banner = document.createElement('div');
+        banner.id = 'sw-update-banner';
+        banner.style.cssText = [
+          'position:fixed','bottom:0','left:0','right:0','z-index:9999',
+          'background:#16a34a','color:#fff','padding:14px 20px',
+          'display:flex','align-items:center','justify-content:space-between',
+          'font-family:inherit','font-size:15px','direction:rtl',
+          'box-shadow:0 -2px 12px rgba(0,0,0,0.3)'
+        ].join(';');
+        banner.innerHTML = `
+          <span>🚀 גרסה חדשה זמינה!</span>
+          <button onclick="window._applyUpdate()" style="
+            background:#fff;color:#16a34a;border:none;padding:7px 18px;
+            border-radius:8px;font-weight:700;cursor:pointer;font-size:14px
+          ">עדכן עכשיו</button>
+        `;
+        document.body.appendChild(banner);
+      }
+    };
+
+    // Worker כבר ממתין?
+    if(reg.waiting) showUpdateBanner();
+
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+          showUpdateBanner();
+        }
+      });
+    });
+
+    // כשהעדכון ב-SKIP_WAITING → reload
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+
+    // בדוק עדכון ברקע כל 30 דקות
+    setInterval(() => reg.update(), 30 * 60 * 1000);
+
+    // שלח flush כשחוזר אינטרנט
+    window.addEventListener('online', () => {
+      if(reg.active) reg.active.postMessage({ type: 'ONLINE' });
+      console.log('[App] Back online — flushing offline queue');
+    });
+
+  }).catch(err => console.warn('[App] SW registration failed:', err));
+
+  // פונקציה לאישור עדכון
+  window._applyUpdate = () => {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if(reg && reg.waiting){
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+    });
+  };
+
+  // קבל הודעה מ-SW שהסנכרון הצליח
+  navigator.serviceWorker.addEventListener('message', e => {
+    if(e.data && e.data.type === 'OFFLINE_SYNC_DONE'){
+      console.log('[App] Offline sync done:', e.data.count, 'requests');
+      // עדכן אינדיקטור
+      const ind = document.getElementById('sync-indicator');
+      if(ind){
+        ind.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#16a34a;display:inline-block"></span> סונכרן ✓';
+        setTimeout(() => updateOnlineStatus(), 3000);
+      }
+    }
   });
 }
 
