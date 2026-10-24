@@ -5361,28 +5361,41 @@ function useLS(key, init){
       const next = typeof v === 'function' ? v(prev) : v;
       // Save to localStorage immediately
       try { localStorage.setItem('h360_' + key, JSON.stringify(next)); } catch(e){}
-      // Sync to Supabase
+      // Sync to Supabase — MERGE strategy (no delete of unknown rows)
       if(sb && tbl){
-        // Upsert all rows
         const rows = Array.isArray(next) ? next : [next];
-        const upsertData = rows.map(item => ({
-          id: String(item.id),
-          data: item,
-          updated_at: new Date().toISOString()
-        }));
-        console.log('[SB] upserting', tbl, upsertData.length, 'rows');
-        sb.from(tbl).upsert(upsertData, {onConflict:'id'})
-          .then(({error})=>{
-            if(error) console.warn('[SB] sync error:', tbl, error);
-            else console.log('[SB] saved OK:', tbl);
-          });
-        // Delete removed rows
-        sb.from(tbl).select('id').then(({data:allRows})=>{
-          if(!allRows) return;
-          const currentIds = new Set(rows.map(r=>String(r.id)));
-          const toDelete = allRows.filter(r=>!currentIds.has(r.id)).map(r=>r.id);
-          if(toDelete.length > 0){
-            sb.from(tbl).delete().in('id', toDelete).then(()=>{});
+        // 1. קודם משוך מ-Supabase את כל השורות הקיימות
+        sb.from(tbl).select('*').then(({data: sbRows}) => {
+          // 2. בנה מפה של מה שב-Supabase
+          const sbMap = new Map();
+          (sbRows || []).forEach(r => sbMap.set(r.id, r));
+
+          // 3. בנה מפה של מה שיש לנו עכשיו (next)
+          const localMap = new Map();
+          rows.forEach(item => localMap.set(String(item.id), item));
+
+          // 4. Upsert — רק שורות שאנחנו מכירים (הוסף/עדכן)
+          const upsertData = rows.map(item => ({
+            id: String(item.id),
+            data: item,
+            updated_at: new Date().toISOString()
+          }));
+          console.log('[SB] upserting', tbl, upsertData.length, 'rows');
+          sb.from(tbl).upsert(upsertData, {onConflict:'id'})
+            .then(({error})=>{
+              if(error) console.warn('[SB] sync error:', tbl, error);
+              else console.log('[SB] saved OK:', tbl);
+            });
+
+          // 5. מחק רק שורות שה-prev הכיר אבל next לא (=מחיקה מכוונת)
+          const prevRows = Array.isArray(prev) ? prev : (prev ? [prev] : []);
+          const prevIds = new Set(prevRows.map(r => String(r.id)));
+          const nextIds = new Set(rows.map(r => String(r.id)));
+          // שורות שהיו ב-prev אבל אינן ב-next → נמחקו בכוונה
+          const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
+          if(deletedIds.length > 0){
+            console.log('[SB] deleting', tbl, deletedIds);
+            sb.from(tbl).delete().in('id', deletedIds).then(()=>{});
           }
         });
       }
