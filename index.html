@@ -5374,8 +5374,12 @@ function useLS(key, init){
           data: item,
           updated_at: new Date().toISOString()
         }));
+        console.log('[SB] upserting', tbl, upsertData.length, 'rows');
         sb.from(tbl).upsert(upsertData, {onConflict:'id'})
-          .then(({error})=>{ if(error) console.warn('Supabase sync error:', tbl, error); });
+          .then(({error})=>{
+            if(error) console.warn('[SB] sync error:', tbl, error);
+            else console.log('[SB] saved OK:', tbl);
+          });
         // Delete removed rows
         sb.from(tbl).select('id').then(({data:allRows})=>{
           if(!allRows) return;
