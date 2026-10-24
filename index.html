@@ -204,10 +204,14 @@ function LoginScreen({onLogin}){
     setLoading(true);setError('');
     try{
       const hash = await hashPwd(password);
-      if(!sb){setError('שגיאת חיבור לשרת');setLoading(false);return;}
+      if(!sb){setError('שגיאת חיבור לשרת (Supabase לא נטען)');setLoading(false);return;}
       const {data,error:err} = await sb.from('crm_users')
         .select('*').eq('username',username).eq('password_hash',hash).eq('active',true).single();
-      if(err||!data){setError('שם משתמש או סיסמה שגויים');setLoading(false);return;}
+      if(err||!data){
+        console.log('Login error:', err, 'data:', data);
+        setError('שם משתמש או סיסמה שגויים ('+( err?.message||'no data')+')');
+        setLoading(false);return;
+      }
       // Update last_login
       await sb.from('crm_users').update({last_login:new Date().toISOString()}).eq('id',data.id);
       onLogin(data);
@@ -5623,7 +5627,7 @@ function App(){
     const permMap={"finance":"finance","invoices":"invoices","workers":"workers",
       "collabs":"collabs","regional":"regional","projects":"projects",
       "maintenance":"maintenance","scheduler":"scheduler","templates":"templates"};
-    if(permMap[t.id] && authUser.role!=="מנהל"){
+    if(permMap[t.id] && authUser && authUser.role!=="מנהל"){
       return authUser.permissions?.[permMap[t.id]]===true;
     }
     return true;
