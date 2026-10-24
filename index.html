@@ -5343,21 +5343,17 @@ function useLS(key, init){
         try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
       });
 
-    // Real-time subscription
-    if(!sb.channel) return;
-    const channel = sb.channel('realtime_' + tbl)
-      .on('postgres_changes', {event:'*', schema:'public', table:tbl}, payload=>{
-        // Reload all data on any change
-        sb.from(tbl).select('*').order('updated_at', {ascending:true})
-          .then(({data})=>{
-            if(!data) return;
-            const rows = data.map(r => r.data);
-            setVal(rows);
-            try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
-          });
-      })
-      .subscribe();
-    return () => { sb.removeChannel && sb.removeChannel(channel); };
+    // Poll every 10 seconds for changes from other devices
+    const poll = setInterval(()=>{
+      sb.from(tbl).select('*').order('updated_at', {ascending:true})
+        .then(({data})=>{
+          if(!data || data.length === 0) return;
+          const rows = data.map(r => r.data);
+          setVal(rows);
+          try { localStorage.setItem('h360_' + key, JSON.stringify(rows)); } catch(e){}
+        });
+    }, 10000);
+    return () => clearInterval(poll);
   }, [tbl]);
 
   const set = React.useCallback(v => {
