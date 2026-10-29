@@ -4798,20 +4798,85 @@ function Invoices({finance,setFinance,customers,appointments}){
 const MAINTENANCE_FREQUENCIES = ["פעמיים בשבוע","פעם בשבוע","אחזקה חודשית","כל חודשיים","רבעוני (כל 3 חודשים)","כל 6 חודשים","שנתי"];
 const MAINTENANCE_TYPES = ["דירת גן/וילה","עסק - מסעדה","עסק - מאפייה","עסק - מפעל מזון","עסק - בית מרקחת","עסק - גן ילדים","עסק - מלון","בניין משותף","ממסד/מוסד","אחר"];
 
-function MaintenanceModal({onClose,onSave,customers}){
-  const [f,setF]=useState({customerName:"",phone:"",address:"",type:"דירת גן/וילה",frequency:"רבעוני (כל 3 חודשים)",pests:"",price:"",notes:"",startDate:todayStr(),status:"פעיל"});
+function maintContacts(m){ const c=Array.isArray(m.contacts)&&m.contacts.length?m.contacts:[{name:m.contactName||"",phone:m.phone||"",role:""}]; return c.filter(x=>x&&(x.name||x.phone)); }
+function maintList(v){ return Array.isArray(v)?v:String(v||"").split(",").map(x=>x.trim()).filter(Boolean); }
+function MaintPestChips({value,onChange,exclude=[]}){
+  const [other,setOther]=useState("");
+  const list=[...PEST_TYPES_LOG.filter(p=>p!=="חרקי מזון"),"חרקי מזון","עקרבים","נחשים","יונים","טרמיטים"];
+  const all=[...new Set([...list,...value])];
+  const tog=p=>onChange(value.includes(p)?value.filter(x=>x!==p):[...value,p]);
+  return <div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+      {all.filter(p=>!exclude.includes(p)).map(p=>{const on=value.includes(p);return <button key={p} type="button" onClick={()=>tog(p)} style={{padding:"6px 11px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primaryLight:"#fff",color:on?CLR.primary:CLR.muted,fontSize:13,fontWeight:on?700:400,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{p}</button>;})}
+    </div>
+    <div style={{display:"flex",gap:6,marginTop:6}}>
+      <input value={other} onChange={e=>setOther(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&other.trim()){onChange([...value,other.trim()]);setOther("");}}} placeholder="אחר..." style={{flex:1,padding:"7px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13,fontFamily:"inherit"}}/>
+      {other.trim()&&<Btn sm onClick={()=>{onChange([...value,other.trim()]);setOther("");}}>הוסף</Btn>}
+    </div>
+  </div>;
+}
+function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[]}){
+  const init=initial||{};
+  const [f,setF]=useState({customerName:"",address:"",type:"",typeOther:"",frequency:"אחזקה חודשית",price:"",extraVisitPrice:"",notes:"",startDate:todayStr(),status:"פעיל",...init,
+    contacts:maintContacts(init).length?maintContacts(init):[{name:"",phone:"",role:""}],
+    pests:maintList(init.pests), excludedPests:maintList(init.excludedPests), contractFiles:init.contractFiles||[]});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
-  return <Modal title="+ חוזה אחזקה חדש" onClose={onClose} width={520}>
-    <FieldCard title="פרטי לקוח">
-      <G2><Inp label="שם לקוח *" value={f.customerName} onChange={v=>set("customerName",v)}/><Inp label="טלפון" value={f.phone} onChange={v=>set("phone",v)}/></G2>
-      <Inp label="כתובת" value={f.address} onChange={v=>set("address",v)}/>
+  const types=[...new Set([...MAINTENANCE_TYPES.filter(t=>t!=="אחר"),...knownTypes,...(f.type&&f.type!=="אחר"?[f.type]:[])])];
+  const [otherOpen,setOtherOpen]=useState(false);
+  const setC=(i,k,v)=>set("contacts",f.contacts.map((c,j)=>j===i?{...c,[k]:v}:c));
+  const [uploading,setUploading]=useState(false);
+  const onFile=async e=>{
+    const files=[...(e.target.files||[])]; e.target.value="";
+    for(const file of files){
+      if(file.size>15*1024*1024){ alert(`הקובץ "${file.name}" גדול מ-15MB`); continue; }
+      setUploading(true);
+      const ext=(file.name.match(/\.[a-z0-9]+$/i)||[""])[0].toLowerCase();
+      const path=`maintenance/${Date.now()}_${Math.random().toString(36).slice(2,8)}${ext}`;
+      const up=await sb.storage.from('contracts').upload(path,file,{contentType:file.type||undefined,upsert:false});
+      setUploading(false);
+      if(up.error){ alert("העלאת החוזה נכשלה. אם זו הפעם הראשונה — צריך להריץ פעם אחת את סקריפט ה-SQL של החוזים ב-Supabase.\n\n"+up.error.message); continue; }
+      setF(x=>({...x,contractFiles:[...x.contractFiles,{name:file.name,type:file.type,size:file.size,path,addedAt:todayStr()}]}));
+    }
+  };
+  const save=()=>{
+    if(!f.customerName.trim()) return alert("שם המקום / הלקוח חובה");
+    const contacts=f.contacts.filter(c=>c.name||c.phone);
+    const type=otherOpen&&f.typeOther.trim()?f.typeOther.trim():f.type;
+    onSave({...f,type,typeOther:"",contacts,phone:(contacts[0]||{}).phone||"",contactName:(contacts[0]||{}).name||"",id:init.id||Date.now()});
+    onClose();
+  };
+  const chip=on=>({padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
+  return <Modal title={init.id?"✏️ עריכת אחזקה":"+ אחזקה חדשה"} onClose={onClose} width={620}>
+    <FieldCard title="📍 המקום">
+      <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מאפיית השכונה"/>
+      <Inp label="כתובת המקום" value={f.address} onChange={v=>set("address",v)} placeholder="רחוב, מספר, עיר"/>
+      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"4px 0 6px"}}>סוג המקום</label>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {types.map(t=><button key={t} type="button" onClick={()=>{set("type",t);setOtherOpen(false);}} style={chip(!otherOpen&&f.type===t)}>{t}</button>)}
+        <button type="button" onClick={()=>setOtherOpen(true)} style={chip(otherOpen)}>+ אחר</button>
+      </div>
+      {otherOpen&&<div style={{marginTop:8}}><Inp label="סוג מקום אחר" value={f.typeOther} onChange={v=>set("typeOther",v)} placeholder="למשל: מחסן ברזל"/></div>}
     </FieldCard>
-    <FieldCard title="פרטי החוזה">
-      <Sel label="סוג נכס" value={f.type} onChange={v=>set("type",v)} options={MAINTENANCE_TYPES}/>
+    <FieldCard title="👤 אנשי קשר">
+      {f.contacts.map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr auto",gap:6,alignItems:"end",marginBottom:6}}>
+        <Inp label={i===0?"שם איש קשר":""} value={c.name} onChange={v=>setC(i,"name",v)}/>
+        <Inp label={i===0?"טלפון":""} value={c.phone} onChange={v=>setC(i,"phone",v)}/>
+        <Inp label={i===0?"תפקיד":""} value={c.role||""} onChange={v=>setC(i,"role",v)} placeholder="מנהל, אחזקה..."/>
+        <button type="button" onClick={()=>set("contacts",f.contacts.length>1?f.contacts.filter((_,j)=>j!==i):[{name:"",phone:"",role:""}])} style={{marginBottom:12,border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:34,height:36,cursor:"pointer"}}>✕</button>
+      </div>)}
+      <button type="button" onClick={()=>set("contacts",[...f.contacts,{name:"",phone:"",role:""}])} style={{width:"100%",padding:"8px",borderRadius:8,border:`1.5px dashed ${CLR.primary}66`,background:"transparent",color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ הוסף איש קשר</button>
+    </FieldCard>
+    <FieldCard title="🐛 מזיקים">
+      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מזיקים עיקריים במקום (כלולים בחוזה)</label>
+      <MaintPestChips value={f.pests} onChange={v=>set("pests",v)} exclude={f.excludedPests}/>
+      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>🚫 מזיקים לא כלולים</label>
+      <MaintPestChips value={f.excludedPests} onChange={v=>set("excludedPests",v)} exclude={f.pests}/>
+    </FieldCard>
+    <FieldCard title="💰 תדירות ומחיר">
       <Sel label="תדירות ביקור" value={f.frequency} onChange={v=>set("frequency",v)} options={MAINTENANCE_FREQUENCIES}/>
       <G2>
-        <Inp label="מזיקים לטיפול" value={f.pests} onChange={v=>set("pests",v)} placeholder="תיקנים, עכברים..."/>
         <Inp label="מחיר לביקור (₪)" type="number" value={f.price} onChange={v=>set("price",v)}/>
+        <Inp label="מחיר לביקור נוסף בחודש (₪)" type="number" value={f.extraVisitPrice} onChange={v=>set("extraVisitPrice",v)}/>
       </G2>
       <G2>
         <Inp label="תאריך התחלה" type="date" value={f.startDate} onChange={v=>set("startDate",v)}/>
@@ -4819,28 +4884,56 @@ function MaintenanceModal({onClose,onSave,customers}){
       </G2>
       <Txt label="הערות" value={f.notes} onChange={v=>set("notes",v)} rows={2}/>
     </FieldCard>
+    <FieldCard title="📎 חוזה חתום">
+      {f.contractFiles.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:CLR.surface,borderRadius:8,marginBottom:6}}>
+        <span style={{fontSize:18}}>{String(c.type).includes("pdf")?"📄":"🖼️"}</span>
+        <span style={{flex:1,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+        <button type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>פתח</button>
+        <button type="button" onClick={()=>set("contractFiles",f.contractFiles.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>הסר</button>
+      </div>)}
+      <label style={{display:"block",border:`2px dashed ${CLR.border}`,borderRadius:10,padding:"14px",textAlign:"center",cursor:"pointer",background:CLR.surface,fontSize:13,color:CLR.muted}}>
+        <input type="file" accept="image/*,.pdf" multiple onChange={onFile} style={{display:"none"}}/>
+        {uploading?"⏳ מעלה...":"📁 הוסף חוזה (PDF או צילום)"}
+      </label>
+    </FieldCard>
     <div style={{display:"flex",gap:10}}>
-      <Btn full onClick={()=>{if(!f.customerName)return alert("שם לקוח חובה");onSave({...f,id:Date.now()});onClose();}}>✅ שמור חוזה אחזקה</Btn>
+      <Btn full onClick={save}>✅ שמור אחזקה</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
   </Modal>;
 }
+async function openDataFile(c){
+  if(c&&c.path){
+    const w=window.open("","_blank");
+    const r=await sb.storage.from('contracts').createSignedUrl(c.path,600);
+    if(r.error||!r.data){ if(w) w.close(); return alert("לא ניתן לפתוח את הקובץ"); }
+    if(w) w.location.href=r.data.signedUrl; else window.location.href=r.data.signedUrl;
+    return;
+  }
+  try{ const [h,b64]=String(c.data).split(","); const mime=(h.match(/data:([^;]+)/)||[])[1]||c.type||"application/octet-stream";
+    const bin=atob(b64); const u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([u],{type:mime})); const w=window.open(url,"_blank"); if(!w){ const a=document.createElement("a"); a.href=url; a.download=c.name||"contract"; a.click(); }
+  }catch(e){ alert("לא ניתן לפתוח את הקובץ"); }
+}
 
 function Maintenance({maintenance,setMaintenance,customers}){
   const [showNew,setShowNew]=useState(false);
+  const [editM,setEditM]=useState(null);
   const [filter,setFilter]=useState("הכל");
   const items=maintenance.filter(m=>filter==="הכל"||m.status===filter);
   const active=maintenance.filter(m=>m.status==="פעיל");
+  const knownTypes=[...new Set(maintenance.map(m=>m.type).filter(t=>t&&!MAINTENANCE_TYPES.includes(t)))];
   const totalMonthly=active.reduce((s,m)=>{
     const prices={["פעמיים בשבוע"]:8,["פעם בשבוע"]:4,["אחזקה חודשית"]:1,["כל חודשיים"]:0.5,["רבעוני (כל 3 חודשים)"]:0.33,["כל 6 חודשים"]:0.17,["שנתי"]:0.083};
     return s+(parseInt(m.price)||0)*(prices[m.frequency]||1);
   },0);
   const statusColor={פעיל:"#dcfce7",מושהה:"#fef9c3",הסתיים:"#f3f4f6"};
   const statusText={פעיל:"#166534",מושהה:"#854d0e",הסתיים:"#374151"};
+  const cell={background:CLR.surface,borderRadius:6,padding:"6px 8px"};
   return <div>
     <div style={{display:"flex",gap:12,marginBottom:18,flexWrap:"wrap"}}>
-      <StatCard label="חוזים פעילים" value={active.length} bg="#dcfce7"/>
-      <StatCard label="סה״כ חוזים" value={maintenance.length}/>
+      <StatCard label="אחזקות פעילות" value={active.length} bg="#dcfce7"/>
+      <StatCard label="סה״כ אחזקות" value={maintenance.length}/>
       <StatCard label="הכנסה חודשית משוערת" value={`₪${Math.round(totalMonthly)}`} bg="#dbeafe"/>
     </div>
     <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
@@ -4848,39 +4941,51 @@ function Maintenance({maintenance,setMaintenance,customers}){
         <button key={t} type="button" onClick={()=>setFilter(t)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${filter===t?CLR.primary:CLR.border}`,background:filter===t?CLR.primary:"transparent",color:filter===t?"#fff":CLR.muted,cursor:"pointer",fontWeight:600,fontSize:13}}>{t}</button>
       ))}
       <div style={{flex:1}}/>
-      <Btn sm onClick={()=>setShowNew(true)}>+ חוזה אחזקה חדש</Btn>
+      <Btn sm onClick={()=>setShowNew(true)}>+ אחזקה חדשה</Btn>
     </div>
-    {items.length===0?<div style={{textAlign:"center",color:CLR.muted,padding:40}}>אין חוזי אחזקה עדיין</div>:
+    {items.length===0?<div style={{textAlign:"center",color:CLR.muted,padding:40}}>אין אחזקות עדיין</div>:
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-      {items.map(m=>(
-        <div key={m.id} style={{background:CLR.white,border:`1px solid #d1d5db`,borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:8}}>
-            <div>
+      {items.map(m=>{const contacts=maintContacts(m), pests=maintList(m.pests), ex=maintList(m.excludedPests);
+        return <div key={m.id} style={{background:CLR.white,border:`1px solid #d1d5db`,borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:8,gap:8}}>
+            <div style={{minWidth:0}}>
               <div style={{fontWeight:700,fontSize:15,color:"#111",marginBottom:2}}>{m.customerName}</div>
               <div style={{fontSize:12,color:CLR.muted}}>{m.address}</div>
             </div>
             <span style={{background:statusColor[m.status]||"#f3f4f6",color:statusText[m.status]||"#374151",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{m.status}</span>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12,marginBottom:10}}>
-            <div style={{background:CLR.surface,borderRadius:6,padding:"6px 8px"}}><span style={{color:CLR.muted}}>סוג: </span>{m.type}</div>
-            <div style={{background:CLR.surface,borderRadius:6,padding:"6px 8px"}}><span style={{color:CLR.muted}}>תדירות: </span>{m.frequency}</div>
-            {m.pests&&<div style={{background:CLR.surface,borderRadius:6,padding:"6px 8px"}}><span style={{color:CLR.muted}}>מזיקים: </span>{m.pests}</div>}
-            {m.price&&<div style={{background:CLR.primaryLight,borderRadius:6,padding:"6px 8px",fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>מחיר: </span>₪{m.price}</div>}
+          {contacts.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+            {contacts.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>
+              <span>👤 {c.name||"—"}{c.role?<span style={{color:CLR.muted}}> · {c.role}</span>:null}</span>
+              {c.phone&&<a href={"tel:"+c.phone} style={{marginRight:"auto",color:CLR.primary,fontWeight:600,textDecoration:"none"}}>📞 {c.phone}</a>}
+            </div>)}
+          </div>}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12,marginBottom:8}}>
+            {m.type&&<div style={cell}><span style={{color:CLR.muted}}>סוג: </span>{m.type}</div>}
+            <div style={cell}><span style={{color:CLR.muted}}>תדירות: </span>{m.frequency}</div>
+            {m.price&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>לביקור: </span>₪{m.price}</div>}
+            {m.extraVisitPrice&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>ביקור נוסף: </span>₪{m.extraVisitPrice}</div>}
           </div>
+          {pests.length>0&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>✅ כלול: </span>{pests.join(", ")}</div>}
+          {ex.length>0&&<div style={{fontSize:12,marginBottom:4,color:"#b91c1c"}}><span style={{color:CLR.muted}}>🚫 לא כלול: </span>{ex.join(", ")}</div>}
           {m.notes&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>📝 {m.notes}</div>}
-          <div style={{display:"flex",gap:6,justifyContent:"space-between",alignItems:"center"}}>
+          {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
+          </div>}
+          <div style={{display:"flex",gap:6,justifyContent:"space-between",alignItems:"center",borderTop:`1px solid ${CLR.border}`,paddingTop:8}}>
             <span style={{fontSize:11,color:CLR.muted}}>מ-{fmtDate(m.startDate)}</span>
-            <div style={{display:"flex",gap:6}}>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <button type="button" onClick={()=>setEditM(m)} style={{background:CLR.primaryLight,color:CLR.primary,border:"none",borderRadius:6,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✏️ ערוך</button>
               <select value={m.status} onChange={e=>setMaintenance(ms=>ms.map(x=>x.id===m.id?{...x,status:e.target.value}:x))} style={{fontSize:12,padding:"4px 6px",borderRadius:6,border:`1px solid ${CLR.border}`,background:"#fff"}}>
                 {["פעיל","מושהה","הסתיים"].map(s=><option key={s}>{s}</option>)}
               </select>
-              <button type="button" onClick={()=>{if(window.confirm(`להעביר חוזה של ${m.customerName} לארכיון?`))softDelete(setMaintenance,m.id);}} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:12}}>ארכב</button>
+              <button type="button" onClick={()=>{if(window.confirm(`להעביר את ${m.customerName} לסל המחזור?`))softDelete(setMaintenance,m.id);}} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:12}}>ארכב</button>
             </div>
           </div>
-        </div>
-      ))}
+        </div>;})}
     </div>}
-    {showNew&&<MaintenanceModal onClose={()=>setShowNew(false)} onSave={m=>setMaintenance(ms=>[...ms,m])} customers={customers}/>}
+    {showNew&&<MaintenanceModal knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m=>setMaintenance(ms=>[...ms,m])} customers={customers}/>}
+    {editM&&<MaintenanceModal knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x))} customers={customers}/>}
   </div>;
 }
 
