@@ -426,6 +426,13 @@ function AdminPanel({authUser,onClose}){
 
   const saveEdit=async()=>{
     const updates={name:editUser.name,role:editUser.role,permissions:editUser.permissions,active:editUser.active};
+    const nu=editUser._newuser;
+    if(nu!==undefined&&nu!==editUser.username){
+      if(!nu||String(nu).trim()!==nu){setMsg('שם המשתמש לא יכול להיות ריק או להתחיל/להסתיים ברווח');return;}
+      const ur=await sb.rpc('admin_set_username',{p_user_id:String(editUser.id),p_username:nu});
+      if(ur.error){setMsg('לא ניתן לשנות שם משתמש עדיין — צריך להריץ את סקריפט ה-SQL (admin_set_username)');return;}
+      if(ur.data!=='ok'){setMsg('שגיאה: '+ur.data);return;}
+    }
     if(editUser._newpwd){
       const pr=await sb.rpc('admin_set_password',{p_user_id:String(editUser.id),p_password:editUser._newpwd});
       if(pr.error||!pr.data){setMsg('שגיאה בעדכון הסיסמה');return;}
@@ -531,6 +538,9 @@ function AdminPanel({authUser,onClose}){
                         <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם מלא</label>
                           <input value={editUser.name} onChange={e=>setEditUser({...editUser,name:e.target.value})}
                             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
+                        <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם משתמש לכניסה</label>
+                          <input value={editUser._newuser??editUser.username??""} autoComplete="off" onChange={e=>setEditUser({...editUser,_newuser:e.target.value})}
+                            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,direction:"ltr"}}/></div>
                         <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>תפקיד</label>
                           <select value={editUser.role} onChange={e=>setEditUser({...editUser,role:e.target.value})}
                             style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}>
@@ -6531,9 +6541,6 @@ function App(){
       const [{data:us0},{data:wr}]=await Promise.all([sb.from('crm_users').select('id,name,role,active').order('id'), sb.from('workers').select('data')]);
       if(dead||!us0) return;
       let us=us0;
-      // שינוי חד-פעמי לבקשת המנהל: "admin" → "זוהר 360"
-      const adm=us.find(u=>u.role==="מנהל"&&(u.name==="admin"||u.name==="זוהר 360"));
-      if(adm){ const {error}=await sb.from('crm_users').update({name:"Zohar360"}).eq('id',adm.id); if(!error) us=us.map(u=>u.id===adm.id?{...u,name:"Zohar360"}:u); }
       // שם המשתמש המחובר מתעדכן אם שונה בניהול משתמשים
       const me=us.find(u=>String(u.id)===String(authUser.id));
       if(me&&me.name&&me.name!==authUser.name){ const nu={...authUser,name:me.name}; setAuthUser(nu); __h360User=nu; try{localStorage.setItem('crm_auth',JSON.stringify(nu));}catch{} }
@@ -6553,7 +6560,7 @@ function App(){
             changed=true;
           } else if(out[i].name!==u.name){ out=out.map((w,j)=>j===i?{...w,name:u.name}:w); changed=true; }
         });
-        const mgr=us.find(u=>u.role==="מנהל"&&u.name==="Zohar360");
+        const mgr=us.filter(u=>u.role==="מנהל").sort((a,b)=>a.id-b.id)[0];
         if(mgr){ out=out.map(w=>(String(w.crmUserId)===String(mgr.id)&&!w.licenseNum)?(changed=true,{...w,licenseNum:"2849",license:"מדביר שטחים פתוחים",licenseType:"מדביר שטחים פתוחים"}):w); }
         return changed?out:ws;
       });
