@@ -1088,6 +1088,26 @@ function printInvoice(inv){
     price:inv.amount,vat,total:inv.amount+vat,payMethod:inv.payMethod,
   }));
 }
+// שליחת סיכום יומן ביצוע ללקוח בוואטסאפ
+function execLogWAText(log){
+  const pests=(log.pest||[]).join(", ");
+  const mats=(log.materials||[]).map(m=>m.name).filter(Boolean).join(", ");
+  return ["שלום "+(log.clientName||"")+" 👋","",
+    "מצורף סיכום הטיפול שבוצע אצלכם — "+COMPANY.name,
+    "📅 תאריך: "+fmtDate(log.date),
+    log.address?"📍 כתובת: "+log.address:"",
+    pests?"🐛 מזיקים: "+pests:"",
+    mats?"🧪 חומרים: "+mats:"",
+    log.warranty?"🛡️ אחריות: "+log.warranty:"",
+    log.workerName?"👷 מדביר: "+log.workerName+(log.workerLicense?" (רישיון "+log.workerLicense+")":""):"",
+    log.extermination_notes?"\n📝 הנחיות: "+log.extermination_notes:"",
+    log.docNum?"\nמס׳ יומן: "+log.docNum:"",
+    "","תודה שבחרתם בנו 🦟"].filter(x=>x!=="").join("\n");
+}
+function sendExecLogWA(log,phone){
+  const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
+  window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(execLogWAText(log)),"_blank");
+}
 function printExecLog(log){
   openPrintWindow(`יומן ביצוע ${log.docNum||""}`, execLogHtml({company:COMPANY,docNum:log.docNum||("EL-"+(log.id||"")),log,chemicals:CHEMICALS}));
 }
@@ -1408,13 +1428,15 @@ function PestPickerDk({selected,onChange}){
   </div>;
 }
 
-function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[]}){
+function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[]}){
   // Auto-detect worker from appointment
   const apptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
   const defaultWorker = apptWorker || worker || {};
 
   const [f,setF]=useState({
     clientName:    initialData?.clientName    || prefillAppt?.customerName || "",
+    customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
+    phone:         initialData?.phone         || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || "",
     address:       initialData?.address       || prefillAppt?.address      || "",
     structureType: initialData?.structureType || prefillAppt?.structureType || prefillAppt?.propertyType || "",
     pest:          initialData?.pest          || (prefillAppt?.pestType?[prefillAppt.pestType]:[]),
@@ -1426,10 +1448,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     notes:         initialData?.notes         || prefillAppt?.notes || "",
     paymentDone:   initialData?.paymentDone   ?? true,
     paymentNote:   initialData?.paymentNote   || "",
-    date:          prefillAppt?.date          || todayStr(),
+    date:          initialData?.date          || prefillAppt?.date          || todayStr(),
     workerName:    initialData?.workerName    || defaultWorker.name || "",
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
-    workerLicenseType: initialData?.workerLicenseType || defaultWorker.license || "",
+    workerLicenseType: initialData?.workerLicenseType || defaultWorker.licenseType || defaultWorker.license || "",
     extraWorkers:  initialData?.extraWorkers  || [],
   });
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
@@ -1451,7 +1473,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const valid=f.clientName&&f.address&&f.structureType&&allPests.length>0&&f.materials.length>0;
 
   const PEST_LEVELS=["קלה","בינונית","גבוהה","חמורה"];
-  const LICENSE_TYPES=["","מדביר דירות","מדביר דירות ושטח פתוח","מדביר חקלאי"];
+  const LICENSE_TYPES=["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי"];
 
   return <div style={{color:"#0f172a"}}>
 
@@ -1464,7 +1486,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           <select value={f.workerName} onChange={e=>{
             const w=workers.find(x=>x.name===e.target.value);
             set("workerName",e.target.value);
-            if(w){set("workerLicense",w.licenseNum||"");set("workerLicenseType",w.licenseType||"");}
+            if(w){set("workerLicense",w.licenseNum||"");set("workerLicenseType",w.licenseType||w.license||"");}
           }} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,fontFamily:"inherit",background:"#fff"}}>
             <option value="">-- בחר מדביר --</option>
             {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{w.name}</option>)}
@@ -1492,12 +1514,22 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <button onClick={addExtraWorker} style={{marginTop:10,background:"none",border:"1px dashed #86efac",borderRadius:8,padding:"6px 14px",fontSize:12,color:CLR.primary,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>+ הוסף מדביר נוסף</button>
     </div>
 
+    {/* בחירת לקוח קיים — ממלא שם, כתובת, טלפון וסוג מבנה */}
+    {customers.length>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:8}}>👤 לקוח קיים? בחר ונמלא את הפרטים</div>
+      <CustomerSearchSelect customers={customers.filter(c=>!c.deleted)} value={f.customerId||""} onChange={(id,c)=>{
+        if(!c){ set("customerId",null); return; }
+        const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
+        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,address:c.address||x.address,phone:c.phone||x.phone,
+          structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||"")}));
+      }}/>
+    </div>}
     {/* Client + Date */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
       <Inp label="שם לקוח *" value={f.clientName} onChange={v=>set("clientName",v)}/>
       <Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/>
     </div>
-    <div style={{marginBottom:14}}><Inp label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/></div>
+    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:14}}><Inp label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/><Inp label="טלפון לקוח (לשליחה)" value={f.phone} onChange={v=>set("phone",v)}/></div>
 
     {/* Structure + Pest level */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
@@ -1557,18 +1589,22 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>}
 
     <Btn full onClick={()=>{if(!valid)return alert("שם, כתובת, מבנה, מזיקים וחומרים – חובה");onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers});}}>
-      👁 טיוטה לאישור →
+      💾 שמור והצג יומן →
     </Btn>
     {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* שדות חובה: שם, כתובת, מבנה, מזיקים, חומרים</div>}
   </div>;
 }
 
-function ExecLogPreview({data,onBack,onApprove}){
-  const docNum=`EL-${Date.now().toString().slice(-6)}`;
+function ExecLogPreview({data,onBack,onApprove,saved,phone,approveLabel}){
+  const docNum=data.docNum||saved?.docNum||`EL-${Date.now().toString().slice(-6)}`;
+  const log=saved||data;
   return <div>
-    <div style={{display:"flex",gap:10,marginBottom:20}}>
-      <Btn v="ghost" sm onClick={onBack}>← חזרה לעריכה</Btn>
-      <Btn onClick={onApprove} style={{flex:1}}>✅ אשר ושמור יומן ביצוע</Btn>
+    {saved&&<div style={{background:"#dcfce7",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"10px 14px",marginBottom:12,fontWeight:700,fontSize:14}}>✅ יומן הביצוע נשמר במערכת אוטומטית ({docNum})</div>}
+    <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+      <Btn v="ghost" sm onClick={onBack}>← {saved?"תיקון":"חזרה לעריכה"}</Btn>
+      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); sendExecLogWA(log,phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 שלח ללקוח</Btn>
+      <Btn sm v="secondary" onClick={()=>printExecLog({...log,docNum})}>📄 PDF</Btn>
+      {onApprove&&<Btn onClick={onApprove} style={{flex:1}}>{approveLabel||"✓ סיום"}</Btn>}
     </div>
     <div style={{background:"#fff",color:"#111",borderRadius:12,padding:"28px 32px",fontFamily:"Arial,sans-serif",direction:"rtl",lineHeight:1.7}}>
       <div style={{display:"flex",justifyContent:"space-between",borderBottom:"2px solid #1a5c3a",paddingBottom:14,marginBottom:18}}>
@@ -1626,8 +1662,9 @@ function ExecLogPreview({data,onBack,onApprove}){
   </div>;
 }
 
-function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance}){
-  const workerObj = workers.find(w=>w.id===currentUser.id) || {name:currentUser.name,license:"—"};
+function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[]}){
+  const workerObj = workers.find(w=>String(w.crmUserId)===String(currentUser.id)) || workers.find(w=>String(w.name||"").trim()===String(currentUser.name||"").trim()) || {name:currentUser.name,license:"—"};
+  const [savedLog,setSavedLog]=useState(null);
   const [mode,setMode]=useState("list"); // list | new | preview
   const [prefillAppt,setPrefillAppt]=useState(null);
   const [extracted,setExtracted]=useState({});
@@ -1644,47 +1681,50 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     return a.status!=="בוצע"&&a.status!=="בוטל";
   });
 
+  // נשמר אוטומטית ברגע שמגיעים לתצוגה — תיקון אחר כך מעדכן את אותו יומן
   const handleSave=data=>{
     const aptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
-    const wName = aptWorker?.name || workerObj.name;
-    const wLicense = aptWorker?.license || workerObj.license;
-    const wId = aptWorker?.id || (currentUser.role==="מדביר"?currentUser.id:null);
-    const newLog={id:nextId(execLogs),docNum:`EL-${String(Date.now()).slice(-6)}`,apptId:prefillAppt?.id||null,customerId:prefillAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
-    setExecLogs(ls=>[newLog,...ls]);
+    const selW = workers.find(w=>w.name===data.workerName);
+    const wName = data.workerName || aptWorker?.name || workerObj.name;
+    const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
+    const wId = selW?.id || aptWorker?.id || workerObj.id || null;
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:`EL-${String(Date.now()).slice(-6)}`,apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
-    setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null);
-    alert("✅ יומן הביצוע נשמר! הוא מופיע ברשימה כאן, ביומן התורים, ובתיק הלקוח.");
+    setSavedLog(newLog);
+    return newLog;
   };
+  const finish=()=>{ setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
 
-  const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setFormKey(k=>k+1);setMode("new");};
-  const handlePreview=(data)=>{setPreviewData(data);setMode("preview");};
+  const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setSavedLog(null);setFormKey(k=>k+1);setMode("new");};
+  const handlePreview=(data)=>{handleSave(data);setPreviewData(data);setExtracted(data);setMode("preview");};
 
   if(viewLog) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       <div style={{display:"flex",gap:10,marginBottom:16}}>
         <Btn v="ghost" sm onClick={()=>setViewLog(null)}>← חזרה</Btn>
       </div>
-      <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} onBack={()=>setViewLog(null)} onApprove={()=>setViewLog(null)}/>
+      <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} saved={viewLog} phone={viewLog.phone||(customers.find(c=>String(c.id)===String(viewLog.customerId))||customers.find(c=>c.name===viewLog.clientName)||{}).phone} onBack={()=>setViewLog(null)}/>
     </div>
   );
 
   if(mode==="preview"&&previewData) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a"}}>
-      <ExecLogPreview data={previewData} onBack={()=>setMode("new")} onApprove={()=>handleSave(previewData)}/>
+      <ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone} onBack={()=>{setFormKey(k=>k+1);setMode("new");}} onApprove={finish}/>
     </div>
   );
 
   if(mode==="new") return(
     <div style={{background:"#f8fafc",minHeight:"100%",color:"#0f172a",direction:"rtl",fontFamily:"'Inter',system-ui,sans-serif"}}>
       <div style={{background:"#fff",borderBottom:"1px solid #e2e8f0",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",position:"sticky",top:0,zIndex:50,boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}>
-        <Btn v="ghost" sm onClick={()=>{setMode("list");setPrefillAppt(null);}}>← חזרה</Btn>
+        <Btn v="ghost" sm onClick={finish}>← חזרה</Btn>
         <h2 style={{margin:0,fontSize:15,fontWeight:700,flex:1}}>📋 מילוי יומן ביצוע</h2>
         {prefillAppt&&<span style={{background:CLR.primaryLight,color:CLR.primary,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600}}>
           {prefillAppt.customerName} · {prefillAppt.pestType}
         </span>}
       </div>
       <div style={{maxWidth:700,margin:"0 auto",padding:"20px"}}>
-        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={handlePreview} workers={workers} appointments={appointments}/>
+        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={handlePreview} workers={workers} appointments={appointments} customers={customers}/>
       </div>
     </div>
   );  // LIST MODE
@@ -1749,6 +1789,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
                   <button onClick={()=>setViewLog(l)} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:CLR.primary,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>👁 צפה</button>
                   <button onClick={()=>printExecLog(l)} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:CLR.muted,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>📄 PDF</button>
+                  <button onClick={()=>{const ph=l.phone||(customers.find(c=>String(c.id)===String(l.customerId))||customers.find(c=>c.name===l.clientName)||{}).phone; if(!ph) return alert("אין טלפון ללקוח הזה"); sendExecLogWA(l,ph);}} style={{padding:"5px 12px",borderRadius:8,border:"none",background:"#25D366",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>📤 שלח</button>
                 </div>
               </div>
             ))}
@@ -2445,7 +2486,7 @@ function InvoiceModal({appt,customers,onClose,onSave}){
 }
 
 // Execution-log modal launched from the calendar — dark themed, prefilled from the appointment
-function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser}){
+function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[]}){
   const [step,setStep]=useState("form"); // form | preview | done
   const [previewData,setPreviewData]=useState(null);
   const [savedLog,setSavedLog]=useState(null);
@@ -2455,11 +2496,8 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
   const [payNow,setPayNow]=useState(true);
   const [savedInvoice,setSavedInvoice]=useState(null);
 
-  const handleApprove=()=>{
-    const log=onSave(previewData); // returns the saved log with id/docNum
-    setSavedLog(log);
-    setStep("done");
-  };
+  const handleApprove=()=>{ setStep("done"); };
+  const autoSave=d=>{ const log=onSave(d,savedLog); setSavedLog(log); setPreviewData(d); setStep("preview"); };
 
   const handleCreateInvoice=()=>{
     const vat=Math.round(appt.price*0.18);
@@ -2481,9 +2519,9 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
         📅 <b>{appt.customerName}</b> | {appt.address} | {appt.pestType} | {fmtDate(appt.date)} {appt.time}
       </div>
 
-      {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={null} onPreview={d=>{setPreviewData(d);setStep("preview");}}/>}
+      {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={previewData} onPreview={autoSave} workers={workers} customers={customers}/>}
 
-      {step==="preview"&&<ExecLogPreview data={previewData} onBack={()=>setStep("form")} onApprove={handleApprove}/>}
+      {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={()=>setStep("form")} onApprove={handleApprove} approveLabel="המשך לחשבונית →"/>}
 
       {step==="done"&&<div>
         <div style={{textAlign:"center",padding:"10px 0 20px"}}>
@@ -2830,11 +2868,11 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const workerObj = workers.find(w=>w.id===currentUser.id) || {name:currentUser.name,license:"—"};
   const apptHasLog=id=>execLogs.some(l=>l.apptId===id);
 
-  const saveLog=data=>{
-    const aptWorker=workers.find(w=>w.id===logAppt?.workerId)||{};
-    const id=nextId(execLogs);
-    const newLog={id,docNum:`EL-${String(Date.now()).slice(-6)}`,apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:aptWorker.name||workerObj.name,workerLicense:aptWorker.license||workerObj.license,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
-    setExecLogs(ls=>[newLog,...ls]);
+  const saveLog=(data,existing)=>{
+    const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
+    const id=existing?existing.id:nextId(execLogs);
+    const newLog={id,docNum:existing?existing.docNum:`EL-${String(Date.now()).slice(-6)}`,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
   };
@@ -3014,7 +3052,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onClose={()=>setDupAppt(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
-      currentUser={currentUser}
+      currentUser={currentUser} workers={workers} customers={customers}
       onClose={()=>{setLogAppt(null);setDetailAppt(null);}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
   </div>;
 }
@@ -3732,10 +3770,10 @@ function NewFinanceModal({customers,onClose,onSave}){
   </Modal>;
 }
 
-function NewWorkerModal({onClose,onSave}){
-  const [f,setF]=useState({name:"",role:"מדביר",phone:"",email:"",license:"",licenseNum:"",licenseExpiry:"",specialty:"",zone:"",status:"פעיל",color:"#2563eb",notes:"",docName:""});
+function NewWorkerModal({onClose,onSave,initial}){
+  const [f,setF]=useState({name:"",role:"מדביר",phone:"",email:"",license:"",licenseNum:"",licenseExpiry:"",specialty:"",zone:"",status:"פעיל",color:"#2563eb",notes:"",docName:"",...(initial||{})});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
-  const [docPreview,setDocPreview]=useState(null);
+  const [docPreview,setDocPreview]=useState(initial?.docPreview||null);
   const handleFile=e=>{
     const file=e.target.files[0]; if(!file) return;
     set("docName",file.name);
@@ -3745,11 +3783,11 @@ function NewWorkerModal({onClose,onSave}){
       reader.readAsDataURL(file);
     } else { setDocPreview("pdf"); }
   };
-  return <Modal title="👷 עובד / מדביר חדש" onClose={onClose} width={520}>
+  return <Modal title={initial?"✏️ עריכת עובד — "+(initial.name||""):"👷 עובד / מדביר חדש"} onClose={onClose} width={520}>
     <FieldCard title="פרטים אישיים">
       <G2>
         <Inp label="שם מלא *" value={f.name} onChange={v=>set("name",v)}/>
-        <Sel label="תפקיד" value={f.role} onChange={v=>set("role",v)} options={["מדביר","פקידה","מנהל"]}/>
+        <Sel label="תפקיד" value={f.role} onChange={v=>set("role",v)} options={[...new Set(["מדביר","פקידה","מנהל",f.role].filter(Boolean))]}/>
       </G2>
       <G2>
         <Inp label="טלפון" value={f.phone} onChange={v=>set("phone",v)}/>
@@ -3761,9 +3799,9 @@ function NewWorkerModal({onClose,onSave}){
           <input type="color" value={f.color} onChange={e=>set("color",e.target.value)} style={{width:"100%",height:38,borderRadius:8,border:`1px solid #d1d5db`,cursor:"pointer"}}/></div>
       </G2>
     </FieldCard>
-    {f.role==="מדביר"&&<FieldCard title="פרטי רישיון">
+    {(f.role==="מדביר"||f.alsoTech)&&<FieldCard title="פרטי רישיון">
       <G2>
-        <Sel label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} options={["","מדביר דירות","מדביר דירות ושטח פתוח","מדביר חקלאי","אחר"]}/>
+        <Sel label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} options={[...new Set(["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי","אחר",f.license||""])]}/>
         <Inp label="מספר רישיון" value={f.licenseNum} onChange={v=>set("licenseNum",v)} placeholder="12345678"/>
       </G2>
       <G2>
@@ -3784,7 +3822,7 @@ function NewWorkerModal({onClose,onSave}){
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder="הערות כלליות על העובד..."/>
     </FieldCard>
     <div style={{display:"flex",gap:10}}>
-      <Btn full onClick={()=>{if(!f.name)return alert("שם חובה");onSave({...f,docPreview});onClose();}}>✅ שמור עובד</Btn>
+      <Btn full onClick={()=>{if(!f.name)return alert("שם חובה");onSave({...f,licenseType:f.license||f.licenseType||"",docPreview});onClose();}}>✅ שמור עובד</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
   </Modal>;
@@ -5424,6 +5462,7 @@ function TrashBin({items, currentUser}){
 
 function Workers({workers,setWorkers,appointments}){
   const [showNew,setShowNew]=useState(false);
+  const [editW,setEditW]=useState(null);
   const cnt=wid=>appointments.filter(a=>a.workerId===wid).length;
   const done=wid=>appointments.filter(a=>a.workerId===wid&&a.status==="בוצע").length;
   return <div>
@@ -5455,12 +5494,14 @@ function Workers({workers,setWorkers,appointments}){
         {w.docPreview==="pdf"&&<div style={{fontSize:11,color:CLR.info,marginTop:6}}>📄 {w.docName}</div>}
         {w.role!=="מדביר"&&<button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,alsoTech:!x.alsoTech}:x))} style={{marginTop:10,width:"100%",background:w.alsoTech?"#16a34a":CLR.surface,color:w.alsoTech?"#fff":CLR.text||"#0f172a",border:`1px solid ${w.alsoTech?"#16a34a":CLR.border}`,borderRadius:6,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>{w.alsoTech?"✓ משובץ גם כמדביר":"👷 אפשר שיבוץ כמדביר"}</button>}
         <div style={{marginTop:12,display:"flex",gap:6}}>
+          <button onClick={()=>setEditW(w)} style={{flex:1,background:CLR.primaryLight,color:CLR.primary,border:"none",borderRadius:6,padding:"6px 0",fontSize:11,fontWeight:700,cursor:"pointer"}}>✏️ ערוך</button>
           <button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,status:x.status==="פעיל"?"לא פעיל":"פעיל"}:x))} style={{flex:1,background:CLR.surface,color:CLR.muted,border:`1px solid ${CLR.border}`,borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>{w.status==="פעיל"?"⏸ השהה":"▶ הפעל"}</button>
           <button onClick={()=>{if(window.confirm(`להעביר את ${w.name} לארכיון?`))softDelete(setWorkers,w.id);}} style={{flex:1,background:"#fee2e2",color:CLR.danger,border:"none",borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>🗑 ארכב</button>
         </div>
       </div>)}
     </div>
     {showNew&&<NewWorkerModal onClose={()=>setShowNew(false)} onSave={w=>setWorkers(ws=>[...ws,{...w,id:nextId(ws)}])}/>}
+    {editW&&<NewWorkerModal initial={editW} onClose={()=>setEditW(null)} onSave={w=>setWorkers(ws=>ws.map(x=>x.id===editW.id?{...x,...w,id:x.id,crmUserId:x.crmUserId,name:x.crmUserId!=null?x.name:w.name}:x))}/>}
   </div>;
 }
 
@@ -6487,8 +6528,15 @@ function App(){
     if(!sb||!authUser||authUser.role!=="מנהל") return;
     let dead=false;
     (async()=>{
-      const [{data:us},{data:wr}]=await Promise.all([sb.from('crm_users').select('id,name,role,active').order('id'), sb.from('workers').select('data')]);
-      if(dead||!us) return;
+      const [{data:us0},{data:wr}]=await Promise.all([sb.from('crm_users').select('id,name,role,active').order('id'), sb.from('workers').select('data')]);
+      if(dead||!us0) return;
+      let us=us0;
+      // שינוי חד-פעמי לבקשת המנהל: "admin" → "זוהר 360"
+      const adm=us.find(u=>u.role==="מנהל"&&u.name==="admin");
+      if(adm){ const {error}=await sb.from('crm_users').update({name:"זוהר 360"}).eq('id',adm.id); if(!error) us=us.map(u=>u.id===adm.id?{...u,name:"זוהר 360"}:u); }
+      // שם המשתמש המחובר מתעדכן אם שונה בניהול משתמשים
+      const me=us.find(u=>String(u.id)===String(authUser.id));
+      if(me&&me.name&&me.name!==authUser.name){ const nu={...authUser,name:me.name}; setAuthUser(nu); __h360User=nu; try{localStorage.setItem('crm_auth',JSON.stringify(nu));}catch{} }
       const remote=(wr||[]).map(r=>r.data);
       const COLORS={"מנהל":"#7c3aed","פקידה":"#2563eb","מדביר":"#16a34a"};
       setWorkers(ws=>{
@@ -6505,6 +6553,8 @@ function App(){
             changed=true;
           } else if(out[i].name!==u.name){ out=out.map((w,j)=>j===i?{...w,name:u.name}:w); changed=true; }
         });
+        const mgr=us.find(u=>u.role==="מנהל"&&u.name==="זוהר 360");
+        if(mgr){ out=out.map(w=>(String(w.crmUserId)===String(mgr.id)&&!w.licenseNum)?(changed=true,{...w,licenseNum:"2849",license:"מדביר שטחים פתוחים",licenseType:"מדביר שטחים פתוחים"}):w); }
         return changed?out:ws;
       });
     })();
