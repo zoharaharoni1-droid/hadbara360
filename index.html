@@ -5957,6 +5957,13 @@ const USER_LIST=[
 // LOCALSTORAGE
 // ═══════════════════════════════════════════════════════
 // Table mapping: JS key -> Supabase table name
+// נתוני הדוגמה שהגיעו עם המערכת — לא מוצגים יותר, ומנוקים מהמטמון המקומי
+const DEMO_DATA = {customers:initCustomers,workers:initWorkers,appointments:initAppointments,finance:initFinance,notes:initNotes,maintenance:initMaintenance,projects:initProjects,collabs:initCollabs,scheduledMsgs:initScheduledMsgs,execLogs:initExecLogs};
+function stripDemo(key, arr){
+  const demo=DEMO_DATA[key]; if(!demo||!Array.isArray(arr)) return arr;
+  const sig=new Set(demo.map(x=>JSON.stringify(x)));
+  return arr.filter(x=>!sig.has(JSON.stringify(x)));
+}
 const SB_TABLES = {
   customers: "customers",
   workers: "workers",
@@ -5977,7 +5984,11 @@ function useLS(key, init){
     // Start with localStorage cache for instant load
     try {
       const s = localStorage.getItem('h360_' + key);
-      return s ? JSON.parse(s) : initVal;
+      if(!s) return initVal;
+      const v = JSON.parse(s);
+      const clean = stripDemo(key, v);
+      if(clean!==v && clean.length!==v.length) try{ localStorage.setItem('h360_' + key, JSON.stringify(clean)); }catch(e){}
+      return clean;
     } catch(e){ return initVal; }
   });
 
@@ -5990,7 +6001,7 @@ function useLS(key, init){
     const syncFromSupabase = () => {
       sb.from(tbl).select('*').order('updated_at', {ascending:true})
         .then(({data, error})=>{
-          if(error || !data || data.length === 0) return;
+          if(error || !data) return; // טבלה ריקה = אין נתונים (לא מציגים דוגמאות)
           const sbRows = data.map(r => r.data);
           // החלף לגמרי במה שב-Supabase — הוא ה-source of truth
           // הכתיבה שלנו כבר עלתה לשם, אז זה בטוח
@@ -6551,7 +6562,7 @@ function App(){
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
   },[]);
-  const [customers,setCustomers]=useLS("customers", initCustomers);
+  const [customers,setCustomers]=useLS("customers", []);
   const [leads,reloadLeads]=useLeads(!!authUser);
   const newLeadsCount=leads.filter(l=>l.status==="חדש").length;
   const seenLeads=React.useRef(null);
@@ -6565,7 +6576,7 @@ function App(){
     }
     if(leads.length||seenLeads.current) seenLeads.current=ids;
   },[leads]);
-  const [workers,setWorkers]=useLS("workers", initWorkers);
+  const [workers,setWorkers]=useLS("workers", []);
   // משתמשי המערכת (מנהל ראשי, פקידות) מופיעים אוטומטית ברשימת העובדים; המנהל הראשי גם מדביר
   React.useEffect(()=>{
     if(!sb||!authUser||authUser.role!=="מנהל") return;
@@ -6601,8 +6612,8 @@ function App(){
     return ()=>{dead=true;};
   },[authUser&&authUser.id, authUser&&authUser.role]);
   const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
-  const [appointments,setAppointments]=useLS("appointments", initAppointments);
-  const [finance,setFinance]=useLS("finance", initFinance);
+  const [appointments,setAppointments]=useLS("appointments", []);
+  const [finance,setFinance]=useLS("finance", []);
   // תיקון תורים בלי שם לקוח (נוצרו מכרטיס הלקוח/שכפול) — משלים את השם מכרטיס הלקוח
   React.useEffect(()=>{
     if(!customers||!customers.length||!appointments||!appointments.length) return;
@@ -6612,11 +6623,11 @@ function App(){
     setAppointments(as=>as.map(a=>needs(a)?{...a,customerName:byId.get(String(a.customerId)).name}:a));
   },[customers,appointments]);
 
-  const [notes,setNotes]=useLS("notes", initNotes);
-  const [maintenance,setMaintenance]=useLS("maintenance",initMaintenance);
-  const [projects,setProjects]=useLS("projects",initProjects);
-  const [collabs,setCollabs]=useLS("collabs",initCollabs);
-  const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs",initScheduledMsgs);
+  const [notes,setNotes]=useLS("notes", []);
+  const [maintenance,setMaintenance]=useLS("maintenance", []);
+  const [projects,setProjects]=useLS("projects", []);
+  const [collabs,setCollabs]=useLS("collabs", []);
+  const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs", []);
 
   // ── פריטים פעילים בלבד (מסנן deleted:true) ──
   const activeWorkers = React.useMemo(()=>activeOnly(workers),[workers]);
@@ -6648,7 +6659,7 @@ function App(){
     {id:3,name:"תודה לאחר טיפול",emoji:"🙏",text:"שלום *{שם}* 👋\n\nתודה שבחרת ב-"+COMPANY.name+"!\nהטיפול בוצע בהצלחה.\n\nנשמח לעמוד לשירותך שוב 😊"},
     {id:4,name:"תזכורת תשלום",emoji:"💳",text:"שלום *{שם}* 👋\n\nבהתאם לבדיקתנו, ישנו חוב פתוח עבור הטיפול שביצענו.\nנשמח להסדיר את התשלום בהקדם.\n\n"+COMPANY.name+" 🦟"},
   ]);
-  const [execLogs,setExecLogs]=useLS("execLogs",initExecLogs);
+  const [execLogs,setExecLogs]=useLS("execLogs", []);
 
   const TABS=[
     {id:"dashboard",label:"📊 דשבורד",short:"📊",hideFor:"מדביר"},
