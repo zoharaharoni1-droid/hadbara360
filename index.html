@@ -3854,6 +3854,32 @@ function NewCustomerModal({onClose,onSave,workers,onSchedule,customers}){
 }
 
 // Full-page "הזמנת עבודה" tab — with side guidance panel
+// ── תצוגה מפוצלת עם קו גרירה (ימין = טופס, שמאל = יומן) ──
+function SplitView({right,left,storageKey,defaultRight=640,minRight=400,minLeft=300}){
+  const ref=React.useRef(null);
+  const [w,setW]=useState(()=>{try{return parseInt(localStorage.getItem(storageKey))||defaultRight;}catch(e){return defaultRight;}});
+  const [drag,setDrag]=useState(false);
+  React.useEffect(()=>{
+    if(!drag) return;
+    const move=e=>{ const r=ref.current&&ref.current.getBoundingClientRect(); if(!r) return; const x=(e.touches?e.touches[0].clientX:e.clientX);
+      const nw=Math.max(minRight,Math.min(r.right-x,r.width-minLeft)); setW(nw); };
+    const up=()=>{ setDrag(false); };
+    window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+    document.body.style.userSelect="none"; document.body.style.cursor="col-resize";
+    return ()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up); document.body.style.userSelect=""; document.body.style.cursor=""; };
+  },[drag]);
+  React.useEffect(()=>{ if(!drag) try{localStorage.setItem(storageKey,String(Math.round(w)));}catch(e){} },[drag,w]);
+  return <div ref={ref} style={{display:"flex",alignItems:"flex-start",gap:0,width:"100%"}}>
+    <div style={{flex:`0 0 ${w}px`,minWidth:0}}>{right}</div>
+    <div onPointerDown={e=>{e.preventDefault();setDrag(true);}} onDoubleClick={()=>setW(defaultRight)} title="גרור כדי לשנות רוחב · דאבל-קליק לאיפוס"
+      style={{flex:"0 0 16px",alignSelf:"stretch",cursor:"col-resize",display:"flex",justifyContent:"center",position:"relative",touchAction:"none"}}>
+      <div style={{width:drag?4:2,background:drag?CLR.primary:CLR.border,borderRadius:2,height:"100%",minHeight:300,transition:"background .15s"}}/>
+      <div style={{position:"absolute",top:"40vh",width:14,height:44,borderRadius:7,background:"#fff",border:`1px solid ${drag?CLR.primary:CLR.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:CLR.muted,fontSize:10,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>⋮</div>
+    </div>
+    <div style={{flex:"1 1 0",minWidth:0}}>{left}</div>
+  </div>;
+}
+
 // ── לוח זמינות המדבירים (ליד הזמנת עבודה) ──
 function apptRange(a){
   const tw=String(a.timeWindow||"").split(/[–-]/).map(x=>x.trim());
@@ -3865,11 +3891,20 @@ function apptRange(a){
 function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact}){
   const techs=workers.filter(w=>isTech(w)&&w.status!=="לא פעיל");
   const [only,setOnly]=useState("all");
+  const [mode,setMode]=useState(()=>{try{return localStorage.getItem('h360_avail_mode')||"day";}catch(e){return "day";}});
+  const setModeP=m=>{setMode(m);try{localStorage.setItem('h360_avail_mode',m);}catch(e){}};
   const cols=only==="all"?techs:techs.filter(w=>String(w.id)===String(only));
   const hours=Array.from({length:14},(_,i)=>7+i); // 07:00–20:00
   const d=new Date((date||todayStr())+"T12:00:00");
   const iso=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
-  const shift=n=>{const x=new Date(d);x.setDate(x.getDate()+n);setDate(iso(x));};
+  const shift=n=>{const x=new Date(d); if(mode==="month") x.setMonth(x.getMonth()+n,1); else x.setDate(x.getDate()+n*(mode==="week"?7:1)); setDate(iso(x));};
+  const unit=mode==="day"?"יום":mode==="week"?"שבוע":"חודש";
+  const MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const wkStart=new Date(d); wkStart.setDate(d.getDate()-d.getDay());
+  const weekDays=Array.from({length:7},(_,i)=>{const x=new Date(wkStart);x.setDate(wkStart.getDate()+i);return x;});
+  const ofW=(a,w)=>String(a.workerId)===String(w.id)||a.workerName===w.name;
+  const live=appointments.filter(a=>a.status!=="בוטל");
+  const goDay=x=>{setDate(iso(x));setModeP("day");};
   const DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
   const dayAppts=appointments.filter(a=>a.date===iso(d)&&a.status!=="בוטל");
   const toMin=t=>{const [h,m]=String(t||"").split(":").map(n=>parseInt(n));return isNaN(h)?null:h*60+(m||0);};
@@ -3877,22 +3912,59 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
   const inSel=h=>sel&&sel.date===iso(d)&&selSt!=null&&selEn!=null&&h*60<selEn&&(h+1)*60>selSt;
   const nav={display:"inline-flex",alignItems:"center",gap:4,padding:"7px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:13,fontWeight:600,color:CLR.primary,fontFamily:"inherit"};
   return <div style={{background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:12,padding:12,display:"flex",flexDirection:"column",gap:10,height:compact?"auto":"100%",minHeight:0}}>
-    <div style={{fontWeight:800,fontSize:15,color:CLR.primary}}>📅 יומני המדבירים</div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <div style={{fontWeight:800,fontSize:15,color:CLR.primary}}>📅 יומני המדבירים</div>
+      <div style={{display:"flex",gap:2,background:"#e8f5ee",borderRadius:9,padding:3}}>
+        {[["day","יומי"],["week","שבועי"],["month","חודשי"]].map(([m,l])=><button key={m} onClick={()=>setModeP(m)} style={{padding:"5px 12px",borderRadius:7,border:"none",cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:mode===m?700:500,background:mode===m?"#fff":"transparent",color:mode===m?"#1a5c3a":"#6b7280"}}>{l}</button>)}
+      </div>
+    </div>
     <div style={{display:"flex",gap:6,alignItems:"center"}}>
-      <button style={nav} onClick={()=>shift(-1)}><span>▶</span><span>יום קודם</span></button>
+      <button style={nav} onClick={()=>shift(-1)}><span>▶</span><span>{unit} קודם</span></button>
       <button style={{...nav,flex:1,justifyContent:"center",color:"#334155"}} onClick={()=>setDate(todayStr())}>היום</button>
-      <button style={nav} onClick={()=>shift(1)}><span>יום הבא</span><span>◀</span></button>
+      <button style={nav} onClick={()=>shift(1)}><span>{unit==="חודש"?"חודש הבא":unit==="שבוע"?"שבוע הבא":"יום הבא"}</span><span>◀</span></button>
     </div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-      <b style={{fontSize:15}}>יום {DAYS[d.getDay()]} · {d.getDate()}/{d.getMonth()+1}</b>
+      <b style={{fontSize:15}}>{mode==="day"?`יום ${DAYS[d.getDay()]} · ${d.getDate()}/${d.getMonth()+1}`:mode==="week"?`${weekDays[0].getDate()}/${weekDays[0].getMonth()+1} – ${weekDays[6].getDate()}/${weekDays[6].getMonth()+1}`:`${MONTHS[d.getMonth()]} ${d.getFullYear()}`}</b>
       <input type="date" value={iso(d)} onChange={e=>e.target.value&&setDate(e.target.value)} style={{padding:"4px 6px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:12}}/>
     </div>
     {techs.length>1&&<div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2}}>
       {[{id:"all",name:"כולם"},...techs].map(w=>{const on=String(only)===String(w.id);return <button key={w.id} onClick={()=>setOnly(w.id)} style={{flexShrink:0,padding:"6px 12px",borderRadius:20,border:`1.5px solid ${on?(w.color||CLR.primary):CLR.border}`,background:on?(w.color||CLR.primary):"#fff",color:on?"#fff":"#334155",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{w.name}</button>;})}
     </div>}
+    {techs.length>0&&mode==="week"&&<div style={{overflow:"auto",flex:1,minHeight:0,border:`1px solid ${CLR.border}`,borderRadius:10}}>
+      <table style={{borderCollapse:"collapse",width:"100%",minWidth:80+cols.length*130,tableLayout:"fixed"}}>
+        <thead><tr>
+          <th style={{width:76,position:"sticky",top:0,background:CLR.primary,color:"#fff",fontSize:11,padding:6,zIndex:2}}>יום</th>
+          {cols.map(w=><th key={w.id} style={{position:"sticky",top:0,background:CLR.primary,color:"#fff",fontSize:12,padding:6,zIndex:2,borderRight:"1px solid rgba(255,255,255,.25)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:w.color||"#fff",marginLeft:4}}/>{w.name}</th>)}
+        </tr></thead>
+        <tbody>{weekDays.map(x=>{const xi=iso(x);const tdy=xi===todayStr();const isSel=sel&&sel.date===xi;return <tr key={xi} style={{background:isSel?"#fef9c3":tdy?"#f0fdf4":"transparent"}}>
+          <td onClick={()=>goDay(x)} style={{cursor:"pointer",fontSize:12,fontWeight:700,padding:"6px",borderTop:`1px solid ${CLR.border}`,verticalAlign:"top",background:isSel?"#fde68a":CLR.surface}}>{DAYS[x.getDay()]}<div style={{fontWeight:400,color:CLR.muted}}>{x.getDate()}/{x.getMonth()+1}</div></td>
+          {cols.map(w=>{const list=live.filter(a=>a.date===xi&&ofW(a,w)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
+            return <td key={w.id} onClick={()=>goDay(x)} title="לחץ לתצוגה יומית" style={{cursor:"pointer",borderTop:`1px solid ${CLR.border}`,borderRight:`1px solid ${CLR.border}`,padding:4,verticalAlign:"top",minHeight:50}}>
+              {list.length===0?<div style={{fontSize:11,color:"#94a3b8",textAlign:"center",padding:"10px 0"}}>פנוי כל היום</div>
+              :list.map(a=><div key={a.id} style={{fontSize:11,lineHeight:1.3,borderRight:`3px solid ${w.color||CLR.primary}`,background:(w.color||CLR.primary)+"18",borderRadius:4,padding:"2px 5px",marginBottom:3,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}><b>{a.timeWindow||a.time}</b> {a.customerName}</div>)}
+            </td>;})}
+        </tr>;})}</tbody>
+      </table>
+    </div>}
+    {techs.length>0&&mode==="month"&&(()=>{
+      const first=new Date(d.getFullYear(),d.getMonth(),1), last=new Date(d.getFullYear(),d.getMonth()+1,0);
+      const cells=Array.from({length:Math.ceil((first.getDay()+last.getDate())/7)*7},(_,i)=>{const n=i-first.getDay()+1;return n<1||n>last.getDate()?null:new Date(d.getFullYear(),d.getMonth(),n);});
+      return <div style={{overflow:"auto",flex:1,minHeight:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:1,background:CLR.border,border:`1px solid ${CLR.border}`,borderRadius:10,overflow:"hidden"}}>
+          {["א'","ב'","ג'","ד'","ה'","ו'","ש'"].map(l=><div key={l} style={{background:CLR.primary,color:"#fff",textAlign:"center",fontSize:12,fontWeight:700,padding:"6px 0"}}>{l}</div>)}
+          {cells.map((x,i)=>{ if(!x) return <div key={i} style={{background:"#f8fafc",minHeight:62}}/>;
+            const xi=iso(x); const tdy=xi===todayStr(); const isSel=sel&&sel.date===xi;
+            return <div key={i} onClick={()=>goDay(x)} style={{background:isSel?"#fef9c3":tdy?"#e8f5ee":"#fff",minHeight:62,padding:4,cursor:"pointer",minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:tdy?800:600,color:tdy?CLR.primary:"#334155"}}>{x.getDate()}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:2,marginTop:2}}>
+                {cols.map(w=>{const n=live.filter(a=>a.date===xi&&ofW(a,w)).length; return n?<div key={w.id} title={w.name+": "+n+" תורים"} style={{display:"flex",alignItems:"center",gap:3,fontSize:11,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden"}}><span style={{width:8,height:8,borderRadius:"50%",background:w.color||CLR.primary,flexShrink:0}}/><span>{n}</span><span style={{fontWeight:400,overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</span></div>:null;})}
+              </div>
+            </div>;})}
+        </div>
+      </div>;})()}
     {techs.length===0
       ? <div style={{fontSize:13,color:CLR.muted,padding:20,textAlign:"center"}}>אין מדבירים פעילים</div>
-      : <div style={{overflow:"auto",flex:1,minHeight:0,border:`1px solid ${CLR.border}`,borderRadius:10}}>
+      : mode==="day"&&<div style={{overflow:"auto",flex:1,minHeight:0,border:`1px solid ${CLR.border}`,borderRadius:10}}>
         <table style={{borderCollapse:"collapse",width:"100%",minWidth:56+cols.length*120,tableLayout:"fixed"}}>
           <thead><tr>
             <th style={{width:52,position:"sticky",top:0,background:CLR.primary,color:"#fff",fontSize:11,padding:6,zIndex:2}}>שעה</th>
@@ -3920,7 +3992,7 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
           </tr>)}</tbody>
         </table>
       </div>}
-    <div style={{fontSize:11,color:CLR.muted}}>💡 לחיצה על משבצת פנויה ממלאת בהזמנה תאריך, שעה ומדביר. צהוב = החלון שבחרתם.</div>
+    <div style={{fontSize:11,color:CLR.muted}}>{mode==="day"?"💡 לחיצה על משבצת פנויה ממלאת בהזמנה תאריך, שעה ומדביר. צהוב = החלון שבחרתם.":"💡 לחיצה על יום פותחת אותו בתצוגה יומית. צהוב = התאריך שבחרתם בהזמנה."}</div>
   </div>;
 }
 
@@ -3955,10 +4027,7 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
           goToCustomers();
         }}/>
     </div>;
-  if(wide) return <div style={{display:"grid",gridTemplateColumns:"minmax(560px,680px) minmax(0,1fr)",gap:16,alignItems:"start"}}>
-    {form}
-    <div style={{position:"sticky",top:12,height:"calc(100vh - 110px)"}}>{panel(false)}</div>
-  </div>;
+  if(wide) return <SplitView storageKey="h360_order_split" defaultRight={640} minRight={420} minLeft={320} right={form} left={<div style={{position:"sticky",top:12,height:"calc(100vh - 110px)"}}>{panel(false)}</div>}/>;
   return <div>
     {form}
     {showCal&&<div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.55)",zIndex:1200,display:"flex",flexDirection:"column",padding:10}} onClick={()=>setShowCal(false)}>
