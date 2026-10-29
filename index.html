@@ -211,6 +211,8 @@ function tmpAuthClient(){
 }
 
 function roleLabel(r){ return r==="מנהל" ? "מנהל ראשי" : r; }
+// מי יכול לקבל שיבוץ הדברה: מדביר, או כל עובד שסומן "גם מדביר" (למשל המנהל הראשי)
+function isTech(w){ return !!w && (w.role==="מדביר" || !!w.alsoTech); }
 function genPassword(){ const a="abcdefghjkmnpqrstuvwxyz23456789"; let p=""; const b=new Uint32Array(8); crypto.getRandomValues(b); for(const x of b) p+=a[x%a.length]; return p; }
 
 // ─── יומן פעילות (נראה רק למנהל) ─────────────────────
@@ -1458,7 +1460,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
             if(w){set("workerLicense",w.licenseNum||"");set("workerLicenseType",w.licenseType||"");}
           }} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,fontFamily:"inherit",background:"#fff"}}>
             <option value="">-- בחר מדביר --</option>
-            {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{w.name}</option>)}
+            {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{w.name}</option>)}
             <option value="אחר">אחר</option>
           </select>
         </div>
@@ -2376,7 +2378,7 @@ function NewApptModal({customers,workers,collabs=[],prefill={},onClose,onSave}){
           style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,boxSizing:"border-box"}}>
           <option value="">-- בחר --</option>
           <optgroup label="עובדים שלי">
-            {workers.filter(w=>w.role==="מדביר").map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+            {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
           </optgroup>
           {collabs&&collabs.filter(c=>c.status==="פעיל").length>0&&<optgroup label="🤝 שיתופי פעולה">
             {collabs.filter(c=>c.status==="פעיל").map(c=><option key={"c"+c.id} value={"c_"+c.id}>{c.name} ({c.area||"פרילנסר"})</option>)}
@@ -2784,7 +2786,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       <Btn v="secondary" sm onClick={()=>setWk(w=>w+1)}>שבוע הבא ▶</Btn>
       <span style={{flex:1,fontWeight:600,color:CLR.primary,fontSize:14}}>{fmtD(days[0])} – {fmtD(days[6])}</span>
       {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
-        <option value="all">כל המדבירים</option>{workers.filter(w=>w.role==="מדביר").map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
+        <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
       <Btn sm v="secondary" onClick={()=>exportAppointments(appointments)}>📥 ייצא</Btn>
       <Btn sm v="ghost" onClick={()=>{
         if(calMode==="day") printDaySchedule(dayDate,appointments,workers);
@@ -3213,7 +3215,7 @@ function suggestWorker(address, workers){
   };
   let bestWorker = null;
   let bestScore = 0;
-  workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").forEach(w=>{
+  workers.filter(w=>isTech(w)&&w.status==="פעיל").forEach(w=>{
     const zone = (w.zone||"").toLowerCase();
     let score = 0;
     // Direct zone name match
@@ -3458,12 +3460,12 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <div style={{fontSize:14,fontWeight:700,color:CLR.primary,marginBottom:10}}>📅 שיגור למדביר <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(לחיצה על שם = שיגור ליומן שלו בשמירה)</span></div>
       {routeSuggestion&&!schedWorker&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>🗺️ מוצע לפי אזור: <b>{routeSuggestion.name}</b></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-        {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").map(w=>{const on=doSchedule&&String(schedWorker)===String(w.id);return <button key={w.id} type="button"
+        {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=>{const on=doSchedule&&String(schedWorker)===String(w.id);return <button key={w.id} type="button"
           onClick={()=>{ if(on){setSchedWorker("");setDoSchedule(false);} else {setSchedWorker(String(w.id));setDoSchedule(true);setRouteSuggestion(null);} }}
           style={{padding:"10px 16px",borderRadius:10,border:`2px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#0f172a",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit",minHeight:44}}>
           {on?"✓ ":""}👷 {w.name}{w.zone?<span style={{fontWeight:400,fontSize:12,opacity:.8}}> · {w.zone}</span>:null}
         </button>;})}
-        {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").length===0&&<div style={{fontSize:13,color:CLR.muted}}>אין מדבירים פעילים. הוסיפו בלשונית "עובדים".</div>}
+        {workers.filter(w=>isTech(w)&&w.status==="פעיל").length===0&&<div style={{fontSize:13,color:CLR.muted}}>אין מדבירים פעילים. הוסיפו בלשונית "עובדים".</div>}
       </div>
       {doSchedule&&<div style={{fontSize:12,color:CLR.muted,marginTop:8}}>* ישוגר ליומן בתאריך ובחלון השעות שנבחרו. חובה: מזיק + תאריך.</div>}
     </div>
@@ -4257,7 +4259,7 @@ function Notes({notes,setNotes,currentUser,workers}){
     {currentUser.role!=="מדביר"&&<div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}><span style={{fontSize:13,color:CLR.muted}}>סנן:</span>
       <select value={fltWk} onChange={e=>setFltWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
         <option value="all">הכל</option><option value="private_only">פרטיות בלבד</option>
-        {workers.filter(w=>w.role==="מדביר").map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+        {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
       </select></div>}
     {visible.map(j=><div key={j.id} style={{background:j.private?"#fef9c3":CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:"14px 18px",marginBottom:10}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",gap:8}}>
@@ -4515,7 +4517,7 @@ function ProjectBuildingRow({b,workers,onUpdate,onRemove,onSchedule}){
           <select value={b.workerId||""} onChange={e=>onUpdate({...b,workerId:parseInt(e.target.value)||"",workerName:(workers.find(w=>w.id===parseInt(e.target.value))||{}).name||""})}
             style={{width:"100%",padding:"6px 9px",borderRadius:7,border:`1px solid #d1d5db`,fontSize:13,background:"#fff",boxSizing:"border-box"}}>
             <option value="">-- בחר --</option>
-            {workers.filter(w=>w.role==="מדביר").map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+            {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
           </select></div>
         <div><label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:3}}>תאריך מתואם</label>
           <input type="date" value={b.date||""} onChange={e=>onUpdate({...b,date:e.target.value})} style={{width:"100%",padding:"6px 9px",borderRadius:7,border:`1px solid #d1d5db`,fontSize:13,background:"#fff",boxSizing:"border-box"}}/></div>
@@ -5049,7 +5051,7 @@ function RegionalStats({appointments,customers,workers,finance}){
   },[appointments,metric]);
 
   // Worker stats by zone
-  const workerStats=workers.filter(w=>w.role==="מדביר").map(w=>({
+  const workerStats=workers.filter(w=>isTech(w)).map(w=>({
     ...w,
     appts:appointments.filter(a=>a.workerId===w.id).length,
     done:appointments.filter(a=>a.workerId===w.id&&a.status==="בוצע").length,
@@ -5355,7 +5357,8 @@ function Workers({workers,setWorkers,appointments}){
       {workers.map(w=><div key={w.id} style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:"18px 22px",width:255}}>
         <div style={{width:48,height:48,borderRadius:"50%",background:w.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:w.color,marginBottom:10,border:`2px solid ${w.color}44`}}>{w.name.charAt(0)}</div>
         <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>{w.name}</div>
-        <div style={{display:"flex",gap:6,marginBottom:10}}><span style={{background:w.color+"22",color:w.color,padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600}}>{w.role}</span><Badge status={w.status}/></div>
+        <div style={{display:"flex",gap:6,marginBottom:10}}><span style={{background:w.color+"22",color:w.color,padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600}}>{w.role}</span>{w.role!=="מדביר"&&w.alsoTech&&<span style={{background:"#dcfce7",color:"#166534",padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600}}>👷 גם מדביר</span>}<Badge status={w.status}/></div>
+        {w.crmUserId!=null&&<div style={{fontSize:11,color:CLR.muted,marginBottom:6}}>🔗 משתמש מערכת</div>}
         <div style={{fontSize:12,color:CLR.muted,lineHeight:2}}>
           📞 {w.phone}
           {w.license&&<><br/>{(()=>{
@@ -5372,6 +5375,7 @@ function Workers({workers,setWorkers,appointments}){
         </div>
         {w.docPreview&&w.docPreview!=="pdf"&&<img src={w.docPreview} alt="רישיון" style={{width:"100%",maxHeight:80,objectFit:"cover",borderRadius:6,marginTop:8,border:`1px solid ${CLR.border}`}}/>}
         {w.docPreview==="pdf"&&<div style={{fontSize:11,color:CLR.info,marginTop:6}}>📄 {w.docName}</div>}
+        {w.role!=="מדביר"&&<button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,alsoTech:!x.alsoTech}:x))} style={{marginTop:10,width:"100%",background:w.alsoTech?"#16a34a":CLR.surface,color:w.alsoTech?"#fff":CLR.text||"#0f172a",border:`1px solid ${w.alsoTech?"#16a34a":CLR.border}`,borderRadius:6,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>{w.alsoTech?"✓ משובץ גם כמדביר":"👷 אפשר שיבוץ כמדביר"}</button>}
         <div style={{marginTop:12,display:"flex",gap:6}}>
           <button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,status:x.status==="פעיל"?"לא פעיל":"פעיל"}:x))} style={{flex:1,background:CLR.surface,color:CLR.muted,border:`1px solid ${CLR.border}`,borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>{w.status==="פעיל"?"⏸ השהה":"▶ הפעל"}</button>
           <button onClick={()=>{if(window.confirm(`להעביר את ${w.name} לארכיון?`))softDelete(setWorkers,w.id);}} style={{flex:1,background:"#fee2e2",color:CLR.danger,border:"none",borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>🗑 ארכב</button>
@@ -5495,7 +5499,7 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
     return lastTreat>=wsISO&&lastTreat<=weISO&&c.status!=="לא פעיל";
   }).slice(0,5);
 
-  const licenseWarnings=workers.filter(w=>w.role==="מדביר"&&w.licenseExpiry).map(w=>{
+  const licenseWarnings=workers.filter(w=>isTech(w)&&w.licenseExpiry).map(w=>{
     const exp=new Date(w.licenseExpiry+"T00:00:00");
     const diff=Math.round((exp-today)/(1000*60*60*24));
     if(diff<0) return {name:w.name,msg:"פג תוקף ב-"+fmtDate(w.licenseExpiry),urgent:true};
@@ -5519,7 +5523,7 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
     months.push({label:names[d.getMonth()],inc});
   }
   const maxVal=Math.max(...months.map(m=>m.inc),1);
-  const workerStats=workers.filter(w=>w.role==="מדביר").map(w=>({
+  const workerStats=workers.filter(w=>isTech(w)).map(w=>({
     name:w.name, color:w.color||CLR.primary,
     total:appointments.filter(a=>a.workerId===w.id).length,
     done:appointments.filter(a=>a.workerId===w.id&&a.status==="בוצע").length,
@@ -6400,7 +6404,35 @@ function App(){
     if(leads.length||seenLeads.current) seenLeads.current=ids;
   },[leads]);
   const [workers,setWorkers]=useLS("workers", initWorkers);
-  const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&w.role==="מדביר"&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
+  // משתמשי המערכת (מנהל ראשי, פקידות) מופיעים אוטומטית ברשימת העובדים; המנהל הראשי גם מדביר
+  React.useEffect(()=>{
+    if(!sb||!authUser||authUser.role!=="מנהל") return;
+    let dead=false;
+    (async()=>{
+      const [{data:us},{data:wr}]=await Promise.all([sb.from('crm_users').select('id,name,role,active').order('id'), sb.from('workers').select('data')]);
+      if(dead||!us) return;
+      const remote=(wr||[]).map(r=>r.data);
+      const COLORS={"מנהל":"#7c3aed","פקידה":"#2563eb","מדביר":"#16a34a"};
+      setWorkers(ws=>{
+        const base=remote.length?remote:ws.filter(w=>w.crmUserId!=null);
+        let out=[...base], changed=false;
+        us.filter(u=>u.active!==false).forEach(u=>{
+          const i=out.findIndex(w=>String(w.crmUserId)===String(u.id));
+          if(i<0){
+            if(out.some(w=>!w.deleted&&String(w.name||"").trim()===String(u.name||"").trim())){
+              out=out.map(w=>(!w.deleted&&String(w.name||"").trim()===String(u.name||"").trim()&&w.crmUserId==null)?{...w,crmUserId:u.id,alsoTech:w.alsoTech||u.role==="מנהל"}:w);
+            } else {
+              out=[...out,{id:nextId(out.length?out:ws),name:u.name,role:u.role==="מדביר"?"מדביר":roleLabel(u.role),phone:"",licenseNum:"",licenseExpiry:"",specialty:"",zone:"",status:"פעיל",color:COLORS[u.role]||"#0891b2",notes:"",crmUserId:u.id,alsoTech:u.role==="מנהל"}];
+            }
+            changed=true;
+          } else if(out[i].name!==u.name){ out=out.map((w,j)=>j===i?{...w,name:u.name}:w); changed=true; }
+        });
+        return changed?out:ws;
+      });
+    })();
+    return ()=>{dead=true;};
+  },[authUser&&authUser.id, authUser&&authUser.role]);
+  const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
   const [appointments,setAppointments]=useLS("appointments", initAppointments);
   const [finance,setFinance]=useLS("finance", initFinance);
   const [notes,setNotes]=useLS("notes", initNotes);
