@@ -6532,8 +6532,8 @@ function App(){
       if(dead||!us0) return;
       let us=us0;
       // שינוי חד-פעמי לבקשת המנהל: "admin" → "זוהר 360"
-      const adm=us.find(u=>u.role==="מנהל"&&u.name==="admin");
-      if(adm){ const {error}=await sb.from('crm_users').update({name:"זוהר 360"}).eq('id',adm.id); if(!error) us=us.map(u=>u.id===adm.id?{...u,name:"זוהר 360"}:u); }
+      const adm=us.find(u=>u.role==="מנהל"&&(u.name==="admin"||u.name==="זוהר 360"));
+      if(adm){ const {error}=await sb.from('crm_users').update({name:"Zohar360"}).eq('id',adm.id); if(!error) us=us.map(u=>u.id===adm.id?{...u,name:"Zohar360"}:u); }
       // שם המשתמש המחובר מתעדכן אם שונה בניהול משתמשים
       const me=us.find(u=>String(u.id)===String(authUser.id));
       if(me&&me.name&&me.name!==authUser.name){ const nu={...authUser,name:me.name}; setAuthUser(nu); __h360User=nu; try{localStorage.setItem('crm_auth',JSON.stringify(nu));}catch{} }
@@ -6553,7 +6553,7 @@ function App(){
             changed=true;
           } else if(out[i].name!==u.name){ out=out.map((w,j)=>j===i?{...w,name:u.name}:w); changed=true; }
         });
-        const mgr=us.find(u=>u.role==="מנהל"&&u.name==="זוהר 360");
+        const mgr=us.find(u=>u.role==="מנהל"&&u.name==="Zohar360");
         if(mgr){ out=out.map(w=>(String(w.crmUserId)===String(mgr.id)&&!w.licenseNum)?(changed=true,{...w,licenseNum:"2849",license:"מדביר שטחים פתוחים",licenseType:"מדביר שטחים פתוחים"}):w); }
         return changed?out:ws;
       });
