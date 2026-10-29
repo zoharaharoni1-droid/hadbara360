@@ -2848,7 +2848,9 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [showNew,setShowNew]=useState(false);
   const [prefill,setPrefill]=useState({});
   const [viewWk,setViewWk]=useState("all");
-  const [calMode,setCalMode]=useState("week");
+  const [narrow,setNarrow]=useState(()=>window.innerWidth<700);
+  React.useEffect(()=>{const f=()=>setNarrow(window.innerWidth<700);window.addEventListener("resize",f);return()=>window.removeEventListener("resize",f);},[]);
+  const [calMode,setCalMode]=useState(()=>window.innerWidth<700?"day":"week");
   const [dayDate,setDayDate]=useState(new Date());
   const [monthYear,setMonthYear]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [invAppt,setInvAppt]=useState(null);
@@ -2905,12 +2907,41 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const atSlot=(iso,t)=>filtered.filter(a=>a.date===iso&&slotHour(a.time)===slotHour(t));
   const hasInvoice=id=>finance.some(f=>f.apptId===id);
 
+  const MONTHS_HE=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const DAYS_HE=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+  const unit=calMode==="day"?"יום":calMode==="week"?"שבוע":"חודש";
+  const goPrev=()=>{ if(calMode==="day"){const d=new Date(dayDate);d.setDate(d.getDate()-1);setDayDate(d);} else if(calMode==="week") setWk(w=>w-1); else setMonthYear(mv=>{let m=mv.m-1,y=mv.y;if(m<0){m=11;y--;}return{y,m};}); };
+  const goNext=()=>{ if(calMode==="day"){const d=new Date(dayDate);d.setDate(d.getDate()+1);setDayDate(d);} else if(calMode==="week") setWk(w=>w+1); else setMonthYear(mv=>{let m=mv.m+1,y=mv.y;if(m>11){m=0;y++;}return{y,m};}); };
+  const goToday=()=>{ const n=new Date(); setDayDate(n); setWk(0); setMonthYear({y:n.getFullYear(),m:n.getMonth()}); };
+  const shortD=d=>`${d.getDate()}/${d.getMonth()+1}`;
+  const periodLabel=calMode==="day"
+    ? `יום ${DAYS_HE[dayDate.getDay()]} · ${dayDate.getDate()}/${dayDate.getMonth()+1}/${dayDate.getFullYear()}`
+    : calMode==="week" ? `${shortD(days[0])} – ${shortD(days[6])}/${days[6].getFullYear()}`
+    : `${MONTHS_HE[monthYear.m]} ${monthYear.y}`;
+  const navBtn={display:"inline-flex",direction:"rtl",alignItems:"center",gap:6,padding:"9px 12px",borderRadius:10,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:14,fontWeight:600,color:CLR.primary,fontFamily:"inherit",whiteSpace:"nowrap"};
   return <div>
+    {/* שורה 1: תצוגה (יומי · שבועי · חודשי) + תור חדש */}
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:2,background:"#e8f5ee",borderRadius:10,padding:3,flex:"1 1 auto",maxWidth:340}}>
+        {[["day","יומי"],["week","שבועי"],["month","חודשי"]].map(([m,l])=>(
+          <button key={m} onClick={()=>setCalMode(m)} style={{flex:1,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:calMode===m?700:500,background:calMode===m?"#fff":"transparent",color:calMode===m?"#1a5c3a":"#6b7280"}}>{l}</button>
+        ))}
+      </div>
+      <Btn sm onClick={()=>{setPrefill(calMode==="day"?{date:toISO(dayDate)}:{});setShowNew(true);}}>+ תור חדש</Btn>
+    </div>
+    {/* שורה 2: ניווט — החצים מצביעים החוצה */}
+    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+      <button onClick={goPrev} style={navBtn} aria-label={unit+" קודם"}><span>▶</span><span>{unit} קודם</span></button>
+      <button onClick={goToday} style={{...navBtn,flex:1,justifyContent:"center",color:"#334155"}}>היום</button>
+      <button onClick={goNext} style={navBtn} aria-label={unit+" הבא"}><span>{unit==="חודש"?"חודש הבא":unit==="שבוע"?"שבוע הבא":"יום הבא"}</span><span>◀</span></button>
+    </div>
+    {/* שורה 3: התקופה המוצגת */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+      <div style={{fontWeight:800,color:CLR.primary,fontSize:16,whiteSpace:"nowrap"}}>{periodLabel}</div>
+      {calMode==="day"&&<input type="date" value={toISO(dayDate)} onChange={e=>{const d=new Date(e.target.value+"T12:00:00");if(!isNaN(d))setDayDate(d);}} style={{padding:"5px 8px",borderRadius:8,border:"1px solid #e5e7eb",fontSize:13}}/>}
+    </div>
+    {/* שורה 4: כלים */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
-      <Btn v="secondary" sm onClick={()=>setWk(w=>w-1)}>◀ שבוע קודם</Btn>
-      <Btn v="secondary" sm onClick={()=>setWk(0)}>היום</Btn>
-      <Btn v="secondary" sm onClick={()=>setWk(w=>w+1)}>שבוע הבא ▶</Btn>
-      <span style={{flex:1,fontWeight:600,color:CLR.primary,fontSize:14}}>{fmtD(days[0])} – {fmtD(days[6])}</span>
       {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
         <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
       <Btn sm v="secondary" onClick={()=>exportAppointments(appointments)}>📥 ייצא</Btn>
@@ -2919,30 +2950,9 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         else if(calMode==="week") printDaySchedule(days[0],appointments,workers);
         else { const d=new Date(monthYear.y,monthYear.m,1); printDaySchedule(d,appointments,workers); }
       }}>🖨️ הדפס רשימה</Btn>
-      <Btn sm onClick={()=>{setPrefill({});setShowNew(true);}}>+ תור חדש</Btn>
-      <div style={{display:"flex",gap:2,background:"#e8f5ee",borderRadius:8,padding:3}}>
-        {[["week","שבועי"],["day","יומי"],["month","חודשי"]].map(([m,l])=>(
-          <button key={m} onClick={()=>setCalMode(m)} style={{padding:"5px 11px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:calMode===m?700:400,background:calMode===m?"#fff":"transparent",color:calMode===m?"#1a5c3a":"#6b7280"}}>{l}</button>
-        ))}
-      </div>
     </div>
-    {/* Day view nav */}
-    {calMode==="day"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
-      <button onClick={()=>{const d=new Date(dayDate);d.setDate(d.getDate()-1);setDayDate(d);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:13}}>◀</button>
-      <input type="date" value={`${dayDate.getFullYear()}-${String(dayDate.getMonth()+1).padStart(2,"0")}-${String(dayDate.getDate()).padStart(2,"0")}`}
-        onChange={e=>{const d=new Date(e.target.value+"T12:00:00");if(!isNaN(d))setDayDate(d);}}
-        style={{padding:"6px 10px",borderRadius:8,border:"1px solid #e5e7eb",fontSize:13}}/>
-      <button onClick={()=>{const d=new Date(dayDate);d.setDate(d.getDate()+1);setDayDate(d);}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:13}}>▶</button>
-      <button onClick={()=>setDayDate(new Date())} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:12,color:"#6b7280"}}>היום</button>
-    </div>}
-    {/* Month view nav */}
-    {calMode==="month"&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}>
-      <button onClick={()=>setMonthYear(mv=>{let m=mv.m-1,y=mv.y;if(m<0){m=11;y--;}return{y,m};})} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:13}}>◀</button>
-      <button onClick={()=>{const n=new Date();setMonthYear({y:n.getFullYear(),m:n.getMonth()});}} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:12,color:"#6b7280"}}>החודש</button>
-      <button onClick={()=>setMonthYear(mv=>{let m=mv.m+1,y=mv.y;if(m>11){m=0;y++;}return{y,m};})} style={{padding:"5px 12px",borderRadius:8,border:"1px solid #e5e7eb",background:"#fff",cursor:"pointer",fontSize:13}}>▶</button>
-    </div>}
     <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>
-      {calMode==="week"&&<span>
+      {calMode==="week"&&!narrow&&<span>
         💡 גרור תור לשיבוץ מחדש · סנן לפי מדביר להעברה
         {draggedId&&<span>{" "}&nbsp;
           <span style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:4,padding:"1px 6px",fontSize:11}}>🟢 פנוי</span>{" "}
@@ -2957,7 +2967,28 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {(()=>{ window._slotLoad={}; days.forEach(d=>{const iso=toISO(d);filtered.filter(a=>a.date===iso).forEach(a=>{const key=iso+"_"+slotHour(a.time);window._slotLoad[key]=(window._slotLoad[key]||0)+1;});}); return null; })()}
     {calMode==="day"&&<DayView date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={a=>setDetailAppt(a)} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setShowNew(true);}}/>}
     {calMode==="month"&&<MonthView year={monthYear.y} month={monthYear.m} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onDayClick={d=>{setDayDate(d);setCalMode("day");}}/>}
-    {calMode==="week"&&<div style={{overflowX:"auto"}}>
+    {calMode==="week"&&narrow&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {days.map((d,i)=>{const iso=toISO(d);const isTdy=iso===todayStr();
+        const list=filtered.filter(a=>a.date===iso).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
+        return <div key={i} style={{background:"#fff",border:`1px solid ${isTdy?CLR.primary:CLR.border}`,borderRadius:12,overflow:"hidden"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isTdy?CLR.primary:CLR.surface,color:isTdy?"#fff":"#0f172a"}}>
+            <div style={{fontWeight:700,fontSize:15}}>יום {DAYS_HE[d.getDay()]} · {shortD(d)}{isTdy?" · היום":""}</div>
+            <button onClick={()=>{setPrefill({date:iso});setShowNew(true);}} style={{background:isTdy?"rgba(255,255,255,0.2)":"#fff",color:isTdy?"#fff":CLR.primary,border:`1px solid ${isTdy?"rgba(255,255,255,0.4)":CLR.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ תור</button>
+          </div>
+          {list.length===0
+            ? <div style={{padding:"10px 14px",fontSize:13,color:CLR.muted}}>אין תורים</div>
+            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);return <div key={a.id} onClick={()=>setDetailAppt(a)} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
+                <div style={{fontWeight:800,fontSize:15,color:"#0f172a",minWidth:48,textAlign:"center"}}>{a.time||"—"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
+                  <div style={{fontSize:13,color:CLR.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.pestType}{a.workerName?" · 👷 "+a.workerName:""}</div>
+                  {a.address&&<div style={{fontSize:12,color:CLR.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {a.address}</div>}
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:prog.color,whiteSpace:"nowrap"}}>{a.status==="בוטל"?"בוטל":prog.label}</div>
+              </div>;})}
+        </div>;})}
+    </div>}
+    {calMode==="week"&&!narrow&&<div style={{overflowX:"auto"}}>
       <table style={{borderCollapse:"collapse",width:"100%",minWidth:700,tableLayout:"fixed"}}>
         <thead><tr style={{background:CLR.primary}}>
           <th style={{width:56,padding:"9px 8px",color:"#fff",fontSize:11,textAlign:"right",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>שעה</th>
@@ -6269,11 +6300,11 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
   const wColor = wid => { const w=workers.find(x=>x.id===wid); return w?.color||"#1a5c3a"; };
 
   const dayAppts = (appointments||[]).filter(a => a.date===iso)
-    .sort((a,b)=>a.time.localeCompare(b.time));
+    .sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
 
   return <div style={{direction:"rtl"}}>
     <div style={{fontWeight:700,fontSize:15,color:"#1a5c3a",marginBottom:12,padding:"8px 0 10px",borderBottom:"2px solid #e8f5ee",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-      <span>{fmtDay(date)}</span>
+      <span style={{fontSize:14}}>{dayAppts.length?"התורים של היום":""}</span>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <span style={{fontSize:13,fontWeight:400,color:"#6b7280"}}>{dayAppts.length} תורים</span>
         {dayAppts.length>0&&<button onClick={()=>printDaySchedule(date,appointments,workers)} style={{background:CLR.primary,color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>🖨️ הדפס</button>}
@@ -6285,7 +6316,9 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
     </div>}
     <div style={{border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}>
       {HALF_SLOTS.map(slot=>{
-        const atSlot = dayAppts.filter(a=>slotHour(a.time)===slotHour(slot)&&slotMin(a.time)===slotMin(slot));
+        // כל תור נכנס לחצי-השעה שלו (גם 10:15 / 06:00 / 21:00 יוצגו)
+        const slotOf = t => { let h=slotHour(t), m=slotMin(t)>=30?30:0; if(isNaN(h)) h=9; if(h<7){h=7;m=0;} if(h>19||(h===19&&m>0)){h=19;m=0;} return String(h).padStart(2,"0")+":"+(m?"30":"00"); };
+        const atSlot = dayAppts.filter(a=>slotOf(a.time)===slot);
         const isHour = slot.endsWith(":00");
         return <div key={slot} style={{display:"flex",minHeight:atSlot.length?72:36,borderBottom:"1px solid #f3f4f6",background:atSlot.length?"#fafffe":"#fff"}}>
           <div style={{width:54,flexShrink:0,padding:"6px 8px 0",fontSize:isHour?12:10,color:isHour?"#6b7280":"#d1d5db",fontWeight:isHour?600:400,borderLeft:"2px solid #e5e7eb",textAlign:"right"}}>{isHour?slot:""}</div>
