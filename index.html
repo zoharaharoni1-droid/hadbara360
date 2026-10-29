@@ -1097,6 +1097,9 @@ function execLogHtml({company,docNum,log,chemicals}){
         <th style="padding:8px 10px;text-align:right;">מס׳ אצווה</th></tr></thead>
       <tbody>${matRows}</tbody>
     </table>
+    ${(log.stationChecks||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 בדיקת תחנות האכלה</div>
+    <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">תחנה</th><th style="padding:6px 10px;text-align:right;">ממצא</th><th style="padding:6px 10px;text-align:right;">פיתיון</th></tr></thead>
+    <tbody>${log.stationChecks.map((c,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${c.num}</td><td style="padding:6px 10px;">${c.activity||"—"}</td><td style="padding:6px 10px;">${c.baitReplaced?"הוחלף":"—"}</td></tr>`).join("")}</tbody></table>`:""}
     ${log.safetyText?`<div style="border:2px solid #ef4444;border-radius:8px;padding:12px 14px;margin-bottom:14px;background:#fff5f5;">
       <div style="font-weight:700;color:#dc2626;font-size:13px;margin-bottom:6px;">⚠️ הנחיות בטיחות לדייר</div>
       <pre style="font-family:Arial;font-size:13px;white-space:pre-wrap;line-height:1.8;">${log.safetyText}</pre></div>`:""}
@@ -1478,7 +1481,7 @@ function PestPickerDk({selected,onChange}){
   </div>;
 }
 
-function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[]}){
+function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[],maintenance=[]}){
   const chemMem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
   // Auto-detect worker from appointment
   const apptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
@@ -1490,7 +1493,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     phone:         initialData?.phone         || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || "",
     address:       initialData?.address       || prefillAppt?.address      || "",
     structureType: initialData?.structureType || prefillAppt?.structureType || prefillAppt?.propertyType || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).propertyType || "",
-    pest:          initialData?.pest          || (prefillAppt?.pestType?[prefillAppt.pestType]:[]),
+    pest:          initialData?.pest          || (Array.isArray(prefillAppt?.pests)&&prefillAppt.pests.length?prefillAppt.pests:(prefillAppt?.pestType?[prefillAppt.pestType]:[])),
     customPest:    initialData?.customPest    || "",
     pestLevel:     initialData?.pestLevel     || "",
     materials:     initialData?.materials_raw || initialData?.materials || [],
@@ -1507,6 +1510,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))}),
   });
   const [scopeAdd,setScopeAdd]=useState("");
+  // חוזה אחזקה של המקום (לבדיקת תחנות האכלה)
+  const contract=(maintenance||[]).find(m=>!m.deleted&&(String(m.id)===String(initialData?.maintenanceId??prefillAppt?.maintenanceId)))
+    || (maintenance||[]).find(m=>!m.deleted&&m.status==="פעיל"&&(m.stations||[]).length&&String(m.customerName||"").trim()===String(f.clientName||"").trim());
+  const [checks,setChecks]=useState(()=>initialData?.stationChecks||[]);
+  const stations=(contract&&contract.stations)||[];
+  const chk=num=>checks.find(c=>String(c.num)===String(num))||{num,activity:"",baitReplaced:false};
+  const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...patch}];});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
 
   const addExtraWorker=()=>set("extraWorkers",[...f.extraWorkers,{name:"",license:"",licenseType:""}]);
@@ -1596,6 +1606,19 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem}/>
     </div>
 
+    {stations.length>0&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+        <div style={{fontWeight:800,fontSize:14,color:"#9a3412"}}>🪤 בדיקת תחנות האכלה ({stations.length})</div>
+        <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false})))} style={{border:"1px solid #fdba74",background:"#fff",color:"#9a3412",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
+      </div>
+      {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>תחנה {st.num}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+          {STATION_ACTIVITY.map(a=>{const on=c.activity===a;const col=a==="פעילות גבוהה"?"#dc2626":a==="פעילות קלה"?"#ca8a04":a==="חסרה / פגומה"?"#475569":"#16a34a";return <button key={a} type="button" onClick={()=>setChk(st.num,{activity:a})} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${on?col:CLR.border}`,background:on?col:"#fff",color:on?"#fff":"#334155",fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{a}</button>;})}
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,marginRight:"auto",cursor:"pointer"}}><input type="checkbox" checked={!!c.baitReplaced} onChange={e=>setChk(st.num,{baitReplaced:e.target.checked})}/> הוחלף פיתיון</label>
+        </div>
+      </div>;})}
+    </div>}
     <div style={{marginBottom:14}}><Inp label="תיאור נוסף / הנחיות ללקוח (לא חובה)" value={f.extermination_notes} onChange={v=>set("extermination_notes",v)} placeholder="למשל: לא לשטוף רצפה 48 שעות"/></div>
 
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
@@ -1657,7 +1680,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
 
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers},{send}); };
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
@@ -1734,7 +1757,7 @@ function ExecLogPreview({data,onBack,onApprove,saved,phone,approveLabel}){
   </div>;
 }
 
-function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[]}){
+function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],maintenance=[]}){
   const workerObj = workers.find(w=>String(w.crmUserId)===String(currentUser.id)) || workers.find(w=>String(w.name||"").trim()===String(currentUser.name||"").trim()) || {name:currentUser.name,license:"—"};
   const [savedLog,setSavedLog]=useState(null);
   const [mode,setMode]=useState("list"); // list | new | preview
@@ -1760,7 +1783,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:`EL-${String(Date.now()).slice(-6)}`,apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:`EL-${String(Date.now()).slice(-6)}`,apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -1796,7 +1819,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
         </span>}
       </div>
       <div style={{maxWidth:700,margin:"0 auto",padding:"20px"}}>
-        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={handlePreview} workers={workers} appointments={appointments} customers={customers} execLogs={execLogs}/>
+        <ExecLogForm key={`form-${formKey}`} worker={workerObj} prefillAppt={prefillAppt} initialData={extracted} onPreview={handlePreview} workers={workers} appointments={appointments} customers={customers} execLogs={execLogs} maintenance={maintenance}/>
       </div>
     </div>
   );  // LIST MODE
@@ -2559,7 +2582,7 @@ function InvoiceModal({appt,customers,onClose,onSave}){
 }
 
 // Execution-log modal launched from the calendar — dark themed, prefilled from the appointment
-function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[],execLogs=[]}){
+function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[]}){
   const [step,setStep]=useState("form"); // form | preview | done
   const [previewData,setPreviewData]=useState(null);
   const [savedLog,setSavedLog]=useState(null);
@@ -2592,7 +2615,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
         📅 <b>{appt.customerName}</b> | {appt.address} | {appt.pestType} | {fmtDate(appt.date)} {appt.time}
       </div>
 
-      {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={previewData} onPreview={autoSave} workers={workers} customers={customers} execLogs={execLogs}/>}
+      {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={previewData} onPreview={autoSave} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}/>}
 
       {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={()=>setStep("form")} onApprove={handleApprove} approveLabel="המשך לחשבונית →"/>}
 
@@ -2906,7 +2929,7 @@ function exportMonthlyReport(year,month,appointments,finance,workers){
   const aRows=mAppts.sort((a,b)=>a.date.localeCompare(b.date)).map(a=>`<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 10px;">${fmtDate(a.date)}</td><td style="padding:6px 10px;">${a.customerName}</td><td style="padding:6px 10px;">${a.pestType}</td><td style="padding:6px 10px;">${a.workerName}</td><td style="padding:6px 10px;font-weight:700;">₪${a.price}</td><td style="padding:6px 10px;">${a.status}</td></tr>`).join("");
   openPrintWindow("דוח "+names[month]+" "+year,`<div style="max-width:900px;margin:0 auto;"><div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:20px;"><div style="font-size:20px;font-weight:700;color:#1a5c3a;">🦟 ${COMPANY.name}</div><div style="text-align:left;font-size:18px;font-weight:700;color:#1a5c3a;">דוח ${names[month]} ${year}</div></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">${[["תורים",mAppts.length],["בוצעו",mAppts.filter(a=>a.status==="בוצע").length],["הכנסות","₪"+income.toLocaleString()],["רווח","₪"+(income-expense).toLocaleString()]].map(([l,v])=>`<div style="background:#f0f9f4;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:12px;color:#6b7280;">${l}</div><div style="font-size:20px;font-weight:700;color:#1a5c3a;">${v}</div></div>`).join("")}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;"><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מדבירים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;">תורים</th><th style="padding:7px;">בוצעו</th><th style="padding:7px;">שווי</th></tr></thead><tbody>${wRows}</tbody></table></div><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מזיקים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;">כמות</th></tr></thead><tbody>${pRows}</tbody></table></div></div><h3 style="color:#1a5c3a;margin-bottom:8px;">רשימת תורים</h3><table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">תאריך</th><th style="padding:7px;text-align:right;">לקוח</th><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;text-align:right;">מחיר</th><th style="padding:7px;text-align:right;">סטטוס</th></tr></thead><tbody>${aRows}</tbody></table></div>`);
 }
-function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser}){
+function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[]}){
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
   const [prefill,setPrefill]=useState({});
@@ -2946,7 +2969,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:`EL-${String(Date.now()).slice(-6)}`,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id,docNum:existing?existing.docNum:`EL-${String(Date.now()).slice(-6)}`,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -3156,7 +3179,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onClose={()=>setDupAppt(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
-      currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs}
+      currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}
       onClose={()=>{setLogAppt(null);setDetailAppt(null);}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
   </div>;
 }
@@ -4798,6 +4821,72 @@ function Invoices({finance,setFinance,customers,appointments}){
 const MAINTENANCE_FREQUENCIES = ["פעמיים בשבוע","פעם בשבוע","אחזקה חודשית","כל חודשיים","רבעוני (כל 3 חודשים)","כל 6 חודשים","שנתי"];
 const MAINTENANCE_TYPES = ["דירת גן/וילה","עסק - מסעדה","עסק - מאפייה","עסק - מפעל מזון","עסק - בית מרקחת","עסק - גן ילדים","עסק - מלון","בניין משותף","ממסד/מוסד","אחר"];
 
+// ── אחזקות: תאריכי ביקור, חידוש, היסטוריה, דוח ──
+const STATION_ACTIVITY=["אין פעילות","פעילות קלה","פעילות גבוהה","חסרה / פגומה"];
+function isoD(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function maintVisitDates(m, fromIso, toIso){
+  const start=new Date((m.startDate||todayStr())+"T12:00:00"); if(isNaN(start)) return [];
+  const from=new Date(fromIso+"T12:00:00"), to=new Date(toIso+"T12:00:00");
+  const end=m.endDate?new Date(m.endDate+"T12:00:00"):null;
+  const MON={"אחזקה חודשית":1,"כל חודשיים":2,"רבעוני (כל 3 חודשים)":3,"כל 6 חודשים":6,"שנתי":12};
+  const out=[]; let d=new Date(start), k=0;
+  for(let guard=0; guard<800 && d<=to; guard++){
+    if(d>=from && (!end||d<=end)){ const x=new Date(d); if(x.getDay()===6) x.setDate(x.getDate()+1); out.push(isoD(x)); }
+    k++;
+    if(MON[m.frequency]){ d=new Date(start); d.setMonth(start.getMonth()+MON[m.frequency]*k); }
+    else if(m.frequency==="פעמיים בשבוע"){ d=new Date(start); d.setDate(start.getDate()+Math.floor(k/2)*7+(k%2?3:0)); }
+    else { d=new Date(start); d.setDate(start.getDate()+7*k); }
+  }
+  return out;
+}
+function maintDaysLeft(m){ if(!m.endDate) return null; const t=new Date(todayStr()+"T12:00:00"), e=new Date(m.endDate+"T12:00:00"); return Math.round((e-t)/86400000); }
+function maintLogs(m, execLogs){ return (execLogs||[]).filter(l=>!l.deleted&&(String(l.maintenanceId)===String(m.id)||(!l.maintenanceId&&m.customerName&&String(l.clientName||"").trim()===String(m.customerName).trim()))).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))); }
+// יוצר תורים חסרים לחוזים עם שיבוץ אוטומטי (עד X ימים קדימה)
+function maintSchedule(maintenance, appointments, workers, horizonDays=62){
+  const today=todayStr(); const h=new Date(); h.setDate(h.getDate()+horizonDays); const to=isoD(h);
+  const add=[];
+  (maintenance||[]).filter(m=>!m.deleted&&m.status==="פעיל"&&m.autoSchedule&&m.workerId).forEach(m=>{
+    const w=(workers||[]).find(x=>String(x.id)===String(m.workerId)); if(!w) return;
+    maintVisitDates(m,today,to).forEach(date=>{
+      const exists=(appointments||[]).some(a=>String(a.maintenanceId)===String(m.id)&&a.date===date)||add.some(a=>a.maintenanceId===m.id&&a.date===date);
+      if(exists) return;
+      const t=m.visitTime||"08:00"; const hh=parseInt(t); const tw=t+"–"+String(Math.min(hh+2,22)).padStart(2,"0")+":"+t.split(":")[1];
+      add.push({customerId:null,customerName:m.customerName,workerId:w.id,workerName:w.name,date,time:t,timeWindow:tw,
+        pestType:"אחזקה"+(maintList(m.pests).length?" · "+maintList(m.pests).slice(0,3).join(", "):""),pests:maintList(m.pests),
+        price:parseInt(m.price)||0,address:m.address||"",notes:"ביקור אחזקה ("+m.frequency+")",status:"ממתין",executionLog:null,
+        maintenanceId:m.id,propertyType:m.type||""});
+    });
+  });
+  return add;
+}
+function maintReportHtml(m, logs, ym){
+  const [y,mo]=ym.split("-").map(Number);
+  const MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  const list=logs.filter(l=>String(l.date||"").startsWith(ym)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const esc=x=>String(x??"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+  const rows=list.map(l=>{
+    const mats=(l.materials||[]).map(x=>`<div><b>${esc(x.name)}</b>${x.active?` (${esc(x.active)})`:""}${x.method?" · "+esc(x.method):""}${x.batch?" · אצווה "+esc(x.batch):""}${x.stations?" · "+esc(x.stations)+" תחנות":""}${(x.areas||[]).length?"<br><span style='color:#555'>"+esc(x.areas.join(", "))+"</span>":""}</div>`).join("");
+    return `<tr><td style="padding:7px;border:1px solid #e5e7eb;white-space:nowrap">${fmtDate(l.date)}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc(l.workerName||"")}${l.workerLicense?"<br><span style='color:#555;font-size:11px'>רישיון "+esc(l.workerLicense)+"</span>":""}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc((l.pest||[]).join(", "))}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${mats||"—"}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${esc(l.extermination_notes||l.notes||"")}</td></tr>`;}).join("");
+  const stations=m.stations||[];
+  const checks=list.filter(l=>(l.stationChecks||[]).length);
+  const stTable=stations.length&&checks.length?`<h3 style="color:#1a5c3a;margin:18px 0 8px">🪤 מעקב תחנות האכלה</h3>
+    <table style="font-size:12px"><thead><tr style="background:#1a5c3a;color:#fff"><th style="padding:6px">תחנה</th><th style="padding:6px">מיקום</th>${checks.map(l=>`<th style="padding:6px">${fmtDate(l.date)}</th>`).join("")}</tr></thead>
+    <tbody>${stations.map(st=>`<tr><td style="padding:6px;border:1px solid #e5e7eb;text-align:center"><b>${st.num}</b></td><td style="padding:6px;border:1px solid #e5e7eb">${esc(st.location||"")}</td>${checks.map(l=>{const c=(l.stationChecks||[]).find(x=>String(x.num)===String(st.num))||{};const col=c.activity==="פעילות גבוהה"?"#fee2e2":c.activity==="פעילות קלה"?"#fef9c3":c.activity==="חסרה / פגומה"?"#e5e7eb":"#fff";return `<td style="padding:6px;border:1px solid #e5e7eb;background:${col}">${esc(c.activity||"—")}${c.baitReplaced?" · הוחלף":""}</td>`;}).join("")}</tr>`).join("")}</tbody></table>`:"";
+  return `<div style="max-width:900px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:12px;margin-bottom:16px">
+      <div><div style="font-size:22px;font-weight:700;color:#1a5c3a">🦟 ${COMPANY.name}</div><div style="font-size:12px;color:#555">${COMPANY.licensePrefix||""}</div></div>
+      <div style="text-align:left"><div style="font-size:18px;font-weight:700;color:#1a5c3a">דוח הדברה חודשי</div><div style="font-size:14px;color:#555">${MONTHS[mo-1]} ${y}</div></div>
+    </div>
+    <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.8">
+      <b>מקום:</b> ${esc(m.customerName)} · <b>כתובת:</b> ${esc(m.address||"—")} · <b>סוג:</b> ${esc(m.type||"—")}<br>
+      <b>תדירות:</b> ${esc(m.frequency)} · <b>מזיקים בחוזה:</b> ${esc(maintList(m.pests).join(", ")||"—")}${maintList(m.excludedPests).length?" · <b>לא כלול:</b> "+esc(maintList(m.excludedPests).join(", ")):""}${stations.length?" · <b>תחנות האכלה:</b> "+stations.length:""}
+    </div>
+    <h3 style="color:#1a5c3a;margin:6px 0 8px">ביקורים בחודש (${list.length})</h3>
+    ${list.length?`<table style="font-size:13px"><thead><tr style="background:#1a5c3a;color:#fff"><th style="padding:7px;text-align:right">תאריך</th><th style="padding:7px;text-align:right">מדביר</th><th style="padding:7px;text-align:right">מזיקים</th><th style="padding:7px;text-align:right">חומרים ויישום</th><th style="padding:7px;text-align:right">הערות</th></tr></thead><tbody>${rows}</tbody></table>`:`<div style="padding:20px;text-align:center;color:#777;border:1px dashed #ccc;border-radius:8px">לא נרשמו ביקורים בחודש זה</div>`}
+    ${stTable}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:30px"><div><div style="font-size:13px;color:#555;margin-bottom:28px">חתימת מדביר:</div><div style="border-bottom:1px solid #999"></div></div><div><div style="font-size:13px;color:#555;margin-bottom:28px">חתימת נציג המקום:</div><div style="border-bottom:1px solid #999"></div></div></div>
+  </div>`;
+}
 function maintContacts(m){ const c=Array.isArray(m.contacts)&&m.contacts.length?m.contacts:[{name:m.contactName||"",phone:m.phone||"",role:""}]; return c.filter(x=>x&&(x.name||x.phone)); }
 function maintList(v){ return Array.isArray(v)?v:String(v||"").split(",").map(x=>x.trim()).filter(Boolean); }
 function MaintPestChips({value,onChange,exclude=[]}){
@@ -4815,9 +4904,9 @@ function MaintPestChips({value,onChange,exclude=[]}){
     </div>
   </div>;
 }
-function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[]}){
+function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],workers=[]}){
   const init=initial||{};
-  const [f,setF]=useState({customerName:"",address:"",type:"",typeOther:"",frequency:"אחזקה חודשית",price:"",extraVisitPrice:"",notes:"",startDate:todayStr(),status:"פעיל",...init,
+  const [f,setF]=useState({customerName:"",address:"",type:"",typeOther:"",frequency:"אחזקה חודשית",price:"",extraVisitPrice:"",notes:"",startDate:todayStr(),endDate:"",status:"פעיל",autoSchedule:false,workerId:"",visitTime:"08:00",stations:[],...init,
     contacts:maintContacts(init).length?maintContacts(init):[{name:"",phone:"",role:""}],
     pests:maintList(init.pests), excludedPests:maintList(init.excludedPests), contractFiles:init.contractFiles||[]});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
@@ -4840,6 +4929,7 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[]}){
   };
   const save=()=>{
     if(!f.customerName.trim()) return alert("שם המקום / הלקוח חובה");
+    if(f.autoSchedule&&!f.workerId) return alert("לשיבוץ אוטומטי צריך לבחור מדביר קבוע");
     const contacts=f.contacts.filter(c=>c.name||c.phone);
     const type=otherOpen&&f.typeOther.trim()?f.typeOther.trim():f.type;
     onSave({...f,type,typeOther:"",contacts,phone:(contacts[0]||{}).phone||"",contactName:(contacts[0]||{}).name||"",id:init.id||Date.now()});
@@ -4880,9 +4970,35 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[]}){
       </G2>
       <G2>
         <Inp label="תאריך התחלה" type="date" value={f.startDate} onChange={v=>set("startDate",v)}/>
-        <Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["פעיל","מושהה","הסתיים"]}/>
+        <Inp label="סיום החוזה (לתזכורת חידוש)" type="date" value={f.endDate||""} onChange={v=>set("endDate",v)}/>
       </G2>
+      <Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["פעיל","מושהה","הסתיים"]}/>
       <Txt label="הערות" value={f.notes} onChange={v=>set("notes",v)} rows={2}/>
+    </FieldCard>
+    <FieldCard title="📅 שיבוץ אוטומטי ביומן">
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:8}}>
+        <input type="checkbox" checked={!!f.autoSchedule} onChange={e=>set("autoSchedule",e.target.checked)} style={{width:18,height:18}}/>
+        לשבץ את הביקורים אוטומטית ביומן לפי התדירות
+      </label>
+      {f.autoSchedule&&<G2>
+        <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>מדביר קבוע</label>
+          <select value={f.workerId||""} onChange={e=>set("workerId",e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff"}}>
+            <option value="">-- בחר --</option>
+            {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+          </select></div>
+        <Sel label="שעת ביקור" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/>
+      </G2>}
+      {f.autoSchedule&&<div style={{fontSize:12,color:CLR.muted}}>הביקורים ישובצו חודשיים קדימה מתאריך ההתחלה. ביקור שיוצא בשבת עובר ליום ראשון.</div>}
+    </FieldCard>
+    <FieldCard title={`🪤 תחנות האכלה במקום (${(f.stations||[]).length})`}>
+      {(f.stations||[]).map((st,i)=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+        <span style={{width:34,height:34,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",flexShrink:0}}>{st.num}</span>
+        <input value={st.location||""} onChange={e=>set("stations",f.stations.map((x,j)=>j===i?{...x,location:e.target.value}:x))} placeholder="מיקום (למשל: פינת מחסן צפונית)" style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit"}}/>
+        <button type="button" onClick={()=>set("stations",f.stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:34,height:34,cursor:"pointer"}}>✕</button>
+      </div>)}
+      <div style={{display:"flex",gap:6}}>
+        {[1,5,10].map(n=><button key={n} type="button" onClick={()=>{const st=f.stations||[];const start=st.reduce((mx,x)=>Math.max(mx,parseInt(x.num)||0),0);set("stations",[...st,...Array.from({length:n},(_,i)=>({num:start+i+1,location:""}))]);}} style={{flex:1,padding:"8px",borderRadius:8,border:`1.5px dashed #fdba74`,background:"transparent",color:"#9a3412",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ {n===1?"תחנה":n+" תחנות"}</button>)}
+      </div>
     </FieldCard>
     <FieldCard title="📎 חוזה חתום">
       {f.contractFiles.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:CLR.surface,borderRadius:8,marginBottom:6}}>
@@ -4916,8 +5032,14 @@ async function openDataFile(c){
   }catch(e){ alert("לא ניתן לפתוח את הקובץ"); }
 }
 
-function Maintenance({maintenance,setMaintenance,customers}){
+function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAppointments,workers=[],execLogs=[]}){
   const [showNew,setShowNew]=useState(false);
+  const [histFor,setHistFor]=useState(null);
+  const [reportFor,setReportFor]=useState(null);
+  const [reportMonth,setReportMonth]=useState(()=>todayStr().slice(0,7));
+  const runSchedule=(list,silent)=>{ if(!setAppointments) return 0; const add=maintSchedule(list||maintenance,appointments,workers); if(add.length) setAppointments(as=>{let out=[...as];add.forEach(a=>{ if(!out.some(x=>String(x.maintenanceId)===String(a.maintenanceId)&&x.date===a.date)) out.push({...a,id:nextId(out)}); });return out;}); if(!silent) alert(add.length?`📅 שובצו ${add.length} ביקורים ביומן`:"כל הביקורים כבר משובצים"); return add.length; };
+  React.useEffect(()=>{ if(maintenance.some(m=>m.autoSchedule)) runSchedule(maintenance,true); },[maintenance.length]);
+  const renewals=maintenance.filter(m=>m.status==="פעיל"&&maintDaysLeft(m)!=null&&maintDaysLeft(m)<=30).sort((a,b)=>maintDaysLeft(a)-maintDaysLeft(b));
   const [editM,setEditM]=useState(null);
   const [filter,setFilter]=useState("הכל");
   const items=maintenance.filter(m=>filter==="הכל"||m.status===filter);
@@ -4936,16 +5058,24 @@ function Maintenance({maintenance,setMaintenance,customers}){
       <StatCard label="סה״כ אחזקות" value={maintenance.length}/>
       <StatCard label="הכנסה חודשית משוערת" value={`₪${Math.round(totalMonthly)}`} bg="#dbeafe"/>
     </div>
+    {renewals.length>0&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"12px 16px",marginBottom:14}}>
+      <div style={{fontWeight:800,color:"#991b1b",marginBottom:6}}>⏳ חוזים לחידוש ({renewals.length})</div>
+      {renewals.map(m=>{const d=maintDaysLeft(m);return <div key={m.id} style={{fontSize:13,padding:"3px 0"}}><b>{m.customerName}</b> — {d<0?`הסתיים לפני ${-d} ימים`:d===0?"מסתיים היום":`מסתיים בעוד ${d} ימים`} ({fmtDate(m.endDate)})</div>;})}
+    </div>}
     <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
       {["הכל","פעיל","מושהה","הסתיים"].map(t=>(
         <button key={t} type="button" onClick={()=>setFilter(t)} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${filter===t?CLR.primary:CLR.border}`,background:filter===t?CLR.primary:"transparent",color:filter===t?"#fff":CLR.muted,cursor:"pointer",fontWeight:600,fontSize:13}}>{t}</button>
       ))}
       <div style={{flex:1}}/>
+      {maintenance.some(m=>m.autoSchedule)&&<Btn sm v="secondary" onClick={()=>runSchedule()}>📅 שבץ ביקורים</Btn>}
       <Btn sm onClick={()=>setShowNew(true)}>+ אחזקה חדשה</Btn>
     </div>
     {items.length===0?<div style={{textAlign:"center",color:CLR.muted,padding:40}}>אין אחזקות עדיין</div>:
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
       {items.map(m=>{const contacts=maintContacts(m), pests=maintList(m.pests), ex=maintList(m.excludedPests);
+        const logs=maintLogs(m,execLogs); const dl=maintDaysLeft(m);
+        const nextVisit=appointments.filter(a=>String(a.maintenanceId)===String(m.id)&&a.date>=todayStr()&&a.status!=="בוטל"&&a.status!=="בוצע").sort((a,b)=>a.date.localeCompare(b.date))[0];
+        const worker=workers.find(w=>String(w.id)===String(m.workerId));
         return <div key={m.id} style={{background:CLR.white,border:`1px solid #d1d5db`,borderRadius:12,padding:"16px 18px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"start",marginBottom:8,gap:8}}>
             <div style={{minWidth:0}}>
@@ -4969,6 +5099,16 @@ function Maintenance({maintenance,setMaintenance,customers}){
           {pests.length>0&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>✅ כלול: </span>{pests.join(", ")}</div>}
           {ex.length>0&&<div style={{fontSize:12,marginBottom:4,color:"#b91c1c"}}><span style={{color:CLR.muted}}>🚫 לא כלול: </span>{ex.join(", ")}</div>}
           {m.notes&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>📝 {m.notes}</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:4,fontSize:12,background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
+            <div>🕓 ביקור אחרון: <b>{logs[0]?fmtDate(logs[0].date):"—"}</b>{logs.length?<span style={{color:CLR.muted}}> · {logs.length} ביקורים</span>:null}</div>
+            {m.autoSchedule&&<div>📅 ביקור הבא: <b>{nextVisit?fmtDate(nextVisit.date)+" "+(nextVisit.time||""):"—"}</b>{worker?<span style={{color:CLR.muted}}> · 👷 {worker.name}</span>:null}</div>}
+            {(m.stations||[]).length>0&&<div>🪤 {m.stations.length} תחנות האכלה</div>}
+            {dl!=null&&<div style={{color:dl<=30?"#b91c1c":CLR.muted,fontWeight:dl<=30?700:400}}>⏳ {dl<0?`החוזה הסתיים לפני ${-dl} ימים`:`החוזה מסתיים בעוד ${dl} ימים`} ({fmtDate(m.endDate)})</div>}
+          </div>
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <button type="button" onClick={()=>setHistFor(m)} style={{flex:1,border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>🕓 היסטוריה</button>
+            <button type="button" onClick={()=>setReportFor(m)} style={{flex:1,border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>📄 דוח חודשי</button>
+          </div>
           {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
           </div>}
@@ -4984,8 +5124,27 @@ function Maintenance({maintenance,setMaintenance,customers}){
           </div>
         </div>;})}
     </div>}
-    {showNew&&<MaintenanceModal knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m=>setMaintenance(ms=>[...ms,m])} customers={customers}/>}
-    {editM&&<MaintenanceModal knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x))} customers={customers}/>}
+    {showNew&&<MaintenanceModal workers={workers} knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m=>{setMaintenance(ms=>[...ms,m]); if(m.autoSchedule) setTimeout(()=>runSchedule([m]),0);}} customers={customers}/>}
+    {editM&&<MaintenanceModal workers={workers} knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>{setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x)); if(m.autoSchedule) setTimeout(()=>runSchedule([{...editM,...m,id:editM.id}]),0);}} customers={customers}/>}
+    {histFor&&(()=>{const logs=maintLogs(histFor,execLogs);const visits=appointments.filter(a=>String(a.maintenanceId)===String(histFor.id)).sort((a,b)=>b.date.localeCompare(a.date));
+      return <Modal title={"🕓 היסטוריה — "+histFor.customerName} onClose={()=>setHistFor(null)} width={560}>
+        <div style={{fontWeight:700,marginBottom:6}}>יומני ביצוע ({logs.length})</div>
+        {logs.length===0?<div style={{color:CLR.muted,fontSize:13,marginBottom:12}}>עוד אין יומני ביצוע למקום הזה</div>:
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>{logs.map(l=><div key={l.id} style={{border:`1px solid ${CLR.border}`,borderRadius:10,padding:"8px 12px",fontSize:13}}>
+            <div style={{display:"flex",justifyContent:"space-between"}}><b>{fmtDate(l.date)}</b><span style={{color:CLR.muted}}>👷 {l.workerName||"—"}</span></div>
+            <div style={{color:CLR.muted}}>{(l.pest||[]).join(", ")}{(l.materials||[]).length?" · 🧪 "+l.materials.map(x=>x.name).join(", "):""}</div>
+            {(l.stationChecks||[]).length>0&&<div style={{fontSize:12}}>🪤 {l.stationChecks.filter(c=>c.activity&&c.activity!=="אין פעילות").length} תחנות עם פעילות מתוך {l.stationChecks.length}</div>}
+            <div style={{marginTop:4}}><button type="button" onClick={()=>printExecLog(l)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:6,padding:"3px 10px",fontSize:12,cursor:"pointer"}}>📄 PDF</button></div>
+          </div>)}</div>}
+        <div style={{fontWeight:700,marginBottom:6}}>ביקורים ביומן ({visits.length})</div>
+        {visits.length===0?<div style={{color:CLR.muted,fontSize:13}}>אין ביקורים משובצים</div>:
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>{visits.slice(0,30).map(a=><div key={a.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"6px 10px",background:CLR.surface,borderRadius:8}}><span>{fmtDate(a.date)} {a.time||""}</span><span style={{color:CLR.muted}}>{a.workerName} · {a.status}</span></div>)}</div>}
+      </Modal>;})()}
+    {reportFor&&<Modal title={"📄 דוח חודשי — "+reportFor.customerName} onClose={()=>setReportFor(null)} width={420}>
+      <Inp label="חודש" type="month" value={reportMonth} onChange={v=>setReportMonth(v)}/>
+      <div style={{fontSize:13,color:CLR.muted,marginBottom:12}}>{maintLogs(reportFor,execLogs).filter(l=>String(l.date||"").startsWith(reportMonth)).length} ביקורים בחודש הזה</div>
+      <Btn full onClick={()=>openPrintWindow("דוח חודשי — "+reportFor.customerName, maintReportHtml(reportFor, maintLogs(reportFor,execLogs), reportMonth))}>📄 הפק דוח (הדפסה / PDF)</Btn>
+    </Modal>}
   </div>;
 }
 
@@ -6065,6 +6224,10 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
         })}
       </div>
     </div>}
+    {(()=>{const ren=maintenance.filter(m=>m.status==="פעיל"&&maintDaysLeft(m)!=null&&maintDaysLeft(m)<=30);return ren.length>0&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"12px 18px",marginBottom:16}}>
+      <div style={{fontWeight:700,color:"#991b1b",marginBottom:6,fontSize:14}}>⏳ חוזי אחזקה לחידוש ({ren.length})</div>
+      {ren.map(m=>{const d=maintDaysLeft(m);return <div key={m.id} style={{fontSize:13,padding:"2px 0"}}><b>{m.customerName}</b> — {d<0?`הסתיים לפני ${-d} ימים`:`מסתיים בעוד ${d} ימים`}</div>;})}
+    </div>;})()}
     {overdueMaintenances.length>0&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"14px 18px",marginBottom:16}}>
       <div style={{fontWeight:700,color:"#92400e",marginBottom:10,fontSize:14}}>🔁 אחזקות שצריכות ביקור ({overdueMaintenances.length})</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -7205,15 +7368,15 @@ function App(){
               <PushPrompt/>
               <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
-              {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>}
+              {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={activeAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
-            {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user}/>}
+            {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance}/>}
             {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} appointments={activeAppointments}/>}
-            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers}/>}
+            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={activeAppointments}/>}
