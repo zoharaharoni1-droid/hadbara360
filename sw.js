@@ -223,3 +223,28 @@ self.addEventListener('message', e => {
     flushQueue();
   }
 });
+
+// ─── Push notifications (לידים חדשים, תורים חדשים למדביר) ─────────────────
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'הדברה 360', {
+    body: d.body || '',
+    icon: '/hadbara360/logo.png',
+    badge: '/hadbara360/logo.png',
+    tag: d.tag || 'h360',
+    renotify: true,
+    dir: 'rtl',
+    lang: 'he',
+    data: { url: d.url || '/hadbara360/' },
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/hadbara360/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if (c.url.includes('/hadbara360/') && 'focus' in c) return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
+});

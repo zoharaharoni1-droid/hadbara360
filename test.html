@@ -222,6 +222,40 @@ function logActivity(action, details){
 const LOG_LABELS={customers:"לקוח",workers:"עובד",appointments:"תור",finance:"רשומת כספים",notes:"הערה",maintenance:"אחזקה",projects:"פרויקט",exec_logs:"יומן ביצוע"};
 function itemLabel(it){ return it&&(it.name||it.customerName||it.title||it.customer||it.description||("#"+it.id)) || ""; }
 
+// ─── התראות Push לטלפון ─────────────────────────────────
+const VAPID_PUBLIC = "BCfSjv6muBQ5FBqAcA11refeniEF3KPu5QL7LLQr4f4iMiACk-qJWaLgHODribM2AcJfh5mg_3xiP0k53Jn6iAM";
+function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+function isStandalone(){ return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }
+function b64ToU8(b){ const p='='.repeat((4-b.length%4)%4); const s=atob((b+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from([...s].map(c=>c.charCodeAt(0))); }
+async function savePushSub(){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64ToU8(VAPID_PUBLIC)});
+  const j = sub.toJSON();
+  const r = await sb.rpc('save_push_subscription',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+  if(r.error||!r.data) throw new Error('save failed');
+  return true;
+}
+async function enablePush(){
+  if(!pushSupported()) { alert(isIOS()&&!isStandalone() ? 'באייפון: לחצו על כפתור השיתוף ← "הוסף למסך הבית", פתחו את המערכת מהאייקון החדש, ואז הפעילו התראות.' : 'הדפדפן הזה לא תומך בהתראות. נסו בכרום.'); return false; }
+  const perm = await Notification.requestPermission();
+  if(perm!=='granted'){ alert('ההתראות חסומות. אפשר לאשר אותן בהגדרות הדפדפן/הטלפון.'); return false; }
+  try{ await savePushSub(); return true; }catch(e){ alert('לא הצלחנו להפעיל התראות: '+(e.message||e)); return false; }
+}
+function PushPrompt(){
+  const [state,setState]=React.useState(()=>!pushSupported()?(isIOS()&&!isStandalone()?'ios':'none'):(Notification.permission==='granted'?'on':'off'));
+  const [hidden,setHidden]=React.useState(()=>{try{return localStorage.getItem('h360_push_hide')==='1'}catch(e){return false}});
+  React.useEffect(()=>{ if(state==='on') savePushSub().catch(()=>{}); },[]);
+  if(state==='on'||state==='none'||hidden) return null;
+  const hide=()=>{setHidden(true);try{localStorage.setItem('h360_push_hide','1')}catch(e){}};
+  return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"10px 14px",marginBottom:12,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",fontSize:13}}>
+    <span style={{flex:"1 1 200px"}}>🔔 {state==='ios'?'כדי לקבל התראות באייפון: כפתור השיתוף ← "הוסף למסך הבית", ופתחו את המערכת מהאייקון.':'קבלו התראה לטלפון על לידים חדשים ועל הדברות שנכנסות ליומן שלכם, גם כשהמערכת סגורה.'}</span>
+    {state==='off'&&<button onClick={async()=>{ if(await enablePush()) setState('on'); }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#2563eb",color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>הפעל התראות</button>}
+    <button onClick={hide} aria-label="סגור" style={{border:"none",background:"none",cursor:"pointer",color:"#64748b",fontSize:16}}>✕</button>
+  </div>;
+}
+
 // All tabs with permission keys
 const ALL_TABS = [
   {id:"dashboard",label:"📊 דשבורד",perm:null},
@@ -6226,7 +6260,7 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
     <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
       {["פתוחים",...LEAD_STATUSES,"הכל"].map(f=><button key={f} onClick={()=>setFilter(f)}
         style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${filter===f?CLR.primary:CLR.border}`,background:filter===f?CLR.primaryLight:"#fff",color:filter===f?CLR.primary:CLR.muted,fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{f}</button>)}
-      {window.Notification&&Notification.permission!=="granted"&&<button onClick={()=>{try{Notification.requestPermission().then(()=>reload());}catch(e){}}} style={{marginRight:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.primary}`,background:CLR.primaryLight,color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>🔔 הפעל התראות</button>}
+      {window.Notification&&Notification.permission!=="granted"&&<button onClick={()=>{enablePush().then(()=>reload());}} style={{marginRight:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.primary}`,background:CLR.primaryLight,color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>🔔 הפעל התראות</button>}
       <button onClick={reload} style={{marginRight:window.Notification&&Notification.permission!=="granted"?0:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>🔄 רענון</button>
     </div>
     {shown.length===0&&<div style={{...card,textAlign:"center",color:CLR.muted,padding:30}}>אין לידים להצגה</div>}
@@ -6551,6 +6585,7 @@ function App(){
 
         {/* Content */}
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
+              <PushPrompt/>
               <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>}
