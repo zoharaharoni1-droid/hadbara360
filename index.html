@@ -3734,8 +3734,9 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
     const lastActivity=lastAppt?.date||c.lastTreatment||"";
     return lastActivity&&lastActivity<oneYearAgoISO&&c.status!=="פעיל";
   };
-  const activeCustomers=customers.filter(c=>!isArchived(c));
-  const archivedCustomers=customers.filter(c=>isArchived(c));
+  const liveCustomers=customers.filter(c=>!c.deleted);
+  const activeCustomers=liveCustomers.filter(c=>!isArchived(c));
+  const archivedCustomers=liveCustomers.filter(c=>isArchived(c));
   const displayCustomers=showArchive?archivedCustomers:activeCustomers;
 
   const filtered=displayCustomers.filter(c=>{
@@ -3800,7 +3801,8 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
     {sel&&<Modal title={`🗂️ תיק הדברה – ${sel.name}`} onClose={()=>setSel(null)} width={600}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         {!editingCust
-          ? <Btn sm onClick={()=>{setEditCustData({...sel});setEditingCust(true);}}>✏️ ערוך פרטים</Btn>
+          ? <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Btn sm onClick={()=>{setEditCustData({...sel});setEditingCust(true);}}>✏️ ערוך פרטים</Btn>
+              {currentUser&&currentUser.role==="מנהל"&&<Btn sm v="ghost" onClick={()=>{ if(window.confirm(`למחוק את ${sel.name}?\nהלקוח יעבור לסל המחזור ואפשר יהיה לשחזר אותו.`)){ softDelete(setCustomers, sel.id); setSel(null); } }} style={{color:CLR.danger,border:`1px solid ${CLR.danger}`}}>🗑️ מחק לקוח</Btn>}</div>
           : <div style={{display:"flex",gap:8}}>
               <Btn sm onClick={()=>{setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,...editCustData}:c));setSel({...sel,...editCustData});setEditingCust(false);}}>✅ שמור</Btn>
               <Btn sm v="ghost" onClick={()=>setEditingCust(false)}>ביטול</Btn>
@@ -5145,7 +5147,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
   // רק תורים של המדביר הזה להיום, ממוינים לפי שעה
   const myAppts = React.useMemo(()=>{
     return appointments
-      .filter(a => a.workerId===currentUser.id && a.date===today)
+      .filter(a => (a.workerName ? String(a.workerName).trim()===String(currentUser.name||"").trim() : a.workerId===currentUser.id) && a.date===today)
       .sort((a,b)=>(a.timeFrom||"00:00").localeCompare(b.timeFrom||"00:00"));
   },[appointments, currentUser.id, today]);
 
@@ -6398,6 +6400,7 @@ function App(){
     if(leads.length||seenLeads.current) seenLeads.current=ids;
   },[leads]);
   const [workers,setWorkers]=useLS("workers", initWorkers);
+  const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&w.role==="מדביר"&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
   const [appointments,setAppointments]=useLS("appointments", initAppointments);
   const [finance,setFinance]=useLS("finance", initFinance);
   const [notes,setNotes]=useLS("notes", initNotes);
@@ -6415,13 +6418,14 @@ function App(){
   const activeProjects = React.useMemo(()=>activeOnly(projects),[projects]);
   const activeScheduledMsgs = React.useMemo(()=>activeOnly(scheduledMsgs),[scheduledMsgs]);
   const deletedItems = React.useMemo(()=>[
+    ...customers.filter(x=>x.deleted).map(x=>({...x,_type:"לקוח",_setter:()=>softRestore(setCustomers,x.id)})),
     ...workers.filter(x=>x.deleted).map(x=>({...x,_type:"עובד",_setter:()=>softRestore(setWorkers,x.id)})),
     ...appointments.filter(x=>x.deleted).map(x=>({...x,_type:"פגישה",_setter:()=>softRestore(setAppointments,x.id)})),
     ...finance.filter(x=>x.deleted).map(x=>({...x,_type:"כספים",_setter:()=>softRestore(setFinance,x.id)})),
     ...notes.filter(x=>x.deleted).map(x=>({...x,_type:"הערה",_setter:()=>softRestore(setNotes,x.id)})),
     ...maintenance.filter(x=>x.deleted).map(x=>({...x,_type:"חוזה",_setter:()=>softRestore(setMaintenance,x.id)})),
     ...projects.filter(x=>x.deleted).map(x=>({...x,_type:"פרויקט",_setter:()=>softRestore(setProjects,x.id)})),
-  ],[workers,appointments,finance,notes,maintenance,projects]);
+  ],[customers,workers,appointments,finance,notes,maintenance,projects]);
 
   const [msgTemplates,setMsgTemplates]=useLS("msgTemplates",[
     {id:1,name:"תזכורת לתור",emoji:"📅",text:"שלום *{שם}* 👋\n\nתזכורת: מחר {תאריך} יגיע המדביר *{מדביר}* לטיפול ב*{מזיק}*.\n📍 {כתובת}\n🕐 {שעה}\n\nלשאלות — "+COMPANY.name+" 🦟"},
@@ -6453,7 +6457,7 @@ function App(){
   ].filter(t=>{
     if(!user || !user.role) return true;
     if(t.hideFor===user.role) return false;
-    if(t.workerOnly && user.role!=="מדביר") return false;
+    if(t.workerOnly && user.role!=="מדביר" && !isAlsoWorker) return false;
     if(t.adminOnly && user.role==="מדביר") return false;
     // Check permissions from authUser
     const permMap={"finance":"finance","invoices":"invoices","workers":"workers",
@@ -6504,7 +6508,7 @@ function App(){
           ].map(group=>(
             <div key={group.lbl} style={{marginBottom:16}}>
               <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
-              {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר")).map(t=>(
+              {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)).map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:13,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:1,fontFamily:"inherit",transition:"all 0.15s"}}
                   onMouseEnter={e=>{if(tab!==t.id){e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#cbd5e1";}}}
                   onMouseLeave={e=>{if(tab!==t.id){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#94a3b8";}}}>
@@ -6603,7 +6607,7 @@ function App(){
               ].map(group=>(
                 <div key={group.lbl} style={{marginBottom:16}}>
                   <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
-                  {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר")).map(t=>(
+                  {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)).map(t=>(
                     <button key={t.id} onClick={()=>{setTab(t.id);setDrawerOpen(false);}}
                       style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:14,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:2,fontFamily:"inherit"}}>
                       <span style={{fontSize:16,width:20,textAlign:"center"}}>{t.icon}</span>{t.name}
