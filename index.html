@@ -212,6 +212,13 @@ function tmpAuthClient(){
 
 function roleLabel(r){ return r==="מנהל" ? "מנהל ראשי" : r; }
 // מי יכול לקבל שיבוץ הדברה: מדביר, או כל עובד שסומן "גם מדביר" (למשל המנהל הראשי)
+// היסטוריית שינויים בתור — כל עריכה נשמרת עם הגרסה הקודמת, כדי שמנהל/פקידה יוכלו להחזיר
+const APPT_SNAP_KEYS=["date","time","timeWindow","workerId","workerName","price","pestType","address","notes","status"];
+function apptSnap(a){ const o={}; APPT_SNAP_KEYS.forEach(k=>{ o[k]=a[k]===undefined?null:a[k]; }); return o; }
+function apptWithHistory(prev,next,user,reason){
+  const h=Array.isArray(prev.history)?prev.history:[];
+  return {...next, history:[...h,{at:new Date().toISOString(),by:(user&&user.name)||"",role:(user&&user.role)||"",reason:reason||"",before:apptSnap(prev),after:apptSnap(next)}].slice(-30)};
+}
 function isTech(w){ return !!w && (w.role==="מדביר" || !!w.alsoTech); }
 function genPassword(){ const a="abcdefghjkmnpqrstuvwxyz23456789"; let p=""; const b=new Uint32Array(8); crypto.getRandomValues(b); for(const x of b) p+=a[x%a.length]; return p; }
 
@@ -2539,8 +2546,26 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   const [editData,setEditData]=useState({
     date:appt.date, time:appt.time, timeWindow:appt.timeWindow||"",
     workerId:appt.workerId, price:appt.price, pestType:appt.pestType,
-    address:appt.address, notes:appt.notes||""
+    address:appt.address, notes:appt.notes||"", reason:""
   });
+  const isStaff=currentUser.role!=="מדביר";
+  const [showHist,setShowHist]=useState(false);
+  const saveEdit=(extra={})=>{
+    const w=workers.find(x=>String(x.id)===String(editData.workerId));
+    const next={...appt,date:editData.date,time:editData.time,timeWindow:editData.timeWindow,
+      workerId:w?w.id:appt.workerId,workerName:w?w.name:appt.workerName,
+      price:parseInt(editData.price)||0,pestType:editData.pestType,address:editData.address,notes:editData.notes,...extra};
+    const timeChanged=next.date!==appt.date||next.time!==appt.time||next.timeWindow!==(appt.timeWindow||"");
+    const reason=String(editData.reason||"").trim();
+    if((timeChanged||extra.status==="בוטל")&&!reason) return alert("נא לכתוב סיבה (למשל: הלקוח ביקש שעה אחרת)");
+    if(JSON.stringify(apptSnap(next))===JSON.stringify(apptSnap(appt))) { setEditMode(false); return; }
+    onSaveEdit(apptWithHistory(appt,next,currentUser,reason||"עריכת פרטים"));
+    setEditMode(false); setE("reason","");
+  };
+  const restoreVersion=h=>{
+    if(!window.confirm("להחזיר את התור למצב שהיה לפני השינוי הזה?")) return;
+    onSaveEdit(apptWithHistory(appt,{...appt,...h.before},currentUser,"↩️ שחזור לגרסה קודמת (שינוי של "+(h.by||"?")+")"));
+  };
   const setE=(k,v)=>setEditData(x=>({...x,[k]:v}));
   const cust=customers.find(c=>c.id===appt.customerId)||{};
   const worker=workers.find(w=>w.id===appt.workerId)||{};
@@ -2615,6 +2640,57 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     {invoice&&<div style={{background:CLR.primaryLight,borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span>🧾 <b>חשבונית {invoice.invoiceNum}</b> · ₪{invoice.amount}</span>
       <span style={{display:"flex",gap:8,alignItems:"center"}}><Badge status={invoice.status}/><button onClick={()=>printInvoice(invoice)} style={{background:"none",border:`1px solid ${CLR.border}`,borderRadius:6,padding:"3px 8px",fontSize:12,cursor:"pointer",color:CLR.primary}}>📄 PDF</button></span>
+    </div>}
+    {appt.status==="בוטל"&&<div style={{background:"#fee2e2",color:"#991b1b",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13,fontWeight:600}}>❌ התור בוטל{isStaff?" — אפשר להחזיר אותו מהיסטוריית השינויים למטה":""}</div>}
+    {/* ── עריכת תור ── */}
+    {onSaveEdit&&!editMode&&<div style={{marginTop:12}}><Btn v="secondary" full onClick={()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);}}>✏️ ערוך תור / שנה שעה</Btn></div>}
+    {editMode&&<div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"14px",marginTop:12}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>✏️ עריכת תור</div>
+      <G2 gap={8}>
+        <Inp label="תאריך" type="date" value={editData.date} onChange={v=>setE("date",v)}/>
+        <Sel label="שעה" value={editData.time} onChange={v=>setE("time",v)} options={(!editData.time||HOURS.includes(editData.time))?HOURS:[editData.time,...HOURS]}/>
+        <Inp label="חלון הגעה (לא חובה)" value={editData.timeWindow} onChange={v=>setE("timeWindow",v)} placeholder="למשל 10:00–12:00"/>
+        {isStaff
+          ? <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>מדביר</label>
+              <select value={editData.workerId||""} onChange={e=>setE("workerId",e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14}}>
+                <option value="">-- בחר --</option>
+                {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+              </select></div>
+          : <div/>}
+        <Sel label="סוג מזיק" value={editData.pestType} onChange={v=>setE("pestType",v)} options={(!editData.pestType||PEST_TYPES_CRM.includes(editData.pestType))?PEST_TYPES_CRM:[editData.pestType,...PEST_TYPES_CRM]}/>
+        <Inp label="מחיר (₪)" type="number" value={editData.price} onChange={v=>setE("price",v)}/>
+      </G2>
+      <Inp label="כתובת" value={editData.address} onChange={v=>setE("address",v)}/>
+      <Txt label="הערות לתור" value={editData.notes} onChange={v=>setE("notes",v)} rows={2}/>
+      <Inp label="סיבת השינוי (חובה בשינוי שעה/תאריך)" value={editData.reason} onChange={v=>setE("reason",v)} placeholder="למשל: התקשרתי ללקוח, מעדיף אחה״צ"/>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
+        <Btn full onClick={()=>saveEdit()}>💾 שמור שינויים</Btn>
+        {appt.status!=="בוטל"&&<Btn v="ghost" onClick={()=>{ if(window.confirm("לבטל את התור? (אפשר להחזיר אחר כך)")) saveEdit({status:"בוטל"}); }} style={{color:CLR.danger}}>❌ בטל תור</Btn>}
+        <Btn v="ghost" onClick={()=>setEditMode(false)}>סגור</Btn>
+      </div>
+    </div>}
+    {/* ── היסטוריית שינויים ── */}
+    {Array.isArray(appt.history)&&appt.history.length>0&&<div style={{marginTop:12,border:`1px solid ${CLR.border}`,borderRadius:10,overflow:"hidden"}}>
+      <button onClick={()=>setShowHist(x=>!x)} style={{width:"100%",background:CLR.surface,border:"none",padding:"10px 14px",textAlign:"right",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🕓 היסטוריית שינויים ({appt.history.length}) {showHist?"▲":"▼"}</button>
+      {showHist&&<div style={{padding:"8px 12px"}}>
+        {[...appt.history].reverse().map((h,i)=>{
+          const b=h.before||{}, a=h.after||{};
+          const diffs=APPT_SNAP_KEYS.filter(k=>String(b[k]??"")!==String(a[k]??"")).map(k=>{
+            const L={date:"תאריך",time:"שעה",timeWindow:"חלון",workerName:"מדביר",price:"מחיר",pestType:"מזיק",address:"כתובת",notes:"הערות",status:"סטטוס"}[k];
+            if(!L) return null; const fv=v=>k==="date"&&v?fmtDate(v):(v??"—");
+            return L+": "+fv(b[k])+" ← "+fv(a[k]);
+          }).filter(Boolean);
+          return <div key={i} style={{borderBottom:`1px solid ${CLR.border}`,padding:"8px 0",fontSize:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+              <b>{h.by||"?"}{h.role?` (${roleLabel(h.role)})`:""}</b>
+              <span style={{color:CLR.muted}}>{new Date(h.at).toLocaleString("he-IL",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</span>
+            </div>
+            {h.reason&&<div>📝 {h.reason}</div>}
+            {diffs.map((d,j)=><div key={j} style={{color:CLR.muted}}>{d}</div>)}
+            {isStaff&&onSaveEdit&&<button onClick={()=>restoreVersion(h)} style={{marginTop:4,background:"#eef2ff",color:"#3730a3",border:"1px solid #c7d2fe",borderRadius:6,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>↩️ החזר למצב שלפני השינוי</button>}
+          </div>;
+        })}
+      </div>}
     </div>}
     <div style={{borderTop:`1px solid ${CLR.border}`,marginTop:16,paddingTop:16,display:"flex",gap:10,flexWrap:"wrap"}}>
       {appt.status!=="בדרך"&&appt.status!=="בוצע"&&appt.status!=="בוטל"&&onMarkEnRoute&&<Btn v="secondary"
@@ -2745,7 +2821,9 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     setAppointments(as=>as.map(a=>{
       if(a.id!==apptId) return a;
       const w=newWorkerId?workers.find(x=>x.id===newWorkerId):null;
-      return {...a,date:newDate,time:newTime,...(w?{workerId:w.id,workerName:w.name}:{})};
+      const nx={...a,date:newDate,time:newTime,timeWindow:"",...(w?{workerId:w.id,workerName:w.name}:{})};
+      if(nx.date===a.date&&nx.time===a.time&&nx.workerId===a.workerId) return a;
+      return apptWithHistory(a,nx,currentUser,"הזזה ביומן (גרירה)");
     }));
   };
 
@@ -6452,7 +6530,13 @@ function App(){
 
   // ── פריטים פעילים בלבד (מסנן deleted:true) ──
   const activeWorkers = React.useMemo(()=>activeOnly(workers),[workers]);
-  const activeAppointments = React.useMemo(()=>activeOnly(appointments),[appointments]);
+  const activeAppointments = React.useMemo(()=>{
+    const live=activeOnly(appointments);
+    if(!customers||!customers.length) return live;
+    const all=new Map(customers.map(c=>[String(c.id),c]));
+    // תורים של לקוח שנמחק (או הועבר לסל) לא מוצגים; שחזור הלקוח מחזיר אותם
+    return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); return !!c&&!c.deleted; });
+  },[appointments,customers]);
   const activeFinance = React.useMemo(()=>activeOnly(finance),[finance]);
   const activeNotes = React.useMemo(()=>activeOnly(notes),[notes]);
   const activeMaintenance = React.useMemo(()=>activeOnly(maintenance),[maintenance]);
