@@ -1,7 +1,7 @@
 // הדברה 360 — Service Worker v2
 // תכונות: cache-first, offline queue, auto-update
 
-const VERSION = 'hadbara360-v7';
+const VERSION = 'hadbara360-v8';
 const ASSETS = [
   '/hadbara360/',
   '/hadbara360/index.html',
@@ -230,8 +230,8 @@ self.addEventListener('push', e => {
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data ? e.data.text() : '' }; }
   e.waitUntil(self.registration.showNotification(d.title || 'הדברה 360', {
     body: d.body || '',
-    icon: '/hadbara360/logo.png',
-    badge: '/hadbara360/logo.png',
+    icon: '/hadbara360/icon-192.png',
+    badge: '/hadbara360/badge-96.png',
     tag: d.tag || 'h360',
     renotify: true,
     dir: 'rtl',
