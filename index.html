@@ -208,6 +208,54 @@ function tmpAuthClient(){
   return window.supabase.createClient(SUPA_URL, SUPA_KEY, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:'h360-admin-tmp'}});
 }
 
+function roleLabel(r){ return r==="מנהל" ? "מנהל ראשי" : r; }
+function genPassword(){ const a="abcdefghjkmnpqrstuvwxyz23456789"; let p=""; const b=new Uint32Array(8); crypto.getRandomValues(b); for(const x of b) p+=a[x%a.length]; return p; }
+
+// ─── יומן פעילות (נראה רק למנהל) ─────────────────────
+let __h360User = null;
+function logActivity(action, details){
+  try{
+    if(!sb||!__h360User) return;
+    sb.from('activity_log').insert({user_name:__h360User.name||"", action:String(action).slice(0,60), details:String(details||"").slice(0,300)}).then(()=>{});
+  }catch(e){}
+}
+const LOG_LABELS={customers:"לקוח",workers:"עובד",appointments:"תור",finance:"רשומת כספים",notes:"הערה",maintenance:"אחזקה",projects:"פרויקט",exec_logs:"יומן ביצוע"};
+function itemLabel(it){ return it&&(it.name||it.customerName||it.title||it.customer||it.description||("#"+it.id)) || ""; }
+
+// ─── התראות Push לטלפון ─────────────────────────────────
+const VAPID_PUBLIC = "BCfSjv6muBQ5FBqAcA11refeniEF3KPu5QL7LLQr4f4iMiACk-qJWaLgHODribM2AcJfh5mg_3xiP0k53Jn6iAM";
+function pushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+function isStandalone(){ return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }
+function b64ToU8(b){ const p='='.repeat((4-b.length%4)%4); const s=atob((b+p).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from([...s].map(c=>c.charCodeAt(0))); }
+async function savePushSub(){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(!sub) sub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64ToU8(VAPID_PUBLIC)});
+  const j = sub.toJSON();
+  const r = await sb.rpc('save_push_subscription',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+  if(r.error||!r.data) throw new Error('save failed');
+  return true;
+}
+async function enablePush(){
+  if(!pushSupported()) { alert(isIOS()&&!isStandalone() ? 'באייפון: לחצו על כפתור השיתוף ← "הוסף למסך הבית", פתחו את המערכת מהאייקון החדש, ואז הפעילו התראות.' : 'הדפדפן הזה לא תומך בהתראות. נסו בכרום.'); return false; }
+  const perm = await Notification.requestPermission();
+  if(perm!=='granted'){ alert('ההתראות חסומות. אפשר לאשר אותן בהגדרות הדפדפן/הטלפון.'); return false; }
+  try{ await savePushSub(); return true; }catch(e){ alert('לא הצלחנו להפעיל התראות: '+(e.message||e)); return false; }
+}
+function PushPrompt(){
+  const [state,setState]=React.useState(()=>!pushSupported()?(isIOS()&&!isStandalone()?'ios':'none'):(Notification.permission==='granted'?'on':'off'));
+  const [hidden,setHidden]=React.useState(()=>{try{return localStorage.getItem('h360_push_hide')==='1'}catch(e){return false}});
+  React.useEffect(()=>{ if(state==='on') savePushSub().catch(()=>{}); },[]);
+  if(state==='on'||state==='none'||hidden) return null;
+  const hide=()=>{setHidden(true);try{localStorage.setItem('h360_push_hide','1')}catch(e){}};
+  return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"10px 14px",marginBottom:12,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",fontSize:13}}>
+    <span style={{flex:"1 1 200px"}}>🔔 {state==='ios'?'כדי לקבל התראות באייפון: כפתור השיתוף ← "הוסף למסך הבית", ופתחו את המערכת מהאייקון.':'קבלו התראה לטלפון על לידים חדשים ועל הדברות שנכנסות ליומן שלכם, גם כשהמערכת סגורה.'}</span>
+    {state==='off'&&<button onClick={async()=>{ if(await enablePush()) setState('on'); }} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#2563eb",color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>הפעל התראות</button>}
+    <button onClick={hide} aria-label="סגור" style={{border:"none",background:"none",cursor:"pointer",color:"#64748b",fontSize:16}}>✕</button>
+  </div>;
+}
+
 // All tabs with permission keys
 const ALL_TABS = [
   {id:"dashboard",label:"📊 דשבורד",perm:null},
@@ -256,8 +304,7 @@ function LoginScreen({onLogin}){
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#f0fdf4 0%,#dcfce7 50%,#f0fdf4 100%)",display:"flex",alignItems:"center",justifyContent:"center",direction:"rtl",fontFamily:"'Inter','Heebo',sans-serif"}}>
       <div style={{background:"#fff",borderRadius:20,boxShadow:"0 20px 60px rgba(0,0,0,0.12)",padding:"48px 40px",width:"100%",maxWidth:420,textAlign:"center"}}>
         <div style={{marginBottom:32}}>
-          <div style={{fontSize:48,marginBottom:12}}>🦟</div>
-          <h1 style={{margin:0,fontSize:26,fontWeight:800,color:"#0f172a"}}>הדברה 360</h1>
+          <img src="logo.png" alt="הדברה 360" style={{height:90,width:"auto",display:"block",margin:"0 auto 12px"}}/>
           <p style={{margin:"8px 0 0",color:"#64748b",fontSize:14}}>מערכת ניהול CRM</p>
         </div>
         <div style={{textAlign:"right",marginBottom:24}}>
@@ -288,6 +335,11 @@ function LoginScreen({onLogin}){
 // ── ADMIN PANEL (ניהול משתמשים) ───────────────────────
 function AdminPanel({authUser,onClose}){
   const [users,setUsers]=React.useState([]);
+  const [showLog,setShowLog]=React.useState(false);
+  const [logRows,setLogRows]=React.useState([]);
+  const [logUser,setLogUser]=React.useState("");
+  const [logErr,setLogErr]=React.useState("");
+  const loadLog=async()=>{ const {data,error}=await sb.from('activity_log').select('*').order('at',{ascending:false}).limit(300); if(error){setLogErr('יומן הפעילות עוד לא הופעל (צריך להריץ את סקריפט ה-SQL)');} else {setLogErr('');setLogRows(data||[]);} };
   const [loading,setLoading]=React.useState(true);
   const [showAdd,setShowAdd]=React.useState(false);
   const [editUser,setEditUser]=React.useState(null);
@@ -362,10 +414,30 @@ function AdminPanel({authUser,onClose}){
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",direction:"rtl",padding:16}}>
       <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:700,maxHeight:"90vh",overflow:"auto",boxShadow:"0 25px 80px rgba(0,0,0,0.2)"}}>
         <div style={{padding:"24px 28px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <h2 style={{margin:0,fontSize:20,fontWeight:800}}>👥 ניהול משתמשים</h2>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>setShowLog(false)} style={{fontSize:18,fontWeight:800,border:"none",background:"none",cursor:"pointer",color:showLog?"#94a3b8":"#0f172a",fontFamily:"inherit"}}>👥 משתמשים</button>
+            <button onClick={()=>{setShowLog(true);loadLog();}} style={{fontSize:18,fontWeight:800,border:"none",background:"none",cursor:"pointer",color:showLog?"#0f172a":"#94a3b8",fontFamily:"inherit"}}>📜 פעילות</button>
+          </div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#64748b"}}>✕</button>
         </div>
-        <div style={{padding:"20px 28px"}}>
+        {showLog&&<div style={{padding:"16px 20px"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+            <select value={logUser} onChange={e=>setLogUser(e.target.value)} style={{padding:"7px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}>
+              <option value="">כל המשתמשים</option>
+              {[...new Set(logRows.map(r=>r.user_name))].filter(Boolean).map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+            <button onClick={loadLog} style={{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#fff",cursor:"pointer",fontSize:13}}>🔄 רענון</button>
+          </div>
+          {logErr&&<div style={{color:CLR.danger,fontSize:13,marginBottom:8}}>{logErr}</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {logRows.filter(r=>!logUser||r.user_name===logUser).map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:13,padding:"8px 10px",borderRadius:8,background:"#f8fafc",flexWrap:"wrap"}}>
+              <span style={{color:"#64748b",whiteSpace:"nowrap"}}>{new Date(r.at).toLocaleString('he-IL',{dateStyle:'short',timeStyle:'short'})}</span>
+              <b>{r.user_name}</b><span>{r.action}</span>{r.details&&<span style={{color:"#475569"}}>— {r.details}</span>}
+            </div>)}
+            {logRows.length===0&&!logErr&&<div style={{color:"#64748b",fontSize:13}}>אין עדיין פעילות רשומה</div>}
+          </div>
+        </div>}
+        {!showLog&&<div style={{padding:"20px 28px"}}>
           {msg&&<div style={{background:"#f0fdf4",color:"#16a34a",borderRadius:8,padding:"10px 16px",marginBottom:16,fontSize:13}}>{msg}</div>}
 
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -422,9 +494,12 @@ function AdminPanel({authUser,onClose}){
                             <option>מנהל</option><option>פקידה</option><option>מדביר</option>
                           </select></div>
                         <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>סיסמה חדשה (אופציונלי)</label>
-                          <input type="password" placeholder="השאר ריק לשמור קיימת"
+                          <div style={{display:"flex",gap:6}}><input type="text" placeholder="השאר ריק לשמור קיימת" value={editUser._newpwd||""} autoComplete="off"
                             onChange={e=>setEditUser({...editUser,_newpwd:e.target.value})}
-                            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
+                            style={{flex:1,minWidth:0,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,direction:"ltr"}}/>
+                            <button type="button" onClick={()=>setEditUser({...editUser,_newpwd:genPassword()})} title="צור סיסמה"
+                            style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",cursor:"pointer",fontSize:12,whiteSpace:"nowrap"}}>🎲 צור</button></div>
+                          <div style={{fontSize:11,color:"#64748b",marginTop:4}}>הסיסמה מוצגת רק עכשיו. רשמו ומסרו לעובד לפני השמירה.</div></div>
                         <div style={{display:"flex",alignItems:"flex-end"}}>
                           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
                             <input type="checkbox" checked={editUser.active} onChange={e=>setEditUser({...editUser,active:e.target.checked})}/>
@@ -448,7 +523,7 @@ function AdminPanel({authUser,onClose}){
                         <span style={{fontSize:12,color:"#64748b",marginRight:10}}>@{u.username}</span>
                         <span style={{fontSize:11,background:u.role==="מנהל"?"#fef3c7":u.role==="פקידה"?"#e0f2fe":"#f0fdf4",
                           color:u.role==="מנהל"?"#d97706":u.role==="פקידה"?"#0369a1":"#16a34a",
-                          padding:"2px 10px",borderRadius:20,fontWeight:600}}>{u.role}</span>
+                          padding:"2px 10px",borderRadius:20,fontWeight:600}}>{roleLabel(u.role)}</span>
                         {!u.active&&<span style={{fontSize:11,color:"#ef4444",marginRight:8}}>⛔ לא פעיל</span>}
                         {u.last_login&&<span style={{fontSize:11,color:"#94a3b8",marginRight:8}}>כניסה אחרונה: {new Date(u.last_login).toLocaleDateString('he-IL')}</span>}
                       </div>
@@ -465,7 +540,7 @@ function AdminPanel({authUser,onClose}){
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -2864,12 +2939,12 @@ function PestMultiPicker({selected,onChange,customPest,setCustomPest}){
 }
 
 // Quick-tap chips that append text to notes
-function QuickChips({chips,onPick}){
+function QuickChips({chips,onPick,isOn}){
   return <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-    {chips.map(c=><button key={c} type="button" onClick={()=>onPick(c)}
-      style={{background:CLR.surface,border:`1px solid ${CLR.border}`,borderRadius:20,padding:"5px 12px",fontSize:13,cursor:"pointer",color:CLR.primary}}>
-      + {c}
-    </button>)}
+    {chips.map(c=>{const on=isOn?isOn(c):false;return <button key={c} type="button" onClick={()=>onPick(c)} aria-pressed={on}
+      style={{background:on?CLR.primaryLight:CLR.surface,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 12px",fontSize:13,cursor:on?"default":"pointer",color:CLR.primary,fontWeight:on?700:400}}>
+      {on?"✓":"+"} {c}
+    </button>;})}
   </div>;
 }
 
@@ -3156,7 +3231,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const isUnit=f.propertyType==="דירה"||f.propertyType==="בית פרטי";
 
   const toggleArea=a=>set("buildingAreas",f.buildingAreas.includes(a)?f.buildingAreas.filter(x=>x!==a):[...f.buildingAreas,a]);
-  const addNote=t=>set("notes",f.notes?f.notes+", "+t:t);
+  const notesHas=t=>String(f.notes||"").split(",").map(x=>x.trim()).includes(t);
+  const addNote=t=>{ if(notesHas(t)) return; set("notes",f.notes?f.notes+", "+t:t); };
 
   const allPests=()=>[...f.pests,...(f.customPest.trim()?[f.customPest.trim()]:[])];
   const pestLabel=()=>allPests().join(", ");
@@ -3219,7 +3295,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
 
     <FieldCard title="כתובת">
       <G2><Inp label="עיר" value={f.city} onChange={v=>handleAddressChange("city",v)}/><Inp label="רחוב" value={f.street} onChange={v=>handleAddressChange("street",v)}/></G2>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
         <Sel label="מס׳ בניין" value={f.buildingNum} onChange={v=>set("buildingNum",v)} options={BUILDING_NUMS}/>
         <Sel label={isShared?"מס׳ כניסה/דירה":"מס׳ דירה"} value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
         <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
@@ -3318,8 +3394,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </FieldCard>
 
     <FieldCard title="זמן מועדף להגעה">
-      <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr",gap:12,alignItems:"end"}}>
-        <Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,alignItems:"end"}}>
+        <div style={{gridColumn:"1 / -1"}}><Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/></div>
         <Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>
         <Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>
       </div>
@@ -3327,31 +3403,27 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </FieldCard>
 
     <FieldCard title="הערות">
-      <QuickChips chips={QUICK_NOTES} onPick={addNote}/>
+      <QuickChips chips={QUICK_NOTES} onPick={addNote} isOn={notesHas}/>
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder="הערות חופשיות, או לחץ על הכפתורים למעלה..."/>
     </FieldCard>
 
-    {/* Schedule */}
+    {/* Schedule — בחירת מדביר בלחיצה */}
     <div style={{background:CLR.primaryLight,border:`1px solid ${CLR.primary}33`,borderRadius:12,padding:"14px 18px",marginBottom:14}}>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,cursor:"pointer",color:CLR.primary}}>
-        <input type="checkbox" checked={doSchedule} onChange={e=>setDoSchedule(e.target.checked)}/> 📅 לשגר עכשיו ליומן של מדביר
-      </label>
-      {doSchedule&&<div style={{marginTop:12}}>
-        {routeSuggestion&&!schedWorker&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span>🗺️ <b>מוצע לפי אזור:</b> {routeSuggestion.name} ({routeSuggestion.zone})</span>
-          <button onClick={()=>{setSchedWorker(String(routeSuggestion.id));setRouteSuggestion(null);}} style={{padding:"4px 12px",borderRadius:6,background:CLR.primary,color:"#fff",border:"none",fontSize:12,cursor:"pointer",fontWeight:600}}>✓ בחר</button>
-        </div>}
-        <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>בחר מדביר לשיגור</label>
-          <select value={schedWorker} onChange={e=>setSchedWorker(e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,boxSizing:"border-box"}}>
-            <option value="">-- בחר מדביר --</option>
-            {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").map(w=><option key={w.id} value={w.id}>{w.name} ({w.zone})</option>)}
-          </select></div>
-        <div style={{fontSize:12,color:CLR.muted,marginTop:6}}>* התור ישוגר ליומן של המדביר בתאריך ובחלון השעות שנבחרו. חובה: מדביר + מזיק + תאריך.</div>
-      </div>}
+      <div style={{fontSize:14,fontWeight:700,color:CLR.primary,marginBottom:10}}>📅 שיגור למדביר <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(לחיצה על שם = שיגור ליומן שלו בשמירה)</span></div>
+      {routeSuggestion&&!schedWorker&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>🗺️ מוצע לפי אזור: <b>{routeSuggestion.name}</b></div>}
+      <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+        {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").map(w=>{const on=doSchedule&&String(schedWorker)===String(w.id);return <button key={w.id} type="button"
+          onClick={()=>{ if(on){setSchedWorker("");setDoSchedule(false);} else {setSchedWorker(String(w.id));setDoSchedule(true);setRouteSuggestion(null);} }}
+          style={{padding:"10px 16px",borderRadius:10,border:`2px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#0f172a",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit",minHeight:44}}>
+          {on?"✓ ":""}👷 {w.name}{w.zone?<span style={{fontWeight:400,fontSize:12,opacity:.8}}> · {w.zone}</span>:null}
+        </button>;})}
+        {workers.filter(w=>w.role==="מדביר"&&w.status==="פעיל").length===0&&<div style={{fontSize:13,color:CLR.muted}}>אין מדבירים פעילים. הוסיפו בלשונית "עובדים".</div>}
+      </div>
+      {doSchedule&&<div style={{fontSize:12,color:CLR.muted,marginTop:8}}>* ישוגר ליומן בתאריך ובחלון השעות שנבחרו. חובה: מזיק + תאריך.</div>}
     </div>
 
     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-      <Btn full onClick={save}>{doSchedule?"✅ שמור ושגר ליומן":"✅ שמור תיק הדברה"}</Btn>
+      <Btn full onClick={save}>{doSchedule?("✅ שמור ושגר ל"+((workers.find(w=>String(w.id)===String(schedWorker))||{}).name||"מדביר")):"✅ שמור תיק הדברה"}</Btn>
       <Btn v="secondary" onClick={()=>{
         if(!f.name||!f.phone) return alert("צריך שם וטלפון של הלקוח");
         if(allPests().length===0) return alert("צריך לבחור לפחות מזיק אחד");
@@ -5742,6 +5814,11 @@ function useLS(key, init){
             updated_at: new Date().toISOString()
           }));
           console.log('[SB] upserting changed', tbl, changed.length, 'rows');
+          changed.slice(0,5).forEach(item=>{
+            const wasThere = prevRows.some(r=>String(r.id)===String(item.id));
+            const act = !wasThere ? "יצירה" : (item.deleted && !(prevRows.find(r=>String(r.id)===String(item.id))||{}).deleted ? "העברה לסל" : "עדכון");
+            logActivity(act+" "+(LOG_LABELS[tbl]||tbl), itemLabel(item));
+          });
           sb.from(tbl).upsert(upsertData, {onConflict:'id'})
             .then(({error})=>{
               if(error) console.warn('[SB] sync error:', tbl, error);
@@ -5755,6 +5832,7 @@ function useLS(key, init){
         const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
         if(deletedIds.length > 0){
           console.log('[SB] deleting', tbl, deletedIds);
+          deletedIds.slice(0,5).forEach(id=>{ const it=prevRows.find(r=>String(r.id)===id); logActivity("מחיקה "+(LOG_LABELS[tbl]||tbl), itemLabel(it)); });
           sb.from(tbl).delete().in('id', deletedIds).then(()=>{});
         }
       }
@@ -6152,6 +6230,7 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
   const update=async(l,patch)=>{
     setBusy(l.id);
     const {error}=await sb.from('leads').update({...patch,updated_at:new Date().toISOString()}).eq('id',l.id);
+    if(!error) logActivity("ליד: "+(patch.status||"עדכון"), l.name);
     setBusy(null);
     if(error) alert('שגיאה בשמירה: '+error.message); else reload();
   };
@@ -6181,7 +6260,8 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
     <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"}}>
       {["פתוחים",...LEAD_STATUSES,"הכל"].map(f=><button key={f} onClick={()=>setFilter(f)}
         style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${filter===f?CLR.primary:CLR.border}`,background:filter===f?CLR.primaryLight:"#fff",color:filter===f?CLR.primary:CLR.muted,fontWeight:600,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{f}</button>)}
-      <button onClick={reload} style={{marginRight:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>🔄 רענון</button>
+      {window.Notification&&Notification.permission!=="granted"&&<button onClick={()=>{enablePush().then(()=>reload());}} style={{marginRight:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.primary}`,background:CLR.primaryLight,color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>🔔 הפעל התראות</button>}
+      <button onClick={reload} style={{marginRight:window.Notification&&Notification.permission!=="granted"?0:"auto",padding:"6px 12px",borderRadius:8,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>🔄 רענון</button>
     </div>
     {shown.length===0&&<div style={{...card,textAlign:"center",color:CLR.muted,padding:30}}>אין לידים להצגה</div>}
     {shown.map(l=><div key={l.id} style={{...card,display:"flex",flexWrap:"wrap",gap:"10px 18px",alignItems:"center",opacity:busy===l.id?0.6:1}}>
@@ -6213,9 +6293,10 @@ function App(){
     try{const u=localStorage.getItem('crm_auth');return u?JSON.parse(u):null;}catch{return null;}
   });
   const [showAdmin,setShowAdmin]=React.useState(false);
+  if(authUser) __h360User=authUser;
 
   const doLogin=(u)=>{
-    setAuthUser(u);
+    setAuthUser(u); __h360User=u; logActivity("כניסה למערכת","");
     try{localStorage.setItem('crm_auth',JSON.stringify(u));}catch{}
   };
   const doLogout=()=>{
@@ -6259,6 +6340,17 @@ function App(){
   const [customers,setCustomers]=useLS("customers", initCustomers);
   const [leads,reloadLeads]=useLeads(!!authUser);
   const newLeadsCount=leads.filter(l=>l.status==="חדש").length;
+  const seenLeads=React.useRef(null);
+  React.useEffect(()=>{
+    const ids=new Set(leads.map(l=>l.id));
+    if(seenLeads.current){
+      const fresh=leads.filter(l=>!seenLeads.current.has(l.id)&&l.status==="חדש");
+      if(fresh.length&&window.Notification&&Notification.permission==="granted"){
+        try{ new Notification("🌐 ליד חדש מהאתר",{body:fresh.map(l=>l.name+(l.pest?" · "+l.pest:"")).join("\n"),icon:"logo.png",tag:"h360-lead"}); }catch(e){}
+      }
+    }
+    if(leads.length||seenLeads.current) seenLeads.current=ids;
+  },[leads]);
   const [workers,setWorkers]=useLS("workers", initWorkers);
   const [appointments,setAppointments]=useLS("appointments", initAppointments);
   const [finance,setFinance]=useLS("finance", initFinance);
@@ -6349,9 +6441,9 @@ function App(){
       {!isFullTab&&!isMobile&&<aside style={{position:"fixed",top:0,right:0,bottom:0,width:230,background:"#0f172a",display:"flex",flexDirection:"column",zIndex:200,overflow:"hidden"}}>
         {/* Logo */}
         <div style={{padding:"16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-          <div style={{width:34,height:34,background:"#16a34a",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🦟</div>
+          <div style={{background:"#fff",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",flexShrink:0}}><img src="logo.png" alt="הדברה 360" style={{height:34,width:"auto",display:"block"}}/></div>
           <div>
-            <div style={{fontSize:14,fontWeight:700,color:"#fff",letterSpacing:"-0.3px"}}>הדברה 360</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff",letterSpacing:"-0.3px"}}>מערכת ניהול</div>
             <div style={{fontSize:10,color:"#94a3b8",marginTop:1}}>מערכת CRM</div>
           </div>
         </div>
@@ -6383,7 +6475,7 @@ function App(){
           </div>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:"12.5px",fontWeight:600,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div>
-            <div style={{fontSize:"10.5px",color:"#94a3b8",marginTop:1}}>{user.role}</div>
+            <div style={{fontSize:"10.5px",color:"#94a3b8",marginTop:1}}>{roleLabel(user.role)}</div>
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0}}>
             {authUser?.role==="מנהל"&&<button onClick={()=>setShowAdmin(true)} title="ניהול משתמשים"
@@ -6420,21 +6512,21 @@ function App(){
         </div>}
 
         {/* Topbar (mobile) */}
-        {isMobile&&<div style={{height:52,background:"#0f172a",display:"flex",alignItems:"center",padding:"0 14px",gap:10,position:"sticky",top:0,zIndex:200,boxShadow:"0 2px 8px rgba(0,0,0,0.2)"}}>
+        {isMobile&&<div style={{height:52,background:"#fff",display:"flex",alignItems:"center",padding:"0 14px",gap:10,position:"sticky",top:0,zIndex:200,borderBottom:"1px solid #e2e8f0",boxShadow:"0 2px 8px rgba(15,23,42,0.06)"}}>
           {/* Hamburger — RIGHT side (first in RTL) */}
-          <button onClick={()=>setDrawerOpen(true)} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",padding:"8px",borderRadius:8,display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
-            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
-            <span style={{display:"block",width:20,height:2,background:"#fff",borderRadius:2}}/>
+          <button onClick={()=>setDrawerOpen(true)} style={{background:"#f1f5f9",border:"none",cursor:"pointer",padding:"8px",borderRadius:8,display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+            <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
+            <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
+            <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
           </button>
           {/* Logo */}
-          <div style={{fontSize:15,fontWeight:800,color:"#fff",flex:1,letterSpacing:"-0.3px"}}>🦟 הדברה 360</div>
+          <div style={{flex:1,display:"flex",alignItems:"center"}}><img src="logo.png" alt="הדברה 360" style={{height:36,width:"auto",display:"block"}}/></div>
           {/* Page name */}
-          <div style={{fontSize:11,color:"#94a3b8",fontWeight:600,flexShrink:0}}>{tabLabel[tab]||tab}</div>
+          <div style={{fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>{tabLabel[tab]||tab}</div>
           {/* Refresh data — בלי לטעון מחדש את הדף, לא מאבדים טפסים פתוחים */}
-          <button aria-label="רענון נתונים" title="רענון נתונים" onClick={e=>{window.dispatchEvent(new Event('h360-refresh'));reloadLeads();const b=e.currentTarget;b.style.opacity=0.4;setTimeout(()=>{b.style.opacity=1;},700);}} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"opacity .2s"}}>🔄</button>
+          <button aria-label="רענון נתונים" title="רענון נתונים" onClick={e=>{window.dispatchEvent(new Event('h360-refresh'));reloadLeads();const b=e.currentTarget;b.style.opacity=0.4;setTimeout(()=>{b.style.opacity=1;},700);}} style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#0f172a",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"opacity .2s"}}>🔄</button>
           {/* Search */}
-          <button onClick={()=>setShowSearch(true)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🔍</button>
+          <button onClick={()=>setShowSearch(true)} style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#0f172a",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🔍</button>
         </div>}
 
         {/* Mobile Drawer */}
@@ -6446,10 +6538,10 @@ function App(){
             {/* Drawer header */}
             <div style={{padding:"16px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:36,height:36,background:"#16a34a",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🦟</div>
+                <div style={{background:"#fff",borderRadius:10,padding:"4px 10px",display:"flex",alignItems:"center",flexShrink:0}}><img src="logo.png" alt="הדברה 360" style={{height:34,width:"auto",display:"block"}}/></div>
                 <div>
-                  <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>הדברה 360</div>
-                  <div style={{fontSize:11,color:"#94a3b8"}}>{user.name} · {user.role}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>מערכת ניהול</div>
+                  <div style={{fontSize:11,color:"#94a3b8"}}>{user.name} · {roleLabel(user.role)}</div>
                 </div>
               </div>
               <button onClick={()=>setDrawerOpen(false)} style={{background:"#1e293b",border:"none",borderRadius:8,width:32,height:32,cursor:"pointer",color:"#94a3b8",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -6476,7 +6568,7 @@ function App(){
             </nav>
             {/* User actions */}
             <div style={{padding:"12px 14px",borderTop:"1px solid #1e293b"}}>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:8,fontWeight:600}}>{user.name} · {user.role}</div>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:8,fontWeight:600}}>{user.name} · {roleLabel(user.role)}</div>
               <div style={{display:"flex",gap:8}}>
                 {authUser?.role==="מנהל"&&<button onClick={()=>{setShowAdmin(true);setDrawerOpen(false);}}
                   style={{flex:1,padding:"9px",background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,cursor:"pointer"}}>
@@ -6493,6 +6585,7 @@ function App(){
 
         {/* Content */}
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
+              <PushPrompt/>
               <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs}/>}
