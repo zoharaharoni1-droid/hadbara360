@@ -258,6 +258,38 @@ function PushPrompt(){
   </div>;
 }
 
+// ─── השלמה אוטומטית לערים ורחובות (מאגר הממשלה data.gov.il) ─────────
+const GOV_API="https://data.gov.il/api/3/action/datastore_search";
+function useIlCities(){
+  const [list,setList]=React.useState(()=>{try{return JSON.parse(localStorage.getItem("h360_il_cities")||"[]")}catch(e){return []}});
+  React.useEffect(()=>{
+    if(list.length) return;
+    fetch(GOV_API+"?resource_id=5c78e9fa-c2e2-4771-93ff-7f400a12f7ba&limit=2000&fields=%D7%A1%D7%9E%D7%9C_%D7%99%D7%A9%D7%95%D7%91,%D7%A9%D7%9D_%D7%99%D7%A9%D7%95%D7%91")
+      .then(r=>r.json()).then(j=>{
+        const out=(j.result&&j.result.records||[]).map(r=>({code:String(r["סמל_ישוב"]).trim(),name:String(r["שם_ישוב"]||"").trim()}))
+          .filter(c=>c.name&&c.name!=="לא רשום").sort((a,b)=>a.name.localeCompare(b.name,"he"));
+        setList(out); try{localStorage.setItem("h360_il_cities",JSON.stringify(out))}catch(e){}
+      }).catch(()=>{});
+  },[]);
+  return list;
+}
+function useIlStreets(cityCode){
+  const [list,setList]=React.useState([]);
+  React.useEffect(()=>{
+    if(!cityCode){setList([]);return;}
+    const key="h360_il_streets_"+cityCode;
+    try{const c=localStorage.getItem(key); if(c){setList(JSON.parse(c));return;}}catch(e){}
+    fetch(GOV_API+"?resource_id=a7296d1a-f8c9-4b70-96c2-6ebb4352f8e3&limit=5000&fields=%D7%A9%D7%9D_%D7%A8%D7%97%D7%95%D7%91&filters="+encodeURIComponent(JSON.stringify({"סמל_ישוב":Number(cityCode)})))
+      .then(r=>r.json()).then(j=>{
+        const out=[...new Set((j.result&&j.result.records||[]).map(r=>String(r["שם_רחוב"]||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"he"));
+        setList(out); try{localStorage.setItem(key,JSON.stringify(out))}catch(e){}
+      }).catch(()=>setList([]));
+  },[cityCode]);
+  return list;
+}
+const ADDR_INPUT={width:"100%",padding:"9px 12px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,boxSizing:"border-box",background:"#fff"};
+const ADDR_LABEL={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
+
 // All tabs with permission keys
 const ALL_TABS = [
   {id:"dashboard",label:"📊 דשבורד",perm:null},
@@ -3233,6 +3265,9 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const isUnit=f.propertyType==="דירה"||f.propertyType==="בית פרטי";
 
   const toggleArea=a=>set("buildingAreas",f.buildingAreas.includes(a)?f.buildingAreas.filter(x=>x!==a):[...f.buildingAreas,a]);
+  const ilCities=useIlCities();
+  const ilCityCode=(ilCities.find(c=>c.name===String(f.city||"").trim())||{}).code;
+  const ilStreets=useIlStreets(ilCityCode);
   const notesHas=t=>String(f.notes||"").split(",").map(x=>x.trim()).includes(t);
   const addNote=t=>{ if(notesHas(t)) return; set("notes",f.notes?f.notes+", "+t:t); };
 
@@ -3296,13 +3331,22 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </FieldCard>
 
     <FieldCard title="כתובת">
-      <G2><Inp label="עיר" value={f.city} onChange={v=>handleAddressChange("city",v)}/><Inp label="רחוב" value={f.street} onChange={v=>handleAddressChange("street",v)}/></G2>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}}>
-        <Sel label="מס׳ בניין" value={f.buildingNum} onChange={v=>set("buildingNum",v)} options={BUILDING_NUMS}/>
-        <Sel label={isShared?"מס׳ כניסה/דירה":"מס׳ דירה"} value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
-        <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
+      <G2>
+        <div style={{marginBottom:12}}><label style={ADDR_LABEL}>עיר</label>
+          <input list="h360-cities" value={f.city||""} onChange={e=>handleAddressChange("city",e.target.value)} placeholder="התחילו להקליד..." autoComplete="off" style={ADDR_INPUT}/>
+          <datalist id="h360-cities">{ilCities.map(c=><option key={c.code} value={c.name}/>)}</datalist></div>
+        <div style={{marginBottom:12}}><label style={ADDR_LABEL}>כתובת (רחוב ומספר)</label>
+          <input list="h360-streets" value={f.street||""} onChange={e=>handleAddressChange("street",e.target.value)} placeholder="לדוגמה: הרצל 12" autoComplete="off" style={ADDR_INPUT}/>
+          <datalist id="h360-streets">{ilStreets.map(st=><option key={st} value={st+" "}/>)}</datalist></div>
+      </G2>
+      <G2>
         <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
-      </div>
+        <Sel label={isShared?"מס׳ כניסה/דירה":"מס׳ דירה"} value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
+      </G2>
+      <G2>
+        <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
+        <div/>
+      </G2>
       {/* Parking & elevator toggles + building code */}
       <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
         {[["parking","🅿️ חניה"],["elevator","🛗 מעלית"]].map(([key,label])=>(
