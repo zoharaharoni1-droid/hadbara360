@@ -2895,10 +2895,10 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     return saved;
   };
 
-  const getWeek=()=>{const d=new Date();d.setDate(d.getDate()-d.getDay()+1+wk*7);return Array.from({length:7},(_,i)=>{const x=new Date(d);x.setDate(d.getDate()+i);return x;});};
+  const getWeek=()=>{const d=new Date();d.setDate(d.getDate()-d.getDay()+wk*7);return Array.from({length:7},(_,i)=>{const x=new Date(d);x.setDate(d.getDate()+i);return x;});};
   const days=getWeek();
   const toISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const fmtD=d=>`${["א'","ב'","ג'","ד'","ה'","ו'","ש'"][d.getDay()===0?6:d.getDay()-1]} ${d.getDate()}/${d.getMonth()+1}`;
+  const fmtD=d=>`${["א'","ב'","ג'","ד'","ה'","ו'","ש'"][d.getDay()]} ${d.getDate()}/${d.getMonth()+1}`;
   const slots=["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00"];
   const wColor=wid=>{const w=workers.find(x=>x.id===wid);return w?.color||CLR.primary;};
   const sBg={"ממתין":"#fef9c3","בוצע":"#dcfce7","בדרך":"#dbeafe","בוטל":"#f3f4f6"};
@@ -6372,12 +6372,11 @@ function MonthView({year, month, appointments, workers, finance, execLogs, curre
   const monthNames = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 
   return <div style={{direction:"rtl"}}>
-    <div style={{fontWeight:700,fontSize:15,color:"#1a5c3a",marginBottom:12,textAlign:"center"}}>{monthNames[month]} {year}</div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,background:"#e5e7eb",border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:1,background:"#e5e7eb",border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}>
       {dayLabels.map(l=><div key={l} style={{background:"#1a5c3a",color:"#fff",textAlign:"center",padding:"7px 0",fontSize:12,fontWeight:600}}>{l}</div>)}
       {days.map((day,i)=>(
         <div key={i} onClick={()=>day&&onDayClick(new Date(year,month,day.dayNum))}
-          style={{background:day?.isToday?"#e8f5ee":"#fff",minHeight:80,padding:"5px",cursor:day?"pointer":"default",
+          style={{background:day?.isToday?"#e8f5ee":"#fff",minHeight:64,padding:"4px",minWidth:0,overflow:"hidden",cursor:day?"pointer":"default",
             outline:day?.isToday?"2px solid #1a5c3a":"none",outlineOffset:"-2px",position:"relative"}}
           onMouseEnter={e=>day&&(e.currentTarget.style.background=day.isToday?"#d1fae5":"#f9fafb")}
           onMouseLeave={e=>day&&(e.currentTarget.style.background=day?.isToday?"#e8f5ee":"#fff")}>
