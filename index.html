@@ -172,6 +172,41 @@ async function hashPwd(str){
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
+// ─── Secure auth (Supabase Auth) ─────────────────────────────────────────
+// כל משתמש CRM מקבל חשבון Supabase Auth. שם המשתמש מומר לכתובת פנימית קבועה.
+function authEmail(username){
+  const bytes = new TextEncoder().encode(String(username).trim());
+  return 'u' + Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('') + '@hadbara360.co.il';
+}
+function authPwd(p){ return 'h360:' + p; }
+
+async function secureLogin(username, password){
+  username = String(username).trim();
+  const email = authEmail(username);
+  let r = await sb.auth.signInWithPassword({email, password: authPwd(password)});
+  if(r.error){
+    // משתמש ותיק שעוד לא הועבר: מאמתים את הסיסמה הישנה בשרת ויוצרים לו חשבון
+    const chk = await sb.rpc('legacy_check', {p_username: username, p_password: password});
+    if(chk.error) throw new Error('שגיאת חיבור לשרת');
+    if(!chk.data) throw new Error('שם משתמש או סיסמה שגויים');
+    const up = await sb.auth.signUp({email, password: authPwd(password)});
+    if(up.error) throw new Error('לא ניתן להשלים את המעבר לכניסה המאובטחת: ' + up.error.message);
+    if(!up.data.session) throw new Error('יש לכבות "Confirm email" בהגדרות Supabase');
+    const ln = await sb.rpc('legacy_link', {p_username: username, p_password: password});
+    if(ln.error || !ln.data){ await sb.auth.signOut(); throw new Error('המעבר לכניסה המאובטחת נכשל, פנו למנהל'); }
+  }
+  const uid = (await sb.auth.getUser()).data.user?.id;
+  const prof = await sb.from('crm_users').select('*').eq('auth_id', uid).eq('active', true).maybeSingle();
+  if(prof.error || !prof.data){ await sb.auth.signOut(); throw new Error('המשתמש אינו פעיל'); }
+  sb.rpc('touch_login').then(()=>{});
+  return prof.data;
+}
+
+// לקוח זמני ליצירת משתמש חדש בלי לנתק את המנהל המחובר
+function tmpAuthClient(){
+  return window.supabase.createClient(SUPA_URL, SUPA_KEY, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:'h360-admin-tmp'}});
+}
+
 // All tabs with permission keys
 const ALL_TABS = [
   {id:"dashboard",label:"📊 דשבורד",perm:null},
@@ -210,19 +245,10 @@ function LoginScreen({onLogin}){
     if(!username||!password){setError('נא למלא שם משתמש וסיסמה');return;}
     setLoading(true);setError('');
     try{
-      const hash = await hashPwd(password);
       if(!sb){setError('שגיאת חיבור לשרת (Supabase לא נטען)');setLoading(false);return;}
-      const {data,error:err} = await sb.from('crm_users')
-        .select('*').eq('username',username).eq('password_hash',hash).eq('active',true).single();
-      if(err||!data){
-        console.log('Login error:', err, 'data:', data);
-        setError('שם משתמש או סיסמה שגויים ('+( err?.message||'no data')+')');
-        setLoading(false);return;
-      }
-      // Update last_login
-      await sb.from('crm_users').update({last_login:new Date().toISOString()}).eq('id',data.id);
+      const data = await secureLogin(username, password);
       onLogin(data);
-    }catch(e){setError('שגיאת חיבור');setLoading(false);}
+    }catch(e){setError(e?.message||'שגיאת חיבור');setLoading(false);}
   };
 
   return(
@@ -289,9 +315,11 @@ function AdminPanel({authUser,onClose}){
 
   const saveNew=async()=>{
     if(!newU.name||!newU.username||!newU.password){setMsg('נא למלא את כל השדות');return;}
-    const hash=await hashPwd(newU.password);
+    if(String(newU.username).trim()!==newU.username){setMsg('שם המשתמש לא יכול להתחיל או להסתיים ברווח');return;}
+    const up=await tmpAuthClient().auth.signUp({email:authEmail(newU.username),password:authPwd(newU.password)});
+    if(up.error||!up.data.user){setMsg('שגיאה: '+(up.error?.message||'יצירת החשבון נכשלה'));return;}
     const {error}=await sb.from('crm_users').insert({
-      name:newU.name,username:newU.username,password_hash:hash,
+      name:newU.name,username:newU.username,password_hash:'migrated',auth_id:up.data.user.id,
       role:newU.role,permissions:newU.permissions,active:true
     });
     if(error){setMsg('שגיאה: '+error.message);return;}
@@ -302,8 +330,12 @@ function AdminPanel({authUser,onClose}){
 
   const saveEdit=async()=>{
     const updates={name:editUser.name,role:editUser.role,permissions:editUser.permissions,active:editUser.active};
-    if(editUser._newpwd){updates.password_hash=await hashPwd(editUser._newpwd);}
-    await sb.from('crm_users').update(updates).eq('id',editUser.id);
+    if(editUser._newpwd){
+      const pr=await sb.rpc('admin_set_password',{p_user_id:String(editUser.id),p_password:editUser._newpwd});
+      if(pr.error||!pr.data){setMsg('שגיאה בעדכון הסיסמה');return;}
+    }
+    const {error:upErr}=await sb.from('crm_users').update(updates).eq('id',editUser.id);
+    if(upErr){setMsg('שגיאה: '+upErr.message);return;}
     setMsg('✅ נשמר!');setEditUser(null);loadUsers();
   };
 
@@ -6088,7 +6120,15 @@ function App(){
   const doLogout=()=>{
     setAuthUser(null);
     try{localStorage.removeItem('crm_auth');}catch{}
+    try{ sb && sb.auth.signOut(); }catch{}
   };
+  // בלי סשן מאובטח תקף — חוזרים למסך הכניסה
+  React.useEffect(()=>{
+    if(!sb) return;
+    sb.auth.getSession().then(({data})=>{ if(!data.session) { setAuthUser(null); try{localStorage.removeItem('crm_auth');}catch{} } });
+    const {data:sub} = sb.auth.onAuthStateChange((ev, session)=>{ if(ev==='SIGNED_OUT' || !session){ setAuthUser(null); try{localStorage.removeItem('crm_auth');}catch{} } });
+    return ()=>{ try{sub.subscription.unsubscribe();}catch{} };
+  },[]);
 
   // Map authUser to legacy user object (used after all hooks)
   const user = authUser ? {
