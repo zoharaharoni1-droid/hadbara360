@@ -36,8 +36,8 @@ function loadScript(urls,cb,i){
 </script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;direction:rtl;color:#0f172a;overscroll-behavior-y:contain}
-  html{overscroll-behavior-y:contain}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;direction:rtl;color:#0f172a;overscroll-behavior-y:none}
+  html{overscroll-behavior-y:none}
   #root{min-height:100vh}
   #loading{display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#16a34a;direction:rtl}
 
@@ -5715,7 +5715,8 @@ function useLS(key, init){
 
     syncFromSupabase();
     const poll = setInterval(syncFromSupabase, 10000);
-    return () => clearInterval(poll);
+    window.addEventListener('h360-refresh', syncFromSupabase);
+    return () => { clearInterval(poll); window.removeEventListener('h360-refresh', syncFromSupabase); };
   }, [tbl]);
 
   const set = React.useCallback(v => {
@@ -6335,7 +6336,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -6429,6 +6430,8 @@ function App(){
           <div style={{fontSize:15,fontWeight:800,color:"#fff",flex:1,letterSpacing:"-0.3px"}}>🦟 הדברה 360</div>
           {/* Page name */}
           <div style={{fontSize:11,color:"#94a3b8",fontWeight:600,flexShrink:0}}>{tabLabel[tab]||tab}</div>
+          {/* Refresh data — בלי לטעון מחדש את הדף, לא מאבדים טפסים פתוחים */}
+          <button aria-label="רענון נתונים" title="רענון נתונים" onClick={e=>{window.dispatchEvent(new Event('h360-refresh'));reloadLeads();const b=e.currentTarget;b.style.opacity=0.4;setTimeout(()=>{b.style.opacity=1;},700);}} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"opacity .2s"}}>🔄</button>
           {/* Search */}
           <button onClick={()=>setShowSearch(true)} style={{background:"rgba(255,255,255,0.1)",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#fff",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🔍</button>
         </div>}
@@ -6453,7 +6456,7 @@ function App(){
             {/* Nav items */}
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {[
-                {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"}]},
+                {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
@@ -6568,20 +6571,7 @@ window.addEventListener('online', () => { updateOnlineStatus(); });
 window.addEventListener('offline', updateOnlineStatus);
 setTimeout(updateOnlineStatus, 1000);
 
-// ─── חסימת Pull-to-Refresh במובייל ─────────────────────────────────────────
-(function(){
-  let startY=0;
-  document.addEventListener('touchstart',function(e){
-    startY=e.touches[0].clientY;
-  },{passive:true});
-  document.addEventListener('touchmove',function(e){
-    const y=e.touches[0].clientY;
-    // חוסם רק כשגוללים למעלה מראש הדף (overflow-y:contain לא עובד ב-iOS Safari)
-    if(y>startY && document.scrollingElement && document.scrollingElement.scrollTop===0){
-      e.preventDefault();
-    }
-  },{passive:false});
-})();
+// Pull-to-Refresh חסום ב-CSS (overscroll-behavior-y:none) — בלי לחסום גלילה רגילה
 
 // ─── Service Worker — עדכון אוטומטי + Offline Queue ─────────────────────
 if('serviceWorker' in navigator){
