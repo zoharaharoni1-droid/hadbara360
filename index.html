@@ -2395,7 +2395,7 @@ function NewApptModal({customers,workers,collabs=[],prefill={},onClose,onSave}){
     <Txt label="הערות" value={f.notes} onChange={v=>set("notes",v)} rows={2}/>
     <div style={{display:"flex",gap:10}}>
       <Btn full onClick={()=>{if(!f.customerId||!f.workerId||!f.date)return alert("לקוח, מדביר ותאריך – חובה");const c=customers.find(x=>x.id===parseInt(f.customerId));const w=workers.find(x=>x.id===parseInt(f.workerId));const collab=f.collabId?collabs.find(x=>x.id===parseInt(f.collabId)):null;
-              onSave({...f,customerId:parseInt(f.customerId),workerId:f.collabId?"":parseInt(f.workerId),workerName:collab?collab.name:(w?.name||""),collabId:f.collabId||null,collabName:collab?.name||"",price:parseInt(f.price)||0,status:"ממתין",executionLog:null});onClose();}}>✅ שמור תור</Btn>
+              onSave({...f,customerId:parseInt(f.customerId),customerName:c?.name||"",phone:c?.phone||f.phone||"",workerId:f.collabId?"":parseInt(f.workerId),workerName:collab?collab.name:(w?.name||""),collabId:f.collabId||null,collabName:collab?.name||"",price:parseInt(f.price)||0,status:"ממתין",executionLog:null});onClose();}}>✅ שמור תור</Btn>
       <Btn v="ghost" full onClick={onClose}>ביטול</Btn>
     </div>
     {showCalc&&<PriceCalc onClose={()=>setShowCalc(false)} onDone={d=>{set("price",d.price);setShowCalc(false);}}/>}
@@ -6435,6 +6435,15 @@ function App(){
   const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
   const [appointments,setAppointments]=useLS("appointments", initAppointments);
   const [finance,setFinance]=useLS("finance", initFinance);
+  // תיקון תורים בלי שם לקוח (נוצרו מכרטיס הלקוח/שכפול) — משלים את השם מכרטיס הלקוח
+  React.useEffect(()=>{
+    if(!customers||!customers.length||!appointments||!appointments.length) return;
+    const byId=new Map(customers.map(c=>[String(c.id),c]));
+    const needs=a=>!String(a.customerName||"").trim()&&a.customerId!=null&&byId.get(String(a.customerId))?.name;
+    if(!appointments.some(needs)) return;
+    setAppointments(as=>as.map(a=>needs(a)?{...a,customerName:byId.get(String(a.customerId)).name}:a));
+  },[customers,appointments]);
+
   const [notes,setNotes]=useLS("notes", initNotes);
   const [maintenance,setMaintenance]=useLS("maintenance",initMaintenance);
   const [projects,setProjects]=useLS("projects",initProjects);
