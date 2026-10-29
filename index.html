@@ -36,7 +36,8 @@ function loadScript(urls,cb,i){
 </script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;direction:rtl;color:#0f172a}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;direction:rtl;color:#0f172a;overscroll-behavior-y:contain}
+  html{overscroll-behavior-y:contain}
   #root{min-height:100vh}
   #loading{display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#16a34a;direction:rtl}
 
@@ -6096,7 +6097,16 @@ function App(){
     role: authUser.role,
   } : {id:null,name:"",role:""};
   const defaultTab = authUser?.role==="מדביר" ? "fieldview" : "dashboard";
-  const [tab,setTab]=useState(defaultTab);
+  const [tab,setTab]=useState(()=>{
+    try{
+      const saved=localStorage.getItem("h360_last_tab");
+      if(saved && authUser?.role==="מדביר" && saved==="fieldview") return saved;
+      if(saved && authUser?.role!=="מדביר" && saved!=="fieldview") return saved;
+    }catch(e){}
+    return defaultTab;
+  });
+  // שמור tab בכל שינוי
+  React.useEffect(()=>{try{localStorage.setItem("h360_last_tab",tab)}catch(e){}},[tab]);
   const [showSearch,setShowSearch]=useState(false);
   const [isMobile,setIsMobile]=React.useState(()=>window.innerWidth<900);
   const [drawerOpen,setDrawerOpen]=React.useState(false);
@@ -6414,6 +6424,21 @@ function updateOnlineStatus(){
 window.addEventListener('online', () => { updateOnlineStatus(); });
 window.addEventListener('offline', updateOnlineStatus);
 setTimeout(updateOnlineStatus, 1000);
+
+// ─── חסימת Pull-to-Refresh במובייל ─────────────────────────────────────────
+(function(){
+  let startY=0;
+  document.addEventListener('touchstart',function(e){
+    startY=e.touches[0].clientY;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    const y=e.touches[0].clientY;
+    // חוסם רק כשגוללים למעלה מראש הדף (overflow-y:contain לא עובד ב-iOS Safari)
+    if(y>startY && document.scrollingElement && document.scrollingElement.scrollTop===0){
+      e.preventDefault();
+    }
+  },{passive:false});
+})();
 
 // ─── Service Worker — עדכון אוטומטי + Offline Queue ─────────────────────
 if('serviceWorker' in navigator){
