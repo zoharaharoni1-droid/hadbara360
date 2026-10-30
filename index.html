@@ -6156,17 +6156,22 @@ function RegionalStats({appointments,customers,workers,finance}){
   </div>;
 }
 // ─── תצוגת מדביר ─────────────────────────────────────────────────────────
-function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs}){
+function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[]}){
   const today = todayStr();
   const [expandedId, setExpandedId] = React.useState(null);
   const [note, setNote] = React.useState({});
 
+  // מי אני ביומן: המשתמש המחובר + כרטיס העובד שמקושר אליו (מזהה, שם, שם במסמכים)
+  const meW = workers.filter(w=>!w.deleted&&(String(w.crmUserId)===String(currentUser.id)||String(w.name||"").trim()===String(currentUser.name||"").trim()));
+  const myIds = new Set(meW.map(w=>String(w.id)));
+  const myNames = new Set([currentUser.name,...meW.map(w=>w.name),...meW.map(w=>w.fullName)].filter(Boolean).map(x=>String(x).trim()));
+  const isMine = a => myIds.has(String(a.workerId)) || myNames.has(String(a.workerName||"").trim()) || (a.extraWorkerIds||[]).some(id=>myIds.has(String(id)));
   // רק תורים של המדביר הזה להיום, ממוינים לפי שעה
   const myAppts = React.useMemo(()=>{
     return appointments
-      .filter(a => (a.workerName ? String(a.workerName).trim()===String(currentUser.name||"").trim() : a.workerId===currentUser.id) && a.date===today)
-      .sort((a,b)=>(a.timeFrom||"00:00").localeCompare(b.timeFrom||"00:00"));
-  },[appointments, currentUser.id, today]);
+      .filter(a => isMine(a) && a.date===today && a.status!=="בוטל" && !a.deleted)
+      .sort((a,b)=>(a.time||a.timeFrom||"00:00").localeCompare(b.time||b.timeFrom||"00:00"));
+  },[appointments, currentUser.id, currentUser.name, workers, today]);
 
   const total = myAppts.length;
   const done  = myAppts.filter(a=>a.status==="בוצע").length;
@@ -7473,7 +7478,7 @@ function App(){
     })();
     return ()=>{dead=true;};
   },[authUser&&authUser.id, authUser&&authUser.role]);
-  const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&String(w.name||"").trim()===String(authUser.name||"").trim());
+  const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&(String(w.crmUserId)===String(authUser.id)||String(w.name||"").trim()===String(authUser.name||"").trim()));
   const [appointments,setAppointments]=useLS("appointments", []);
   const [finance,setFinance]=useLS("finance", []);
   // תיקון תורים בלי שם לקוח (נוצרו מכרטיס הלקוח/שכפול) — משלים את השם מכרטיס הלקוח
@@ -7733,7 +7738,7 @@ function App(){
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
               <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
-              {tab==="fieldview"&&<WorkerFieldView currentUser={user} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
+              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={activeAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
