@@ -609,6 +609,7 @@ function AdminPanel({authUser,onClose}){
 }
 
 const PEST_TYPES_CRM = ["ג'וקים","תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים","צרעות","שלשולים"];
+const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
 const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["דבורים","צרעות"]:[p]);
 // Serial numbers for execution logs: plain integers starting at 1001
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
@@ -1087,7 +1088,7 @@ function execLogHtml({company,docNum,log,chemicals}){
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:8px;font-size:13px;">
       <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
-      <b style="color:#1a5c3a;">מדביר:</b> ${log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
+      <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
     <div style="background:#fffbf0;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
       <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔬 פרטי הטיפול</div>
       ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>היקף הטיפול:</b> ${log.scope.join(" · ")}</div>`:""}
@@ -1110,7 +1111,7 @@ function execLogHtml({company,docNum,log,chemicals}){
       <pre style="font-family:Arial;font-size:13px;white-space:pre-wrap;line-height:1.8;">${log.safetyText}</pre></div>`:""}
     ${log.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;"><b>הערות:</b> ${log.notes}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:20px;margin-top:16px;">
-      <div><div style="font-size:13px;color:#555;margin-bottom:28px;">חתימת מדביר:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${log.workerName} · רישיון ${log.workerLicense||"—"}</div></div>
+      <div><div style="font-size:13px;color:#555;margin-bottom:28px;">חתימת מדביר:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${log.workerDocName||log.workerName}${log.workerLicense?" · רישיון "+log.workerLicense:""}</div></div>
       <div><div style="font-size:13px;color:#555;margin-bottom:28px;">חתימת לקוח:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${log.clientName}</div></div>
     </div>
   </div>`;
@@ -1136,7 +1137,7 @@ function execLogWAText(log){
     pests?"🐛 מזיקים: "+pests:"",
     mats?"🧪 חומרים:"+mats:"",
     log.warranty?"🛡️ אחריות: "+log.warranty:"",
-    log.workerName?"👷 מדביר: "+log.workerName+(log.workerLicense?" (רישיון "+log.workerLicense+")":""):"",
+    log.workerName?"👷 מדביר: "+(log.workerDocName||log.workerName)+(log.workerLicense?" (רישיון "+log.workerLicense+")":""):"",
     log.extermination_notes?"\n📝 הנחיות: "+log.extermination_notes:"",
     log.docNum?"\nמס׳ יומן: "+log.docNum:"",
     "","תודה שבחרתם בנו 🦟"].filter(x=>x!=="").join("\n");
@@ -1832,7 +1833,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
             if(w){set("workerLicense",w.licenseNum||"");set("workerLicenseType",w.licenseType||w.license||"");}
           }} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,fontFamily:"inherit",background:"#fff"}}>
             <option value="">-- בחר מדביר --</option>
-            {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{w.name}</option>)}
+            {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=><option key={w.id} value={w.name}>{docNameOf(w)?docNameOf(w)+" ("+w.name+")":w.name}</option>)}
             <option value="אחר">אחר</option>
           </select>
         </div>
@@ -1885,7 +1886,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
   // Form data and saved logs use different field names — normalize so the preview never crashes
   const src={...(saved||{}),...(rawData||{})};
   const data={...src,
-    worker:{name:(src.worker&&src.worker.name)||src.workerName||"",license:(src.worker&&src.worker.license)||src.workerLicense||""},
+    worker:{name:src.workerDocName||(src.worker&&src.worker.name)||src.workerName||"",license:(src.worker&&src.worker.license)||src.workerLicense||""},
     materials:src.materials||[], pest:src.pest||[], scope:src.scope||[]};
   const docNum=data.docNum||saved?.docNum||"(יוקצה בשמירה)";
   const log=saved||data;
@@ -1972,7 +1973,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -3160,7 +3161,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -4308,6 +4309,7 @@ function NewWorkerModal({onClose,onSave,initial}){
         <Sel label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} options={[...new Set(["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי","אחר",f.license||""])]}/>
         <Inp label="מספר רישיון" value={f.licenseNum} onChange={v=>set("licenseNum",v)} placeholder="12345678"/>
       </G2>
+      <Inp label="שם המדביר במסמכים (יומן ביצוע, PDF)" value={f.fullName||""} onChange={v=>set("fullName",v)} placeholder={"למשל: זוהר אהרוני — ריק = "+(f.name||"שם המשתמש")}/>
       <G2>
         <Inp label="תוקף רישיון" type="date" value={f.licenseExpiry} onChange={v=>set("licenseExpiry",v)}/>
         <Inp label="התמחות / מזיקים" value={f.specialty} onChange={v=>set("specialty",v)} placeholder="פרעושים, מכרסמים..."/>
