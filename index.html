@@ -1658,15 +1658,22 @@ function myChemicals(execLogs, workerName){
   return Object.keys(cnt).sort((a,b)=>(cnt[b]-cnt[a])||String(last[b]||"").localeCompare(String(last[a]||"")));
 }
 // בחירה מרובה בטבלת כפתורים מסודרת + "אחר" להקלדה חופשית
-function GridChoice({items,isOn,onToggle,onOther,otherLabel="אחר",min=128,small}){
+// מצב "יומן רציף" — מציג רק את האפשרויות העיקריות, עם "עוד" להרחבה
+const CompactCtx=React.createContext(false);
+function GridChoice({items,isOn,onToggle,onOther,otherLabel="אחר",min=128,small,limit}){
   const [other,setOther]=useState(""); const [open,setOpen]=useState(false);
+  const compact=React.useContext(CompactCtx); const [more,setMore]=useState(false);
+  const lim=compact&&!more?(limit||6):Infinity;
+  const shown=items.filter((it,i)=>i<lim||isOn(it)); const hidden=items.length-shown.length;
   const addOther=()=>{const v=other.trim(); if(!v) return; onOther(v); setOther(""); setOpen(false);};
   const tile=on=>({display:"flex",alignItems:"center",gap:7,minHeight:small?34:40,padding:small?"5px 8px":"7px 10px",borderRadius:8,border:"1.5px solid "+(on?"#2563eb":"#e2e8f0"),background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",fontSize:small?13:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",textAlign:"right",lineHeight:1.25,width:"100%",boxSizing:"border-box"});
   const box=on=>({flexShrink:0,width:17,height:17,borderRadius:4,border:"1.5px solid "+(on?"#2563eb":"#cbd5e1"),background:on?"#2563eb":"#fff",color:"#fff",fontSize:11,display:"inline-flex",alignItems:"center",justifyContent:"center"});
   return <div>
     <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${min}px,1fr))`,gap:6}}>
-      {items.map(it=>{const on=isOn(it);return <button key={it} type="button" onClick={()=>onToggle(it)} style={tile(on)}><span style={box(on)}>{on?"✓":""}</span><span>{it}</span></button>;})}
-      {onOther&&!open&&<button type="button" onClick={()=>setOpen(true)} style={{...tile(false),border:"1.5px dashed #cbd5e1",color:"#2563eb",justifyContent:"center"}}>+ {otherLabel}</button>}
+      {shown.map(it=>{const on=isOn(it);return <button key={it} type="button" onClick={()=>onToggle(it)} style={tile(on)}><span style={box(on)}>{on?"✓":""}</span><span>{it}</span></button>;})}
+      {hidden>0&&<button type="button" onClick={()=>setMore(true)} style={{...tile(false),border:"1.5px dashed #cbd5e1",color:"#475569",justifyContent:"center"}}>+ עוד ({hidden})</button>}
+      {compact&&more&&items.length>(limit||6)&&<button type="button" onClick={()=>setMore(false)} style={{...tile(false),border:"1.5px dashed #cbd5e1",color:"#475569",justifyContent:"center"}}>פחות ▲</button>}
+      {onOther&&!open&&(!compact||more||hidden===0)&&<button type="button" onClick={()=>setOpen(true)} style={{...tile(false),border:"1.5px dashed #cbd5e1",color:"#2563eb",justifyContent:"center"}}>+ {otherLabel}</button>}
     </div>
     {onOther&&open&&<div style={{display:"flex",gap:6,marginTop:6}}>
       <input autoFocus value={other} onChange={e=>setOther(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addOther();}}} placeholder={otherLabel+" — הקלד..."} style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:8,border:"1.5px solid #93c5fd",fontSize:14,fontFamily:"inherit"}}/>
@@ -1791,7 +1798,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
             <button type="button" onClick={()=>updateField(m.name,"stations",String((parseInt(m.stations)||0)+1))} style={{width:34,height:34,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button>
           </div>}
           <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
-          <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small/>
+          <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small limit={6}/>
           <button type="button" onClick={()=>setOpenMat(null)} style={{width:"100%",marginTop:10,padding:"9px",borderRadius:10,border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ סגור חומר</button>
         </div>;
       })}
@@ -1800,6 +1807,8 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
 }
 
 function PestPickerDk({selected,onChange}){
+  const compact=React.useContext(CompactCtx); const [morePests,setMorePests]=useState(false);
+  const MAIN_PESTS=["תיקן אמריקאי","תיקן גרמני","נמלים","עכברים","פרעושים"];
   const foodOn=selected.includes("חרקי מזון")||selected.some(p=>FOOD_PESTS.includes(p));
   const toggle=p=>{
     if(p==="חרקי מזון"&&foodOn) return onChange(selected.filter(x=>x!=="חרקי מזון"&&!FOOD_PESTS.includes(x)));
@@ -1808,9 +1817,10 @@ function PestPickerDk({selected,onChange}){
   const btn=on=>({background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",border:`1.5px solid ${on?"#2563eb":"#e2e8f0"}`,borderRadius:8,padding:"7px 12px",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))",gap:6}}>
-      {PEST_TYPES_LOG.map(p=>{ const on=p==="חרקי מזון"?foodOn:selected.includes(p);
+      {PEST_TYPES_LOG.filter(p=>!compact||morePests||MAIN_PESTS.includes(p)||selected.includes(p)||(p==="חרקי מזון"&&foodOn)).map(p=>{ const on=p==="חרקי מזון"?foodOn:selected.includes(p);
         return <button key={p} type="button" onClick={()=>toggle(p)} style={btn(on)}>{on?"✓ ":""}{p}{p==="חרקי מזון"?(foodOn?" ▲":" ▼"):""}</button>; })}
       {selected.filter(p=>!PEST_TYPES_LOG.includes(p)&&!FOOD_PESTS.includes(p)).map(p=><button key={p} type="button" onClick={()=>toggle(p)} style={btn(true)}>✓ {p}</button>)}
+      {compact&&<button type="button" onClick={()=>setMorePests(m=>!m)} style={{...btn(false),border:"1.5px dashed #cbd5e1",color:"#475569"}}>{morePests?"פחות ▲":"+ עוד מזיקים"}</button>}
     </div>
     {foodOn&&<div style={{marginTop:8,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"10px 12px"}}>
       <div style={{fontSize:13,fontWeight:700,color:"#075985",marginBottom:6}}>🌾 איזה חרקי מזון?</div>
@@ -1843,9 +1853,9 @@ function PlaceEditor({place,onChange}){
   const lbl={display:"block",fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:3};
   const extras=p.extras||[];
   return <div>
-    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מולא מההזמנה — אפשר לשנות לפי מה שבוצע בפועל. הנקודות עצמן (פנלים, ניקוזים...) נרשמות בכל חומר ב"אזורי יישום".</div>
+    {!React.useContext(CompactCtx)&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מולא מההזמנה — אפשר לשנות לפי מה שבוצע בפועל. הנקודות עצמן (פנלים, ניקוזים...) נרשמות בכל חומר ב"אזורי יישום".</div>}
     <label style={lbl}>סוג המקום</label>
-    <GridChoice items={[...PLACE_TYPES,...(p.type&&!PLACE_TYPES.includes(p.type)?[p.type]:[])]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small/>
+    <GridChoice items={[...PLACE_TYPES,...(p.type&&!PLACE_TYPES.includes(p.type)?[p.type]:[])]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small limit={4}/>
     {unit&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:10}}>
       <label><span style={lbl}>חדרים</span><select value={p.rooms||""} onChange={e=>set("rooms",e.target.value)} style={sel}><option value="">—</option>{["1","1.5","2","2.5","3","3.5","4","4.5","5","5.5","6","7","8","9","10"].map(o=><option key={o}>{o}</option>)}</select></label>
       <label><span style={lbl}>מפלסים</span><select value={p.levels||"1"} onChange={e=>set("levels",e.target.value)} style={sel}>{["1","2","3","4"].map(o=><option key={o}>{o}</option>)}</select></label>
@@ -1853,7 +1863,7 @@ function PlaceEditor({place,onChange}){
     </div>}
     {p.type==="בניין משותף"&&<div style={{marginTop:10,maxWidth:160}}><label><span style={lbl}>קומות בבניין</span><select value={p.floors||""} onChange={e=>set("floors",e.target.value)} style={sel}><option value="">—</option>{Array.from({length:30},(_,i)=>String(i+1)).map(o=><option key={o}>{o}</option>)}</select></label></div>}
     <label style={{...lbl,marginTop:12}}>אזורים נוספים שטופלו</label>
-    <GridChoice items={[...PLACE_EXTRAS,...extras.filter(x=>!PLACE_EXTRAS.includes(x))]} isOn={x=>extras.includes(x)} onToggle={x=>set("extras",extras.includes(x)?extras.filter(y=>y!==x):[...extras,x])} onOther={x=>{ if(!extras.includes(x)) set("extras",[...extras,x]); }} otherLabel="אזור אחר" min={110} small/>
+    <GridChoice items={[...PLACE_EXTRAS,...extras.filter(x=>!PLACE_EXTRAS.includes(x))]} isOn={x=>extras.includes(x)} onToggle={x=>set("extras",extras.includes(x)?extras.filter(y=>y!==x):[...extras,x])} onOther={x=>{ if(!extras.includes(x)) set("extras",[...extras,x]); }} otherLabel="אזור אחר" min={110} small limit={4}/>
   </div>;
 }
 // ── כרטיס מתקפל ביומן הביצוע (נוח לטלפון): כותרת + סיכום, נפתח לעריכה וסוגר ב"סיום"
@@ -1955,6 +1965,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:v}}));};
   const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
   const [instrAdd,setInstrAdd]=useState("");
+  const [instrMore,setInstrMore]=useState(false);
+  const [payMore,setPayMore]=useState(false);
   const addDevice=type=>setF(x=>({...x,devices:x.devices.some(d=>d.type===type)?x.devices:[...x.devices,{type,qty:1,location:""}]}));
   const setDevice=(i,patch)=>setF(x=>({...x,devices:x.devices.map((d,j)=>j===i?{...d,...patch}:d)}));
   const [devOpen,setDevOpen]=useState(false);
@@ -1983,7 +1995,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const sec=(id,icon,title,summary,state,children)=><ExecSec key={id} flat={logMode==="flat"} id={id} icon={icon} title={title} summary={summary} state={state} open={openSec===id} onToggle={()=>setOpenSec(o=>o===id?null:id)} onNext={()=>goNext(id)}>{children}</ExecSec>;
   const placeSum=placeToScope(f.place).join(" · ");
   const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
-  return <div style={{color:"#0f172a",paddingBottom:8}}>
+  return <CompactCtx.Provider value={logMode==="flat"}><div style={{color:"#0f172a",paddingBottom:8}}>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן לפי שלבים"],["flat","📄 יומן רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
     </div>
@@ -2055,7 +2067,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{width:"100%",border:"1.5px dashed #93c5fd",background:"#fff",color:"#2563eb",borderRadius:10,padding:"9px 12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור רשימה":"+ הוסף מוצר"}</button>
       {devOpen&&<div style={{marginTop:10}}>{DEVICE_TYPES.map((g,gi)=><div key={g.g} style={{marginBottom:10}}>
         <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:5}}>{g.g}</div>
-        <GridChoice items={[...g.items,...(gi===DEVICE_TYPES.length-1?f.devices.map(d=>d.type).filter(t=>!DEVICE_TYPES.some(G=>G.items.includes(t))):[])]} isOn={it=>f.devices.some(d=>d.type===it)} onToggle={it=>f.devices.some(d=>d.type===it)?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} onOther={gi===DEVICE_TYPES.length-1?addDevice:null} otherLabel="מוצר אחר" min={128} small/>
+        <GridChoice items={[...g.items,...(gi===DEVICE_TYPES.length-1?f.devices.map(d=>d.type).filter(t=>!DEVICE_TYPES.some(G=>G.items.includes(t))):[])]} isOn={it=>f.devices.some(d=>d.type===it)} onToggle={it=>f.devices.some(d=>d.type===it)?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} onOther={gi===DEVICE_TYPES.length-1?addDevice:null} otherLabel="מוצר אחר" min={128} small limit={4}/>
       </div>)}</div>}
       {f.devices.map((d,i)=><div key={d.type} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:"10px",marginTop:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
@@ -2069,7 +2081,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           <button type="button" onClick={()=>set("devices",f.devices.filter((_,j)=>j!==i))} title="הסר" style={{border:"none",background:"none",color:"#64748b",fontSize:16,cursor:"pointer"}}>✕</button>
         </div>
         {(()=>{const cur=(d.location||"").split(", ").filter(Boolean); const spots=[...DEVICE_SPOTS,...cur.filter(x=>!DEVICE_SPOTS.includes(x))];
-          return <GridChoice items={spots} isOn={sp=>cur.includes(sp)} onToggle={sp=>setDevice(i,{location:(cur.includes(sp)?cur.filter(x=>x!==sp):[...cur,sp]).join(", ")})} onOther={sp=>{ if(!cur.includes(sp)) setDevice(i,{location:[...cur,sp].join(", ")}); }} otherLabel="מיקום אחר" min={100} small/>;})()}
+          return <GridChoice items={spots} isOn={sp=>cur.includes(sp)} onToggle={sp=>setDevice(i,{location:(cur.includes(sp)?cur.filter(x=>x!==sp):[...cur,sp]).join(", ")})} onOther={sp=>{ if(!cur.includes(sp)) setDevice(i,{location:[...cur,sp].join(", ")}); }} otherLabel="מיקום אחר" min={100} small limit={4}/>;})()}
       </div>)}
     </div>
 
@@ -2089,7 +2101,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     {sec("instr","📋","הנחיות ללקוח",f.instructions.length?f.instructions.length+" הנחיות":"",f.instructions.length?"ok":"opt",<>
     <div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
-        {[...new Set([...INSTR_BASE,...instrForPests(allPests),...f.instructions])].map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
+        {(()=>{const all=[...new Set([...instrForPests(allPests),...INSTR_BASE,...f.instructions])]; if(logMode!=="flat"||instrMore) return all; const rest=all.filter(t=>!f.instructions.includes(t)).slice(0,3); return all.filter(t=>f.instructions.includes(t)||rest.includes(t));})().map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
+        {logMode==="flat"&&<button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות"}</button>}
       </div>
       <div style={{display:"flex",gap:6,marginTop:8}}>
         <input value={instrAdd} onChange={e=>setInstrAdd(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&instrAdd.trim()){toggleInstr(instrAdd.trim());setInstrAdd("");}}} placeholder="הנחיה נוספת..." style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:10,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit"}}/>
@@ -2117,7 +2130,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>
       {f.paymentStatus==="paid"&&<div>
         <div style={{fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:5}}>איך שולם? *</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>{[...PAY_METHODS,"אחר"].map(m=>{const custom=!!f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod); const on=m==="אחר"?(custom||f.paymentMethod==="אחר"):f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",m==="אחר"?(on?"":"אחר"):(on?"":m))} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m==="אחר"&&custom?f.paymentMethod:m}</button>;})}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>{[...PAY_METHODS,"אחר"].filter((m,i)=>logMode!=="flat"||payMore||i<3||m===f.paymentMethod||(m==="אחר"&&f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod))).map(m=>{const custom=!!f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod); const on=m==="אחר"?(custom||f.paymentMethod==="אחר"):f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",m==="אחר"?(on?"":"אחר"):(on?"":m))} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m==="אחר"&&custom?f.paymentMethod:m}</button>;})}</div>
+        {logMode==="flat"&&!payMore&&<button type="button" onClick={()=>setPayMore(true)} style={{width:"100%",marginTop:-2,marginBottom:8,padding:"7px",borderRadius:8,border:"1.5px dashed #fecaca",background:"#fff",color:"#7f1d1d",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ עוד צורות תשלום (PayBox, אשראי, צ'ק, אחר)</button>}
         {f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod)&&<Inp label="צורת תשלום אחרת" value={f.paymentMethod==="אחר"?"":f.paymentMethod} onChange={v=>set("paymentMethod",v||"אחר")} placeholder="למשל: צ'ק דחוי ל-15/11, שני תשלומים..."/>}
         <div style={{maxWidth:240}}><Inp label="סכום שהתקבל בפועל (₪)" type="number" value={f.paymentAmount} onChange={v=>set("paymentAmount",v)}/></div>
         {f.agreedPrice&&f.paymentAmount&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)&&<div style={{fontSize:13,color:"#991b1b",fontWeight:700}}>נשארה יתרה של ₪{parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)} — תירשם כחוב</div>}
@@ -2175,7 +2189,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>; })()}
     {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* שדות חובה: שם לקוח, כתובת, מזיקים, חומרים</div>}
     </div>
-  </div>;
+  </div></CompactCtx.Provider>;
 }
 
 class ErrorBoundary extends React.Component{
