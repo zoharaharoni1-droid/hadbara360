@@ -1593,6 +1593,8 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
   const [customChem,setCustomChem]=useState("");
   const [customCat,setCustomCat]=useState("spray");
   const [showCustom,setShowCustom]=useState(false);
+  const [browse,setBrowse]=useState(selected.length===0);
+  const [openMat,setOpenMat]=useState(null);
   const TREAT_OPTIONS=["ריסוס","ג'ל","תחנת האכלה","פיזור גרגירים","אבקה","ערפול","השמדת קן","אחר"];
   const byName=React.useMemo(()=>{const m={}; reg.forEach(r=>{m[r[0]]=r;}); return m;},[reg]);
   const legacy=name=>CHEMICALS.find(c=>c.name===name)||{};
@@ -1600,6 +1602,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
   const add=(name,custom,ccat)=>{
     const mem=memory[name]||{}; const inf=infoOf(name); const c=ccat||mem.cat||inf.cat||"spray";
     const method=mem.method||treatMethod[name]||CAT_METHOD[c]||"ריסוס";
+    setOpenMat(name); setBrowse(false);
     onChange([...selected,{name,batch:mem.batch||"",method:TREAT_OPTIONS.includes(method)?method:"ריסוס",active:inf.active||mem.active||"",reg:inf.reg||mem.reg||"",maker:inf.maker||mem.maker||"",cat:c,dose:pickDose(name,pests,memory),areas:[],stations:"",custom:!!custom}]);
     chemMemSave(name,{cat:c,reg:inf.reg||mem.reg||"",maker:inf.maker||mem.maker||""});
   };
@@ -1622,6 +1625,8 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
     return rows;
   },[qq,cat,reg,mine,memory]);
   return <div>
+    {!browse&&<button type="button" onClick={()=>setBrowse(true)} style={{width:"100%",border:"1.5px dashed #93c5fd",background:"#fff",color:"#2563eb",borderRadius:10,padding:"9px 12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:selected.length?10:0}}>+ הוסף חומר</button>}
+    {browse&&<div style={{marginBottom:10}}>
     <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:8}}>
       {REG_CATS.map(([k,l])=><button key={k} type="button" onClick={()=>{setCat(k);setQ("");}} style={{...chip(!qq&&cat===k),flexShrink:0,borderRadius:8}}>{l}{k==="mine"&&mine.length?` (${mine.length})`:""}</button>)}
     </div>
@@ -1646,14 +1651,25 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
       <div style={{flex:"1 1 120px"}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>קטגוריה</label><select value={customCat} onChange={e=>setCustomCat(e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",marginBottom:12}}>{REG_CATS.filter(([k])=>!["mine","all"].includes(k)).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></div>
       <Btn sm onClick={addCustom}>+ הוסף</Btn>
     </div>}
+      {selected.length>0&&<button type="button" onClick={()=>setBrowse(false)} style={{width:"100%",marginTop:8,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#475569",borderRadius:10,padding:"8px",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>סגור רשימת חומרים</button>}
+    </div>}
     {selected.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12}}>
       {selected.map((m,i)=>{
         const areas=APPLY_AREAS[m.method]||DEFAULT_AREAS;
         const extra=(m.areas||[]).filter(a=>!areas.includes(a));
-        return <div key={m.name+i} style={{background:"#f8fafc",borderRadius:12,padding:"12px",border:"1px solid "+CLR.border}}>
+        const isOpen=openMat===m.name;
+        const needDose=m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim();
+        if(!isOpen) return <div key={m.name+i} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",borderRadius:12,padding:"10px 12px",border:"1px solid "+(needDose?"#fca5a5":CLR.border)}}>
+          <button type="button" onClick={()=>setOpenMat(m.name)} style={{flex:1,minWidth:0,background:"none",border:"none",textAlign:"right",cursor:"pointer",fontFamily:"inherit",padding:0}}>
+            <span style={{display:"block",fontWeight:800,fontSize:14,color:"#0f172a"}}>🧪 {m.name} <span style={{fontWeight:500,fontSize:12,color:CLR.muted}}>· {m.method||"ריסוס"}{m.stations?" · "+m.stations+" תחנות":""}</span></span>
+            <span style={{display:"block",fontSize:12,color:needDose?"#b91c1c":"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{needDose?"חסר מינון — לחץ למילוי":(m.dose||"")}{(m.areas||[]).length?" · "+m.areas.join(", "):""}</span>
+          </button>
+          <button type="button" onClick={()=>setOpenMat(m.name)} style={{border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 10px",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>ערוך</button>
+        </div>;
+        return <div key={m.name+i} style={{background:"#f8fafc",borderRadius:12,padding:"12px",border:"1.5px solid #93c5fd"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <span style={{fontWeight:800,fontSize:14,color:CLR.primary}}>🧪 {m.name}{m.reg?<span style={{fontWeight:400,fontSize:12,color:CLR.muted}}> · רישום {m.reg}</span>:null}</span>
-            <button type="button" onClick={()=>onChange(selected.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:18}}>✕</button>
+            <button type="button" onClick={()=>onChange(selected.filter((_,j)=>j!==i))} title="הסר חומר" style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:18}}>✕</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:8}}>
             <Inp label="הרכב / חומר פעיל *" value={m.active||""} onChange={v=>updateField(m.name,"active",v)} placeholder="למשל: Deltamethrin 2.5%"/>
@@ -1687,6 +1703,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
           </div>}
           <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
           <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small/>
+          <button type="button" onClick={()=>setOpenMat(null)} style={{width:"100%",marginTop:10,padding:"9px",borderRadius:10,border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ סגור חומר</button>
         </div>;
       })}
     </div>}
@@ -1715,6 +1732,62 @@ function PestPickerDk({selected,onChange}){
   </div>;
 }
 
+// ── המקום המטופל: שדות נפרדים שהמדביר יכול לשנות (סוג, חדרים, מפלסים, קומה, אזורים נוספים)
+const PLACE_TYPES=["דירה","בית פרטי","בניין משותף","עסק","מחסן","משרד","מסעדה","גן ילדים"];
+const PLACE_EXTRAS=["חצר / גינה","מרפסת","בורות ביוב","חדר מדרגות","מקלט","גג","מחסן","חניון","חדר אשפה"];
+function placeFromProperty(p){ p=p||{}; const extras=[];
+  if(p.hasYard) extras.push("חצר / גינה");
+  (p.buildingAreas||[]).forEach(a=>{ if(!extras.includes(a)) extras.push(a); });
+  if(p.sewers&&p.propertyType==="בניין משותף") extras.push("בורות ביוב");
+  return {type:p.propertyType||"",rooms:p.rooms?String(p.rooms):"",levels:p.levels?String(p.levels):"1",floor:p.floor||"",floors:p.floors||"",extras}; }
+function placeToScope(pl){ if(!pl) return []; const out=[]; const t=pl.type||"";
+  const unit=t==="דירה"||t==="בית פרטי";
+  if(t){ let main=unit?((t==="דירה"?"דירת ":"בית ")+(pl.rooms?pl.rooms+" חד'":"")).trim():t;
+    if(t==="בניין משותף"&&pl.floors) main+=" · "+pl.floors+" קומות";
+    if(unit&&parseInt(pl.levels)>1) main+=" · "+pl.levels+" מפלסים";
+    if(unit&&pl.floor) main+=" · "+(pl.floor==="קרקע"?"קומת קרקע":"קומה "+pl.floor);
+    out.push(main); }
+  (pl.extras||[]).forEach(x=>out.push(x)); return out; }
+function PlaceEditor({place,onChange}){
+  const p=place||{}; const set=(k,v)=>onChange({...p,[k]:v}); const unit=p.type==="דירה"||p.type==="בית פרטי";
+  const sel={width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,fontFamily:"inherit",background:"#fff"};
+  const lbl={display:"block",fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:3};
+  const extras=p.extras||[];
+  return <div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מולא מההזמנה — אפשר לשנות לפי מה שבוצע בפועל. הנקודות עצמן (פנלים, ניקוזים...) נרשמות בכל חומר ב"אזורי יישום".</div>
+    <label style={lbl}>סוג המקום</label>
+    <GridChoice items={[...PLACE_TYPES,...(p.type&&!PLACE_TYPES.includes(p.type)?[p.type]:[])]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small/>
+    {unit&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:10}}>
+      <label><span style={lbl}>חדרים</span><select value={p.rooms||""} onChange={e=>set("rooms",e.target.value)} style={sel}><option value="">—</option>{["1","1.5","2","2.5","3","3.5","4","4.5","5","5.5","6","7","8","9","10"].map(o=><option key={o}>{o}</option>)}</select></label>
+      <label><span style={lbl}>מפלסים</span><select value={p.levels||"1"} onChange={e=>set("levels",e.target.value)} style={sel}>{["1","2","3","4"].map(o=><option key={o}>{o}</option>)}</select></label>
+      <label><span style={lbl}>קומה</span><select value={p.floor||""} onChange={e=>set("floor",e.target.value)} style={sel}><option value="">—</option>{["מרתף","קרקע","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20"].map(o=><option key={o}>{o}</option>)}</select></label>
+    </div>}
+    {p.type==="בניין משותף"&&<div style={{marginTop:10,maxWidth:160}}><label><span style={lbl}>קומות בבניין</span><select value={p.floors||""} onChange={e=>set("floors",e.target.value)} style={sel}><option value="">—</option>{Array.from({length:30},(_,i)=>String(i+1)).map(o=><option key={o}>{o}</option>)}</select></label></div>}
+    <label style={{...lbl,marginTop:12}}>אזורים נוספים שטופלו</label>
+    <GridChoice items={[...PLACE_EXTRAS,...extras.filter(x=>!PLACE_EXTRAS.includes(x))]} isOn={x=>extras.includes(x)} onToggle={x=>set("extras",extras.includes(x)?extras.filter(y=>y!==x):[...extras,x])} onOther={x=>{ if(!extras.includes(x)) set("extras",[...extras,x]); }} otherLabel="אזור אחר" min={110} small/>
+  </div>;
+}
+// ── כרטיס מתקפל ביומן הביצוע (נוח לטלפון): כותרת + סיכום, נפתח לעריכה וסוגר ב"סיום"
+function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children}){
+  const badge=state==="ok"?<span style={{width:22,height:22,borderRadius:"50%",background:"#16a34a",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✓</span>
+    :state==="req"?<span style={{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:20,padding:"2px 8px",flexShrink:0}}>חובה</span>
+    :<span style={{width:22,height:22,borderRadius:"50%",border:"1.5px solid #cbd5e1",flexShrink:0}}/>;
+  return <div id={"sec-"+id} style={{background:"#fff",border:"1.5px solid "+(open?"#93c5fd":"#e2e8f0"),borderRadius:14,marginBottom:10,overflow:"hidden",boxShadow:open?"0 2px 10px rgba(37,99,235,0.08)":"none",scrollMarginTop:70}}>
+    <button type="button" onClick={onToggle} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:open?"#f8fbff":"#fff",border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+      <span style={{fontSize:20,flexShrink:0}}>{icon}</span>
+      <span style={{flex:1,minWidth:0}}>
+        <span style={{display:"block",fontWeight:800,fontSize:15,color:"#0f172a"}}>{title}</span>
+        {!open&&<span style={{display:"block",fontSize:13,color:summary?"#475569":"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary||"לא מולא — לחץ להוספה"}</span>}
+      </span>
+      {badge}
+      <span style={{color:"#94a3b8",fontSize:14,flexShrink:0,transform:open?"rotate(180deg)":"none",transition:"transform .2s"}}>▼</span>
+    </button>
+    {open&&<div style={{padding:"4px 14px 14px",borderTop:"1px solid #eef2f7"}}>
+      <div style={{paddingTop:10}}>{children}</div>
+      <button type="button" onClick={onNext} style={{width:"100%",marginTop:12,padding:"11px",borderRadius:10,border:"none",background:"#2563eb",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ סיום — לשלב הבא</button>
+    </div>}
+  </div>;
+}
 function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[],maintenance=[]}){
   const chemMem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
   // Auto-detect worker from appointment
@@ -1746,9 +1819,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
     workerLicenseType: initialData?.workerLicenseType || defaultWorker.licenseType || defaultWorker.license || "",
     extraWorkers:  initialData?.extraWorkers  || [],
+    place:         initialData?.place || (initialData?.scope&&!initialData?.place ? {type:"",rooms:"",levels:"1",floor:"",extras:initialData.scope} : placeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","levels","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))})),
     scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))}),
   });
   const [scopeAdd,setScopeAdd]=useState("");
+  const [openSec,setOpenSec]=useState(()=>{ const c=initialData?.clientName||prefillAppt?.customerName; const a=initialData?.address||prefillAppt?.address; return c&&a?((initialData?.pest||prefillAppt?.pestType)?"chem":"pests"):"client"; });
   // חוזה אחזקה של המקום (לבדיקת תחנות האכלה)
   const contract=(maintenance||[]).find(m=>!m.deleted&&(String(m.id)===String(initialData?.maintenanceId??prefillAppt?.maintenanceId)))
     || (maintenance||[]).find(m=>!m.deleted&&m.status==="פעיל"&&(m.stations||[]).length&&String(m.customerName||"").trim()===String(f.clientName||"").trim());
@@ -1800,8 +1875,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const PEST_LEVELS=["קלה","בינונית","גבוהה","חמורה"];
   const LICENSE_TYPES=["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי"];
 
-  return <div style={{color:"#0f172a"}}>
-
+  const SEC_ORDER=["client","place","pests","chem",...(stations.length?["stations"]:[]),"devices","reentry","instr","notes","pay","worker"];
+  const goNext=id=>{const i=SEC_ORDER.indexOf(id); const nx=SEC_ORDER[i+1]||null; setOpenSec(nx); setTimeout(()=>{try{const el=document.getElementById("sec-"+(nx||id)); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},80);};
+  const sec=(id,icon,title,summary,state,children)=><ExecSec key={id} id={id} icon={icon} title={title} summary={summary} state={state} open={openSec===id} onToggle={()=>setOpenSec(o=>o===id?null:id)} onNext={()=>goNext(id)}>{children}</ExecSec>;
+  const placeSum=placeToScope(f.place).join(" · ");
+  const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
+  return <div style={{color:"#0f172a",paddingBottom:8}}>
+    {sec("client","👤","לקוח",[f.clientName,f.address].filter(Boolean).join(" · "),f.clientName&&f.address?"ok":"req",<>
     {/* בחירת לקוח קיים — ממלא שם, כתובת, טלפון וסוג מבנה */}
     {customers.length>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:8}}>👤 לקוח קיים? בחר ונמלא את הפרטים</div>
@@ -1819,7 +1899,18 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:14}}><Inp label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/><Inp label="טלפון לקוח (לשליחה)" value={f.phone} onChange={v=>set("phone",v)}/></div>
 
-    {/* רמת נגיעות */}
+    </>)}
+    {sec("place","🏠","המקום המטופל",placeSum,placeSum?"ok":"opt",<PlaceEditor place={f.place} onChange={v=>set("place",v)}/>)}
+    {sec("pests","🐛","מזיקים ורמת נגיעות",[allPests.join(", "),f.pestLevel?"נגיעות "+f.pestLevel:""].filter(Boolean).join(" · "),allPests.length?"ok":"req",<>
+    <div style={{marginBottom:14}}>
+      <PestPickerDk selected={f.pest} onChange={v=>set("pest",v)}/>
+      <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center"}}>
+        <input value={f.customPest} onChange={e=>set("customPest",e.target.value)} placeholder="מזיק אחר (הקלד בחופשי)..."
+          style={{flex:1,padding:"7px 10px",borderRadius:8,border:"1.5px solid "+CLR.border,fontSize:13,fontFamily:"inherit"}}/>
+        {f.customPest&&<span style={{background:CLR.primaryLight,color:CLR.primary,padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>✓ {f.customPest}</span>}
+      </div>
+    </div>
+
     <div style={{marginBottom:14}}>
       <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>רמת נגיעות</label>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,maxWidth:420}}>
@@ -1832,37 +1923,16 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>
     </div>
 
-    {/* המקום המטופל (מהזמנת העבודה) — הטיפולים עצמם נרשמים כ"אזורי יישום" בכל חומר */}
-    <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:14,color:"#075985",marginBottom:2}}>🏠 המקום המטופל</div>
-      <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מהזמנת העבודה. את הנקודות עצמן (פנלים, ניקוזים, צירים...) מסמנים למטה ב"אזורי יישום" של כל חומר</div>
-      {f.scope.length>0&&<div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:8}}>
-        {f.scope.map((x,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:"#fff",border:"1px solid #bae6fd",borderRadius:8,padding:"7px 10px",fontSize:14,fontWeight:600,color:"#0c4a6e"}}>
-          <span>{x}</span><button type="button" onClick={()=>set("scope",f.scope.filter((_,j)=>j!==i))} title="הסר" style={{border:"none",background:"none",color:"#64748b",cursor:"pointer",fontSize:16}}>✕</button></div>)}
-      </div>}
-      <GridChoice items={["דירה","בית פרטי","חצר / גינה","בורות ביוב","חדר מדרגות","גג","מחסן","עסק"].filter(x=>!f.scope.some(y=>y.startsWith(x)))} isOn={()=>false} onToggle={x=>set("scope",[...f.scope,x])} onOther={x=>set("scope",[...f.scope,x])} otherLabel="מקום אחר" min={104} small/>
-    </div>
-
-    {/* Pests */}
+    </>)}
+    {sec("chem","🧪","חומרי הדברה",f.materials.map(m=>m.name).join(", "),f.materials.length?"ok":"req",<>
     <div style={{marginBottom:14}}>
-      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>מזיקים *</label>
-      <PestPickerDk selected={f.pest} onChange={v=>set("pest",v)}/>
-      <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center"}}>
-        <input value={f.customPest} onChange={e=>set("customPest",e.target.value)} placeholder="מזיק אחר (הקלד בחופשי)..."
-          style={{flex:1,padding:"7px 10px",borderRadius:8,border:"1.5px solid "+CLR.border,fontSize:13,fontFamily:"inherit"}}/>
-        {f.customPest&&<span style={{background:CLR.primaryLight,color:CLR.primary,padding:"4px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>✓ {f.customPest}</span>}
-      </div>
-    </div>
-
-    {/* Chemicals */}
-    <div style={{marginBottom:14}}>
-      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>חומרי הדברה *</label>
       <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)} pests={allPests}/>
     </div>
 
-    {stations.length>0&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+    </>)}
+    {stations.length>0&&sec("stations","🪤","בדיקת תחנות האכלה",checks.filter(c=>c.activity).length+" מתוך "+stations.length+" נבדקו",checks.filter(c=>c.activity).length?"ok":"opt",<>
+    <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8,flexWrap:"wrap"}}>
-        <div style={{fontWeight:800,fontSize:14,color:"#075985"}}>🪤 בדיקת תחנות האכלה ({stations.length})</div>
         <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false})))} style={{border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
       </div>
       {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
@@ -1872,13 +1942,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,marginRight:"auto",cursor:"pointer"}}><input type="checkbox" checked={!!c.baitReplaced} onChange={e=>setChk(st.num,{baitReplaced:e.target.checked})}/> הוחלף פיתיון</label>
         </div>
       </div>;})}
-    </div>}
-    {/* מוצרי הדברה — מלכודות, תחנות ניטור, אמצעי מניעה */}
-    <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-        <div style={{fontWeight:800,fontSize:14,color:"#0f172a"}}>🪤 מוצרי הדברה <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(מלכודות, ניטור, מניעה)</span></div>
-        <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור":"+ הוסף"}</button>
-      </div>
+    </div>
+    </>)}
+    {sec("devices","🪤","מוצרי הדברה",f.devices.map(d=>d.type+((parseInt(d.qty)||1)>1?" ×"+d.qty:"")).join(", "),f.devices.length?"ok":"opt",<>
+    <div>
+      <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{width:"100%",border:"1.5px dashed #93c5fd",background:"#fff",color:"#2563eb",borderRadius:10,padding:"9px 12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור רשימה":"+ הוסף מוצר"}</button>
       {devOpen&&<div style={{marginTop:10}}>{DEVICE_TYPES.map((g,gi)=><div key={g.g} style={{marginBottom:10}}>
         <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:5}}>{g.g}</div>
         <GridChoice items={[...g.items,...(gi===DEVICE_TYPES.length-1?f.devices.map(d=>d.type).filter(t=>!DEVICE_TYPES.some(G=>G.items.includes(t))):[])]} isOn={it=>f.devices.some(d=>d.type===it)} onToggle={it=>f.devices.some(d=>d.type===it)?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} onOther={gi===DEVICE_TYPES.length-1?addDevice:null} otherLabel="מוצר אחר" min={128} small/>
@@ -1899,9 +1967,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>)}
     </div>
 
-    {/* זמן מחוץ למקום המטופל */}
-    <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:"10px 14px",marginBottom:14}}>
-      <div style={{fontWeight:800,fontSize:14,color:"#0f172a",marginBottom:6}}>⏱️ זמן מחוץ למקום <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(נזכר לפי החומר)</span></div>
+    </>)}
+    {sec("reentry","⏱️","זמן מחוץ למקום",reSum,reSum?"ok":"opt",<>
+    <div>
       {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"4px 0"}}>
         <span style={{fontSize:13,color:"#334155",fontWeight:600}}>{g.l}</span>
         <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{flexShrink:0,width:112,padding:"5px 8px",borderRadius:8,border:"1.5px solid "+(f.reentry[g.k]?"#2563eb":"#e2e8f0"),background:"#fff",fontSize:13,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
@@ -1911,9 +1979,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>)}
     </div>
 
-    {/* הנחיות ללקוח */}
-    <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{fontWeight:800,fontSize:14,color:"#166534",marginBottom:8}}>📋 הנחיות ללקוח</div>
+    </>)}
+    {sec("instr","📋","הנחיות ללקוח",f.instructions.length?f.instructions.length+" הנחיות":"",f.instructions.length?"ok":"opt",<>
+    <div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
         {[...new Set([...INSTR_BASE,...instrForPests(allPests),...f.instructions])].map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
       </div>
@@ -1923,6 +1991,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>
     </div>
 
+    </>)}
+    {sec("notes","📝","הערות ואחריות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):"",f.warranty?"אחריות "+f.warranty+" חו׳":""].filter(Boolean).join(" · "),f.notes||f.warranty?"ok":"opt",<>
     <div style={{marginBottom:14}}>
       <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>📝 הערות / תיאור הטיפול</label>
       <textarea value={f.notes} onChange={e=>set("notes",e.target.value)} rows={5} placeholder="למשל: ביצעתי ריסוס בפנלים כנגד תיקנים ונמלים, הונח ג'ל במטבח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical",minHeight:120}}/>
@@ -1930,9 +2000,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     <div style={{marginBottom:14,maxWidth:220}}><Inp label="אחריות (חודשים)" type="number" value={f.warranty} onChange={v=>set("warranty",v)} placeholder=""/></div>
 
-    {/* Payment */}
-    <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-      <div style={{fontWeight:600,fontSize:13,color:CLR.danger,marginBottom:8}}>💳 סטטוס תשלום <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(פנימי — הלקוח לא רואה)</span></div>
+    </>)}
+    {sec("pay","💳","תשלום (פנימי)",f.paymentDone?["שולם",f.paymentMethod,f.paymentAmount?"₪"+f.paymentAmount:""].filter(Boolean).join(" · "):"לא שולם"+(f.paymentNote?" — "+f.paymentNote:""),f.paymentDone&&!f.paymentMethod?"req":"ok",<>
+    <div>
       <label style={{display:"flex",alignItems:"center",gap:8,fontSize:15,cursor:"pointer",marginBottom:8}}>
         <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)} style={{width:20,height:20}}/>
         <span style={{color:"#0f172a",fontWeight:600}}>תשלום התקבל בשטח</span>
@@ -1944,16 +2014,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>}
       {!f.paymentDone&&<Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="ישלם בהעברה..."/>}
     </div>
-
-    {/* Safety instructions */}
-    {safety&&<div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
-      <div style={{fontWeight:700,color:"#92400e",fontSize:13,marginBottom:6}}>⚠️ הנחיות בטיחות ללקוח</div>
-      <pre style={{margin:0,fontSize:12,fontFamily:"inherit",whiteSpace:"pre-wrap",lineHeight:1.8,color:"#78350f"}}>{safety}</pre>
-    </div>}
-
-    {/* פרטי מדביר — בסוף */}
-    <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:13,color:CLR.primary,marginBottom:10}}>👷 פרטי מדביר</div>
+    </>)}
+    {sec("worker","👷","מדביר",[f.workerName,f.workerLicense?"רישיון "+f.workerLicense:""].filter(Boolean).join(" · "),f.workerName?"ok":"req",<>
+    <div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div>
           <label style={{fontSize:11,color:CLR.muted,display:"block",marginBottom:4,fontWeight:600}}>שם מדביר *</label>
@@ -1987,14 +2050,15 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       ))}
       <button onClick={addExtraWorker} style={{marginTop:10,background:"none",border:"1px dashed #86efac",borderRadius:8,padding:"6px 14px",fontSize:12,color:CLR.primary,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>+ הוסף מדביר נוסף</button>
     </div>
-
-
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(f.paymentDone&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    </>)}
+    <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(f.paymentDone&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
       </div>; })()}
     {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* שדות חובה: שם לקוח, כתובת, מזיקים, חומרים</div>}
+    </div>
   </div>;
 }
 
@@ -2116,7 +2180,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[]};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -3307,7 +3371,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[]};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -3828,7 +3892,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const [f,setF]=useState({
     name:"",phone:"",email:"",
     city:"",street:"",buildingNum:"",aptNum:"",entrance:"",
-    propertyType:"דירה",rooms:"3",floors:"",sewers:"",hasYard:false,floor:"קרקע",
+    propertyType:"דירה",rooms:"3",levels:"1",floors:"",sewers:"",hasYard:false,floor:"קרקע",
     parking:null, elevator:null,
     status:"פעיל",notes:"",
     pests:[],customPest:"",price:"",source:"",
@@ -3895,7 +3959,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       name:f.name,phone:f.phone,email:f.email,
       address:addr||f.city||"—",
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,
-      propertyType:f.propertyType,rooms:isShared?"":f.rooms,floors:f.floors,sewers:f.sewers,
+      propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
       floor:f.floor,hasYard:f.hasYard,buildingAreas:f.buildingAreas,
       status:f.status,notes:f.notes,
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
@@ -3913,7 +3977,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         pestType:pestLabel(),pests:allPests(),
         price:parseInt(f.price)||0,address:addr,notes:f.notes,
         buildingAreas:f.buildingAreas,
-        propertyType:f.propertyType,rooms:isShared?"":f.rooms,floor:f.floor,floors:f.floors,hasYard:f.hasYard,sewers:f.sewers,
+        propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floor:f.floor,floors:f.floors,hasYard:f.hasYard,sewers:f.sewers,
         status:"ממתין",executionLog:null,
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
@@ -3977,7 +4041,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <Sel label="סוג נכס" value={f.propertyType} onChange={v=>set("propertyType",v)} options={PROPERTY_TYPES}/>
       {isUnit&&<G2>
         <Sel label="מספר חדרים" value={f.rooms} onChange={v=>set("rooms",v)} options={ROOMS_OPTIONS}/>
-        <div/>
+        <Sel label="מפלסים" value={f.levels||"1"} onChange={v=>set("levels",v)} options={["1","2","3","4"]}/>
       </G2>}
       {isShared&&<>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
