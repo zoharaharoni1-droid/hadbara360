@@ -589,6 +589,51 @@ const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
 const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["דבורים","צרעות"]:[p]);
 // Serial numbers for execution logs: plain integers starting at 1001
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
+// ── מוצרי הדברה (לא כימיים): מלכודות, תחנות ניטור ואמצעי מניעה
+const DEVICE_TYPES = [
+  {g:"מכרסמים",items:["מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
+  {g:"חרקים",items:["תחנת ניטור לתיקנים","מלכודת פרומונים לעש מזון","מלכודת פרומונים לעש בגדים","מלכודת אור UV לזבובים","החלפת משטח דבק במלכודת אור","מלכודת זבובים (פיתיון)","מלכודת יתושים","מלכודת דבק לנחשים / עקרבים"]},
+  {g:"מניעה",items:["אטימת פתחים (צמר פלדה / קצף)","דוקרנים נגד יונים","רשת נגד יונים"]},
+];
+const DEVICE_SPOTS = ["מטבח","מתחת לכיור","ארונות","חדר שירות","מחסן","חצר","מרפסת","חדר אשפה","מקלט"];
+// ── זמני שהייה מחוץ למקום המטופל
+const REENTRY_GROUPS = [{k:"adults",l:"מבוגרים"},{k:"kids",l:"ילדים ותינוקות"},{k:"pregnant",l:"נשים בהריון"},{k:"pets",l:"כלבים וחתולים"},{k:"birds",l:"ציפורים ודגים"}];
+const REENTRY_OPTS = ["0.5","1","2","3","4","6","8","12","24"];
+const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
+const REENTRY_LABEL_ADULTS = {"דלתא סופר":"1","טמפריד":"1","דינופליי":"1"};
+const reentryLines = r => REENTRY_GROUPS.filter(g=>r&&r[g.k]).map(g=>g.l+": "+hrsLabel(r[g.k]));
+// ── הנחיות ללקוח — כפתורים מוכנים
+const INSTR_BASE = [
+  "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
+  "אם תינוק או בעל חיים נכנס לפני שעברו 24 שעות — יש לשטוף את הרצפה לפני כניסתו",
+  "לאוורר היטב את המקום לפני הכניסה",
+  "לנגב משטחי מטבח ושולחנות אוכל לפני שימוש",
+  "לא לרסס חומרים ביתיים על האזורים המטופלים",
+  "ייתכן שיראו יותר חרקים בימים הראשונים — זה סימן שהטיפול עובד",
+  "לא להזיז ולא לגעת במלכודות ובתחנות",
+  "להרחיק ילדים וחיות מחמד מהמלכודות והתחנות",
+];
+const INSTR_BY_PEST = [
+  {m:["פרעוש"],t:["לשאוב אבק כל יום במשך שבועיים ולזרוק את שקית השואב מחוץ לבית","לטפל בחיות המחמד נגד פרעושים אצל וטרינר"]},
+  {m:["פשפש"],t:["לכבס מצעים ובגדים ב־60 מעלות לפחות","לא לישון על המיטה המטופלת 24 שעות"]},
+  {m:["תיקן","ג'וק","ג׳וק"],t:["לא לנקות את נקודות הג'ל","לא להשאיר מזון ומים זמינים בלילה"]},
+  {m:["נמל"],t:["לא לרסס חומרים אחרים על שבילי הנמלים"]},
+  {m:["עכבר","חולד","מכרסם"],t:["לדווח לנו על פגרים או ריח","לא להשאיר מזון פתוח"]},
+  {m:["יתוש"],t:["לרוקן מים עומדים בחצר, בעציצים ובמרזבים"]},
+  {m:["זבוב"],t:["לסגור פחי אשפה ולפנות אשפה באופן קבוע"]},
+  {m:["צרע","דבור"],t:["לא להתקרב לאזור הקן 24 שעות"]},
+];
+const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
+const PAY_METHODS = ["מזומן","ביט","PayBox","העברה בנקאית","אשראי","צ'ק"];
+// ניחוש זמני שהייה והנחיות מיומנים קודמים של אותו מדביר עם אותם חומרים (ואותם מזיקים אם יש)
+const suggestFromHistory = (logs, workerName, matNames, pests) => {
+  const key=a=>[...a].sort().join("|"); const mk=key(matNames); if(!matNames.length) return null;
+  const mine=(logs||[]).filter(l=>!l.deleted&&(!workerName||l.workerName===workerName)&&(l.reentry||(l.instructions||[]).length)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||(b.id||0)-(a.id||0));
+  const names=l=>(l.materials||[]).map(m=>m.name);
+  const sameMats=mine.filter(l=>key(names(l))===mk);
+  const P=new Set(pests||[]);
+  return sameMats.find(l=>(l.pest||[]).some(p=>P.has(p))) || sameMats[0] || mine.find(l=>names(l).some(n=>matNames.includes(n))&&(l.pest||[]).some(p=>P.has(p))) || null;
+};
 const PEST_TYPES_LOG = ["תיקן אמריקאי","תיקן גרמני","נמלים","עכברים","חולדות","מכרסמים","פרעושים","יתושים","זבובים","דבורים","צרעות","חרקי מזון"];
 const FOOD_PESTS = ["חדקונית האורז","חדקונית החיטה","אורזית","עש הקמח ההודי","עש הקמח הים-תיכוני","חיפושית הטבק","חיפושית התרופות","חיפושית קמח (קמחית)","מסורית הדגנים"];
 // היקף הטיפול — נגזר מהזמנת העבודה (סוג נכס, חדרים, קומה, חצר, אזורים משותפים)
@@ -1069,7 +1114,7 @@ function execLogHtml({company,docNum,log,chemicals}){
       <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔬 פרטי הטיפול</div>
       ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>היקף הטיפול:</b> ${log.scope.join(" · ")}</div>`:""}
       <div style="font-size:13px;"><b>מזיקים:</b> ${(log.pest||[]).join(", ")} ${log.pestLevel?" · נגיעות "+log.pestLevel:""} ${log.warranty?" · אחריות "+log.warranty+" חו'":""}</div>
-      ${log.extermination_notes?`<div style="font-size:13px;margin-top:4px;"><b>תיאור / הנחיות:</b> ${log.extermination_notes}</div>`:""}
+      ${log.extermination_notes?`<div style="font-size:13px;margin-top:4px;"><b>הנחיות:</b> ${log.extermination_notes}</div>`:""}
     </div>
     <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🧪 חומרי הדברה בשימוש</div>
     <table style="font-size:12px;margin-bottom:14px;">
@@ -1082,10 +1127,19 @@ function execLogHtml({company,docNum,log,chemicals}){
     ${(log.stationChecks||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 בדיקת תחנות האכלה</div>
     <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">תחנה</th><th style="padding:6px 10px;text-align:right;">ממצא</th><th style="padding:6px 10px;text-align:right;">פיתיון</th></tr></thead>
     <tbody>${log.stationChecks.map((c,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${c.num}</td><td style="padding:6px 10px;">${c.activity||"—"}</td><td style="padding:6px 10px;">${c.baitReplaced?"הוחלף":"—"}</td></tr>`).join("")}</tbody></table>`:""}
+    ${(log.devices||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 מוצרי הדברה</div>
+    <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">מוצר</th><th style="padding:6px 10px;text-align:right;">כמות</th><th style="padding:6px 10px;text-align:right;">מיקום</th></tr></thead>
+    <tbody>${log.devices.map((d,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${d.type}</td><td style="padding:6px 10px;">${d.qty||1}</td><td style="padding:6px 10px;">${d.location||"—"}</td></tr>`).join("")}</tbody></table>`:""}
+    ${reentryLines(log.reentry).length?`<div style="border:2px solid #f97316;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#fff7ed;">
+      <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${REENTRY_GROUPS.filter(g=>log.reentry[g.k]).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
+    ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
+      <ul style="margin:0;padding-right:18px;font-size:13px;line-height:1.8;">${log.instructions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
     ${log.safetyText?`<div style="border:2px solid #ef4444;border-radius:8px;padding:12px 14px;margin-bottom:14px;background:#fff5f5;">
       <div style="font-weight:700;color:#dc2626;font-size:13px;margin-bottom:6px;">⚠️ הנחיות בטיחות לדייר</div>
       <pre style="font-family:Arial;font-size:13px;white-space:pre-wrap;line-height:1.8;">${log.safetyText}</pre></div>`:""}
-    ${log.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;"><b>הערות:</b> ${log.notes}</div>`:""}
+    ${log.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;white-space:pre-wrap;"><b>הערות:</b> ${log.notes}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:20px;margin-top:16px;">
       <div><div style="font-size:13px;color:#555;margin-bottom:28px;">חתימת מדביר:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${log.workerDocName||log.workerName}${log.workerLicense?" · רישיון "+log.workerLicense:""}</div></div>
       <div><div style="font-size:13px;color:#555;margin-bottom:28px;">חתימת לקוח:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${log.clientName}</div></div>
@@ -1114,7 +1168,11 @@ function execLogWAText(log){
     mats?"🧪 חומרים:"+mats:"",
     log.warranty?"🛡️ אחריות: "+log.warranty:"",
     log.workerName?"👷 מדביר: "+(log.workerDocName||log.workerName)+(log.workerLicense?" (רישיון "+log.workerLicense+")":""):"",
+    (log.devices||[]).length?"🪤 מוצרי הדברה:"+log.devices.map(d=>"\n  • "+d.type+" × "+(d.qty||1)+(d.location?" — "+d.location:"")).join(""):"",
+    reentryLines(log.reentry).length?"\n⏱️ *זמן מחוץ למקום אחרי הטיפול:*\n"+reentryLines(log.reentry).map(x=>"  • "+x).join("\n"):"",
+    (log.instructions||[]).length?"\n📋 *הנחיות:*\n"+log.instructions.map(x=>"  • "+x).join("\n"):"",
     log.extermination_notes?"\n📝 הנחיות: "+log.extermination_notes:"",
+    log.notes?"\n📝 "+log.notes:"",
     log.docNum?"\nמס׳ יומן: "+log.docNum:"",
     "","תודה שבחרתם בנו 🦟"].filter(x=>x!=="").join("\n");
 }
@@ -1657,6 +1715,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     notes:         initialData?.notes         || prefillAppt?.notes || "",
     paymentDone:   initialData?.paymentDone   ?? true,
     paymentNote:   initialData?.paymentNote   || "",
+    paymentMethod: initialData?.paymentMethod || "",
+    paymentAmount: initialData?.paymentAmount ?? (prefillAppt?.price||""),
+    devices:       initialData?.devices       || [],
+    reentry:       initialData?.reentry       || {},
+    instructions:  initialData?.instructions  || [],
     date:          initialData?.date          || prefillAppt?.date          || todayStr(),
     workerName:    initialData?.workerName    || defaultWorker.name || "",
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
@@ -1673,6 +1736,29 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const chk=num=>checks.find(c=>String(c.num)===String(num))||{num,activity:"",baitReplaced:false};
   const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...patch}];});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
+  // מילוי אוטומטי של זמני שהייה והנחיות — לפי יומנים קודמים עם אותם חומרים, או לפי ברירת מחדל
+  const touched=React.useRef({reentry:!!initialData?.reentry,instr:!!(initialData?.instructions||[]).length});
+  const matNames=f.materials.map(m=>m.name); const matKey=[...matNames].sort().join("|"); const pestKey=[...f.pest].sort().join("|");
+  React.useEffect(()=>{
+    if(!matNames.length) return;
+    const prev=suggestFromHistory(execLogs,f.workerName,matNames,f.pest);
+    const hasSpray=f.materials.some(m=>!m.method||m.method==="ריסוס");
+    if(!touched.current.reentry){
+      let r=prev&&prev.reentry?{...prev.reentry}:{};
+      if(!prev||!prev.reentry){ const lab=matNames.map(n=>REENTRY_LABEL_ADULTS[n]).filter(Boolean).map(Number); if(lab.length) r.adults=String(Math.max(...lab)); }
+      setF(x=>({...x,reentry:r}));
+    }
+    if(!touched.current.instr){
+      const ins=prev&&(prev.instructions||[]).length?prev.instructions:(hasSpray?INSTR_BASE.slice(0,2):[]);
+      setF(x=>({...x,instructions:ins}));
+    }
+  },[matKey,pestKey]);
+  const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:x.reentry[k]===v?"":v}}));};
+  const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
+  const [instrAdd,setInstrAdd]=useState("");
+  const addDevice=type=>setF(x=>({...x,devices:x.devices.some(d=>d.type===type)?x.devices:[...x.devices,{type,qty:1,location:""}]}));
+  const setDevice=(i,patch)=>setF(x=>({...x,devices:x.devices.map((d,j)=>j===i?{...d,...patch}:d)}));
+  const [devOpen,setDevOpen]=useState(false);
 
   const addExtraWorker=()=>set("extraWorkers",[...f.extraWorkers,{name:"",license:"",licenseType:""}]);
   const updateExtraWorker=(i,k,v)=>setF(x=>({...x,extraWorkers:x.extraWorkers.map((w,j)=>j===i?{...w,[k]:v}:w)}));
@@ -1774,20 +1860,76 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         </div>
       </div>;})}
     </div>}
-    <div style={{marginBottom:14}}><Inp label="תיאור נוסף / הנחיות ללקוח (לא חובה)" value={f.extermination_notes} onChange={v=>set("extermination_notes",v)} placeholder="למשל: לא לשטוף רצפה 48 שעות"/></div>
-
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-      <Inp label="אחריות (חודשים)" type="number" value={f.warranty} onChange={v=>set("warranty",v)} placeholder=""/>
-      <Inp label="הערות" value={f.notes} onChange={v=>set("notes",v)} placeholder="יש כלב בבית..."/>
+    {/* מוצרי הדברה — מלכודות, תחנות ניטור, אמצעי מניעה */}
+    <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <div style={{fontWeight:800,fontSize:14,color:"#6b21a8"}}>🪤 מוצרי הדברה <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(מלכודות, ניטור, מניעה — לא חובה)</span></div>
+        <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{border:"1px solid #d8b4fe",background:"#fff",color:"#7e22ce",borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור":"+ הוסף"}</button>
+      </div>
+      {devOpen&&<div style={{marginTop:10}}>{DEVICE_TYPES.map(g=><div key={g.g} style={{marginBottom:8}}>
+        <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:4}}>{g.g}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{g.items.map(it=>{const on=f.devices.some(d=>d.type===it);return <button key={it} type="button" onClick={()=>on?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} style={{padding:"6px 11px",borderRadius:20,border:"1.5px solid "+(on?"#9333ea":"#e9d5ff"),background:on?"#9333ea":"#fff",color:on?"#fff":"#581c87",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{it}</button>;})}</div>
+      </div>)}</div>}
+      {f.devices.map((d,i)=><div key={d.type} style={{background:"#fff",border:"1px solid #e9d5ff",borderRadius:10,padding:"8px 10px",marginTop:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <b style={{fontSize:14,flex:"1 1 140px"}}>{d.type}</b>
+          <div style={{display:"flex",alignItems:"center",gap:4}}>
+            <button type="button" onClick={()=>setDevice(i,{qty:Math.max(1,(parseInt(d.qty)||1)-1)})} style={{width:30,height:30,borderRadius:8,border:"1px solid #d8b4fe",background:"#fff",fontSize:16,cursor:"pointer"}}>−</button>
+            <input value={d.qty} onChange={e=>setDevice(i,{qty:e.target.value.replace(/[^0-9]/g,"")})} inputMode="numeric" style={{width:44,textAlign:"center",padding:"5px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:14}}/>
+            <button type="button" onClick={()=>setDevice(i,{qty:(parseInt(d.qty)||0)+1})} style={{width:30,height:30,borderRadius:8,border:"1px solid #d8b4fe",background:"#fff",fontSize:16,cursor:"pointer"}}>+</button>
+            <span style={{fontSize:12,color:CLR.muted}}>יח׳</span>
+          </div>
+          <button type="button" onClick={()=>set("devices",f.devices.filter((_,j)=>j!==i))} style={{border:"none",background:"none",color:CLR.danger,fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6,alignItems:"center"}}>
+          {DEVICE_SPOTS.map(sp=>{const on=(d.location||"").split(", ").includes(sp);return <button key={sp} type="button" onClick={()=>{const cur=(d.location||"").split(", ").filter(Boolean);setDevice(i,{location:(on?cur.filter(x=>x!==sp):[...cur,sp]).join(", ")});}} style={{padding:"4px 9px",borderRadius:20,border:"1px solid "+(on?"#9333ea":"#e2e8f0"),background:on?"#f3e8ff":"#fff",color:"#581c87",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{sp}</button>;})}
+          <input value={d.location} onChange={e=>setDevice(i,{location:e.target.value})} placeholder="מיקום..." style={{flex:"1 1 110px",minWidth:90,padding:"5px 9px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:13,fontFamily:"inherit"}}/>
+        </div>
+      </div>)}
     </div>
+
+    {/* זמן מחוץ למקום המטופל */}
+    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:14,color:"#9a3412",marginBottom:2}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+      <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מתמלא אוטומטית לפי טיפולים קודמים שלך עם אותם חומרים — לחיצה משנה, לחיצה חוזרת מבטלת</div>
+      {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",padding:"6px 0",borderTop:"1px dashed #fed7aa"}}>
+        <span style={{fontSize:13,fontWeight:700,minWidth:104}}>{g.l}</span>
+        {REENTRY_OPTS.map(o=>{const on=f.reentry[g.k]===o;return <button key={o} type="button" onClick={()=>setReentry(g.k,o)} style={{padding:"5px 9px",borderRadius:8,border:"1.5px solid "+(on?"#ea580c":"#fed7aa"),background:on?"#ea580c":"#fff",color:on?"#fff":"#7c2d12",fontSize:13,fontWeight:on?800:500,cursor:"pointer",fontFamily:"inherit",minWidth:34}}>{o==="0.5"?"½":o}</button>;})}
+        <span style={{fontSize:12,color:CLR.muted}}>שעות</span>
+      </div>)}
+    </div>
+
+    {/* הנחיות ללקוח */}
+    <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:14,color:"#166534",marginBottom:8}}>📋 הנחיות ללקוח</div>
+      <div style={{display:"flex",flexDirection:"column",gap:5}}>
+        {[...new Set([...INSTR_BASE,...instrForPests(allPests),...f.instructions])].map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
+      </div>
+      <div style={{display:"flex",gap:6,marginTop:8}}>
+        <input value={instrAdd} onChange={e=>setInstrAdd(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&instrAdd.trim()){toggleInstr(instrAdd.trim());setInstrAdd("");}}} placeholder="הנחיה נוספת..." style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:10,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit"}}/>
+        {instrAdd.trim()&&<button type="button" onClick={()=>{toggleInstr(instrAdd.trim());setInstrAdd("");}} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:10,padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer"}}>הוסף</button>}
+      </div>
+    </div>
+
+    <div style={{marginBottom:14}}>
+      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>📝 הערות / תיאור הטיפול</label>
+      <textarea value={f.notes} onChange={e=>set("notes",e.target.value)} rows={5} placeholder="למשל: ביצעתי ריסוס בפנלים כנגד תיקנים ונמלים, הונח ג'ל במטבח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical",minHeight:120}}/>
+      {f.extermination_notes&&<div style={{fontSize:12,color:CLR.muted,marginTop:4}}>תיאור קודם: {f.extermination_notes}</div>}
+    </div>
+    <div style={{marginBottom:14,maxWidth:220}}><Inp label="אחריות (חודשים)" type="number" value={f.warranty} onChange={v=>set("warranty",v)} placeholder=""/></div>
 
     {/* Payment */}
     <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px 16px",marginBottom:14}}>
       <div style={{fontWeight:600,fontSize:13,color:CLR.danger,marginBottom:8}}>💳 סטטוס תשלום <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(פנימי — הלקוח לא רואה)</span></div>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:4}}>
-        <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)} style={{width:16,height:16}}/>
-        <span style={{color:"#0f172a"}}>תשלום התקבל בשטח</span>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:15,cursor:"pointer",marginBottom:8}}>
+        <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)} style={{width:20,height:20}}/>
+        <span style={{color:"#0f172a",fontWeight:600}}>תשלום התקבל בשטח</span>
       </label>
+      {f.paymentDone&&<div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{PAY_METHODS.map(m=>{const on=f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",on?"":m)} style={{padding:"7px 13px",borderRadius:20,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m}</button>;})}</div>
+        <div style={{maxWidth:220}}><Inp label="סכום שהתקבל (₪, כולל מע״מ)" type="number" value={f.paymentAmount} onChange={v=>set("paymentAmount",v)}/></div>
+        <div style={{fontSize:12,color:"#991b1b",marginTop:2}}>🧾 יופיע ב"חשבוניות" ברשימת "ממתינים לחשבונית" עד שתופק חשבונית</div>
+      </div>}
       {!f.paymentDone&&<Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="ישלם בהעברה..."/>}
     </div>
 
@@ -1835,7 +1977,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
 
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(f.paymentDone&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
@@ -1894,7 +2036,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
           {data.pestLevel&&<span><b>נגיעות:</b> {data.pestLevel}</span>}
           {data.warranty&&<span><b>אחריות:</b> {data.warranty} חודשים</span>}
         </div>
-        {data.extermination_notes&&<div style={{marginTop:6,fontSize:13}}><b>תיאור / הנחיות:</b> {data.extermination_notes}</div>}
+        {data.extermination_notes&&<div style={{marginTop:6,fontSize:13}}><b>הנחיות:</b> {data.extermination_notes}</div>}
       </div>
       <div style={{marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#1a5c3a"}}>🧪 חומרי הדברה בשימוש</div>
@@ -1908,11 +2050,24 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
             {m.batch&&<div><span style={lbl}>אצווה: </span>{m.batch}</div>}
           </div>;})}
       </div>
+      {(data.devices||[]).length>0&&<div style={{marginBottom:14}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#1a5c3a"}}>🪤 מוצרי הדברה</div>
+        {data.devices.map((d,i)=><div key={i} style={{border:"1px solid #e9d5ff",background:"#faf5ff",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:13}}><b>{d.type}</b> × {d.qty||1}{d.location?<span style={{color:"#555"}}> · {d.location}</span>:null}</div>)}
+      </div>}
+      {reentryLines(data.reentry).length>0&&<div style={{border:"2px solid #f97316",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#fff7ed"}}>
+        <div style={{fontWeight:700,color:"#c2410c",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{REENTRY_GROUPS.filter(g=>data.reentry[g.k]).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
+      </div>}
+      {(data.instructions||[]).length>0&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+        <div style={{fontWeight:700,color:"#166534",fontSize:14,marginBottom:6}}>📋 הנחיות ללקוח</div>
+        <ul style={{margin:0,paddingRight:18,fontSize:13,lineHeight:1.8}}>{data.instructions.map((t,i)=><li key={i}>{t}</li>)}</ul>
+      </div>}
       {data.safety&&<div style={{border:"2px solid #ef4444",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#fff5f5"}}>
         <div style={{fontWeight:700,color:"#dc2626",fontSize:13,marginBottom:6}}>⚠️ הנחיות בטיחות לדייר</div>
         <pre style={{margin:0,fontFamily:"Arial",fontSize:12,whiteSpace:"pre-wrap",lineHeight:1.8}}>{data.safety}</pre>
       </div>}
-      {data.notes&&<div style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13}}><b>הערות:</b> {data.notes}</div>}
+      {data.notes&&<div style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,whiteSpace:"pre-wrap"}}><b>הערות:</b> {data.notes}</div>}
+      {data.paymentDone&&(data.paymentMethod||data.paymentAmount)&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#166534"}}>💳 <b>שולם בשטח (פנימי, לא נשלח ללקוח):</b> {data.paymentMethod}{data.paymentAmount?" · ₪"+data.paymentAmount:""}</div>}
       {!data.paymentDone&&data.paymentNote&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#991b1b"}}>💳 <b>הערה לפקידה (פנימי, לא נשלח ללקוח):</b> {data.paymentNote}</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20,borderTop:"1px solid #e5e7eb",paddingTop:16}}>
         <div><div style={{fontSize:12,color:"#555",marginBottom:20}}>חתימת מדביר:</div><div style={{borderBottom:"1px solid #999",marginBottom:4}}/><div style={{fontSize:11,color:"#555"}}>{data.worker.name}{data.worker.license?" | רישיון "+data.worker.license:""}</div></div>
@@ -1949,7 +2104,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[]};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -2046,6 +2201,9 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
                 <div style={{fontSize:13,color:"#475569",lineHeight:1.7}}>
                   {l.address&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {l.address}</div>}
                   {(l.structureType||l.workerName)&&<div>{l.structureType?"🏠 "+l.structureType:""}{l.structureType&&l.workerName?"  ·  ":""}{l.workerName?"👷 "+l.workerName:""}</div>}
+                  <div style={{fontSize:13,fontWeight:600,color:l.paymentDone?(l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId))))?"#15803d":"#c2410c"):"#b91c1c"}}>
+                    {l.paymentDone?("💳 שולם"+(l.paymentMethod?" · "+l.paymentMethod:"")+(l.paymentAmount?" · ₪"+l.paymentAmount:"")+((l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId)))))?" · 🧾 חשבונית הופקה":" · ⏳ ממתין לחשבונית")):("💳 לא שולם"+(l.paymentNote?" — "+l.paymentNote:""))}
+                  </div>
                   {l.materials?.length>0&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🧪 {l.materials.map(m=>m.name).join(", ")}</div>}
                 </div>
                 {/* פעולות */}
@@ -3137,7 +3295,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[]};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -4872,13 +5030,14 @@ function Notes({notes,setNotes,currentUser,workers}){
 }
 
 // Standalone "חשבוניות" tab — history of invoices + create new
-function StandaloneInvoiceModal({customers,appointments,onClose,onSave}){
-  const [custId,setCustId]=useState("");
-  const [apptId,setApptId]=useState("");
-  const [desc,setDesc]=useState("");
-  const [amount,setAmount]=useState("");
-  const [payMethod,setPayMethod]=useState("מזומן");
-  const [status,setStatus]=useState("שולם");
+function StandaloneInvoiceModal({customers,appointments,onClose,onSave,prefill}){
+  const P=prefill||{};
+  const [custId,setCustId]=useState(P.custId!=null?String(P.custId):"");
+  const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
+  const [desc,setDesc]=useState(P.desc||"");
+  const [amount,setAmount]=useState(P.amount!=null?String(P.amount):"");
+  const [payMethod,setPayMethod]=useState(P.payMethod||"מזומן");
+  const [status,setStatus]=useState(P.status||"שולם");
   const cust=customers.find(c=>c.id===parseInt(custId));
   const custAppts=appointments.filter(a=>a.customerId===parseInt(custId));
   const docNum=`INV-${String(Date.now()).slice(-5)}`;
@@ -4914,7 +5073,7 @@ function StandaloneInvoiceModal({customers,appointments,onClose,onSave}){
       <Btn full onClick={()=>{
         if(!custId||!amt) return alert("בחר לקוח והזן סכום");
         const a=appointments.find(x=>x.id===parseInt(apptId));
-        onSave({type:"הכנסה",category:"חשבונית",customer:cust.name,customerId:cust.id,amount:amt,date:todayStr(),status,invoiceNum:docNum,apptId:apptId?parseInt(apptId):null,phone:cust.phone||"",address:a?.address||cust.address||"",pestType:a?.pestType||desc,workerName:a?.workerName||"",payMethod});
+        onSave({execLogId:P.execLogId||null,type:"הכנסה",category:"חשבונית",customer:cust.name,customerId:cust.id,amount:amt,date:todayStr(),status,invoiceNum:docNum,apptId:apptId?parseInt(apptId):null,phone:cust.phone||"",address:a?.address||cust.address||"",pestType:a?.pestType||desc,workerName:a?.workerName||"",payMethod});
         onClose();
       }}>✅ שמור חשבונית</Btn>
       <Btn v="secondary" onClick={()=>{if(!cust||!amt)return alert("בחר לקוח והזן סכום");const a=appointments.find(x=>x.id===parseInt(apptId));printInvoice({invoiceNum:docNum,date:todayStr(),customer:cust.name,phone:cust.phone||"",address:a?.address||cust.address||"",pestType:a?.pestType||desc,workerName:a?.workerName||"",amount:amt,payMethod});}}>📄 PDF</Btn>
@@ -4923,8 +5082,15 @@ function StandaloneInvoiceModal({customers,appointments,onClose,onSave}){
   </Modal>;
 }
 
-function Invoices({finance,setFinance,customers,appointments}){
+function Invoices({finance,setFinance,customers,appointments,execLogs=[],setExecLogs}){
   const [showNew,setShowNew]=useState(false);
+  const [invPrefill,setInvPrefill]=useState(null);
+  const hasInvoice=l=>l.invoiceNum||finance.some(f=>f.category==="חשבונית"&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
+  const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const openInvFor=l=>{const c=customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
+    if(!c) return alert("הלקוח "+(l.clientName||"")+" לא נמצא ברשימת הלקוחות — הוסף אותו כלקוח ואז הפק חשבונית");
+    const paid=parseFloat(l.paymentAmount)||0;
+    setInvPrefill({custId:c.id,apptId:l.apptId||"",desc:"הדברת "+(l.pest||[]).join(", ")+(l.address?" – "+l.address:""),amount:paid?Math.round(paid/1.18):"",payMethod:l.paymentMethod||"מזומן",status:"שולם",execLogId:l.id});setShowNew(true);};
   const [statusF,setStatusF]=useState("הכל");
   const [srch,setSrch]=useState("");
   const [dateFrom,setDateFrom]=useState("");
@@ -4953,6 +5119,16 @@ function Invoices({finance,setFinance,customers,appointments}){
       <StatCard label="שולם" value={`₪${paid}`} bg="#dcfce7"/>
       <StatCard label="חוב פתוח" value={`₪${debt}`} bg="#fee2e2"/>
     </div>
+    {pendingInv.length>0&&<div style={{background:"#fff7ed",border:"1.5px solid #fdba74",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+      <div style={{fontWeight:800,fontSize:15,color:"#9a3412",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית ({pendingInv.length})</div>
+      {pendingInv.map(l=><div key={l.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",background:"#fff",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
+        <div style={{fontSize:14}}><b>{l.clientName}</b> <span style={{color:CLR.muted}}>· {fmtDate(l.date)} · יומן {l.docNum}</span><div style={{fontSize:13,color:"#7c2d12"}}>{l.paymentMethod||"—"}{l.paymentAmount?" · ₪"+l.paymentAmount:""}{l.workerName?" · "+(l.workerDocName||l.workerName):""}</div></div>
+        <div style={{display:"flex",gap:6}}>
+          <Btn sm onClick={()=>openInvFor(l)}>🧾 הפק חשבונית</Btn>
+          {setExecLogs&&<Btn sm v="ghost" onClick={()=>{if(confirm("לסמן שהחשבונית הופקה מחוץ למערכת?")) setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,invoiceNum:"הופקה ידנית"}:x));}}>הופקה ידנית</Btn>}
+        </div>
+      </div>)}
+    </div>}
     {/* Search bar */}
     <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
       <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="🔍 חפש לקוח, מספר חשבונית, שירות..."
@@ -4994,7 +5170,7 @@ function Invoices({finance,setFinance,customers,appointments}){
         </tbody>
       </table>
     </div>
-    {showNew&&<StandaloneInvoiceModal customers={customers} appointments={appointments} onClose={()=>setShowNew(false)} onSave={rec=>setFinance(fs=>[...fs,{...rec,id:nextId(fs)}])}/>}
+    {showNew&&<StandaloneInvoiceModal key={invPrefill?("p"+invPrefill.execLogId):"new"} prefill={invPrefill} customers={customers} appointments={appointments} onClose={()=>{setShowNew(false);setInvPrefill(null);}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId&&setExecLogs) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x));}}/>}
   </div>;
 }
 
@@ -7565,7 +7741,7 @@ function App(){
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
             {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance}/>}
-            {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} appointments={activeAppointments}/>}
+            {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} appointments={activeAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
