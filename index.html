@@ -1768,7 +1768,14 @@ function PlaceEditor({place,onChange}){
   </div>;
 }
 // ── כרטיס מתקפל ביומן הביצוע (נוח לטלפון): כותרת + סיכום, נפתח לעריכה וסוגר ב"סיום"
-function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children}){
+function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat}){
+  if(flat) return <div id={"sec-"+id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,marginBottom:12,padding:"12px 14px",scrollMarginTop:70}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingBottom:8,borderBottom:"1px solid #eef2f7"}}>
+      <span style={{fontSize:18}}>{icon}</span><span style={{flex:1,fontWeight:800,fontSize:15}}>{title}</span>
+      {state==="req"&&<span style={{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:20,padding:"2px 8px"}}>חובה</span>}
+    </div>
+    {children}
+  </div>;
   const badge=state==="ok"?<span style={{width:22,height:22,borderRadius:"50%",background:"#16a34a",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✓</span>
     :state==="req"?<span style={{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:20,padding:"2px 8px",flexShrink:0}}>חובה</span>
     :<span style={{width:22,height:22,borderRadius:"50%",border:"1.5px solid #cbd5e1",flexShrink:0}}/>;
@@ -1810,6 +1817,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     paymentDone:   initialData?.paymentDone   ?? true,
     paymentNote:   initialData?.paymentNote   || "",
     paymentMethod: initialData?.paymentMethod || "",
+    paymentStatus: initialData?.paymentStatus || (initialData&&initialData.paymentDone===false?"debt":"paid"),
+    agreedPrice:   initialData?.agreedPrice ?? (prefillAppt?.price||""),
+    paymentDebt:   initialData?.paymentDebt ?? "",
     paymentAmount: initialData?.paymentAmount ?? (prefillAppt?.price||""),
     devices:       initialData?.devices       || [],
     reentry:       initialData?.reentry ? normReentry(initialData.reentry) : {},
@@ -1823,6 +1833,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))}),
   });
   const [scopeAdd,setScopeAdd]=useState("");
+  // סוג היומן — נשמר לכל מדביר: "steps" לפי שלבים / "flat" רציף
+  const modeKey="h360_logmode_"+String(defaultWorker.name||"x");
+  const [logMode,setLogModeS]=useState(()=>{ try{ return localStorage.getItem(modeKey)||"steps"; }catch(e){ return "steps"; } });
+  const setLogMode=m=>{ setLogModeS(m); try{ localStorage.setItem(modeKey,m); }catch(e){} };
   const [openSec,setOpenSec]=useState(()=>{ const c=initialData?.clientName||prefillAppt?.customerName; const a=initialData?.address||prefillAppt?.address; return c&&a?((initialData?.pest||prefillAppt?.pestType)?"chem":"pests"):"client"; });
   // חוזה אחזקה של המקום (לבדיקת תחנות האכלה)
   const contract=(maintenance||[]).find(m=>!m.deleted&&(String(m.id)===String(initialData?.maintenanceId??prefillAppt?.maintenanceId)))
@@ -1877,10 +1891,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
 
   const SEC_ORDER=["client","place","pests","chem",...(stations.length?["stations"]:[]),"devices","reentry","instr","notes","pay","worker"];
   const goNext=id=>{const i=SEC_ORDER.indexOf(id); const nx=SEC_ORDER[i+1]||null; setOpenSec(nx); setTimeout(()=>{try{const el=document.getElementById("sec-"+(nx||id)); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},80);};
-  const sec=(id,icon,title,summary,state,children)=><ExecSec key={id} id={id} icon={icon} title={title} summary={summary} state={state} open={openSec===id} onToggle={()=>setOpenSec(o=>o===id?null:id)} onNext={()=>goNext(id)}>{children}</ExecSec>;
+  const sec=(id,icon,title,summary,state,children)=><ExecSec key={id} flat={logMode==="flat"} id={id} icon={icon} title={title} summary={summary} state={state} open={openSec===id} onToggle={()=>setOpenSec(o=>o===id?null:id)} onNext={()=>goNext(id)}>{children}</ExecSec>;
   const placeSum=placeToScope(f.place).join(" · ");
   const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
   return <div style={{color:"#0f172a",paddingBottom:8}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
+      {[["steps","🪜 יומן לפי שלבים"],["flat","📄 יומן רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
+    </div>
     {sec("client","👤","לקוח",[f.clientName,f.address].filter(Boolean).join(" · "),f.clientName&&f.address?"ok":"req",<>
     {/* בחירת לקוח קיים — ממלא שם, כתובת, טלפון וסוג מבנה */}
     {customers.length>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
@@ -2001,18 +2018,25 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     <div style={{marginBottom:14,maxWidth:220}}><Inp label="אחריות (חודשים)" type="number" value={f.warranty} onChange={v=>set("warranty",v)} placeholder=""/></div>
 
     </>)}
-    {sec("pay","💳","תשלום (פנימי)",f.paymentDone?["שולם",f.paymentMethod,f.paymentAmount?"₪"+f.paymentAmount:""].filter(Boolean).join(" · "):"לא שולם"+(f.paymentNote?" — "+f.paymentNote:""),f.paymentDone&&!f.paymentMethod?"req":"ok",<>
+    {sec("pay","💳","תשלום (פנימי)",[f.agreedPrice?"סוכם ₪"+f.agreedPrice:"",f.paymentStatus==="paid"?["שולם",f.paymentMethod,f.paymentAmount&&String(f.paymentAmount)!==String(f.agreedPrice)?"₪"+f.paymentAmount:""].filter(Boolean).join(" "):f.paymentStatus==="debt"?"חוב ₪"+(f.paymentDebt||f.agreedPrice||"?"):"תשלום מול המשרד"].filter(Boolean).join(" · "),(f.paymentStatus==="paid"&&!f.paymentMethod)||!String(f.agreedPrice||"").trim()?"req":"ok",<>
     <div>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:15,cursor:"pointer",marginBottom:8}}>
-        <input type="checkbox" checked={f.paymentDone} onChange={e=>set("paymentDone",e.target.checked)} style={{width:20,height:20}}/>
-        <span style={{color:"#0f172a",fontWeight:600}}>תשלום התקבל בשטח</span>
-      </label>
-      {f.paymentDone&&<div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{PAY_METHODS.map(m=>{const on=f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",on?"":m)} style={{padding:"7px 13px",borderRadius:20,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m}</button>;})}</div>
-        <div style={{maxWidth:220}}><Inp label="סכום שהתקבל (₪, כולל מע״מ)" type="number" value={f.paymentAmount} onChange={v=>set("paymentAmount",v)}/></div>
+      <div style={{maxWidth:240,marginBottom:4}}><Inp label="מחיר סופי שסוכם עם הלקוח (₪, כולל מע״מ) *" type="number" value={f.agreedPrice} onChange={v=>setF(x=>({...x,agreedPrice:v,paymentAmount:x.paymentStatus==="paid"&&(String(x.paymentAmount)===String(x.agreedPrice)||!x.paymentAmount)?v:x.paymentAmount,paymentDebt:x.paymentStatus==="debt"&&(String(x.paymentDebt)===String(x.agreedPrice)||!x.paymentDebt)?v:x.paymentDebt}))}/></div>
+      {prefillAppt?.price&&String(prefillAppt.price)!==String(f.agreedPrice)&&<div style={{fontSize:12,color:"#64748b",marginBottom:8}}>מחיר בהזמנה: ₪{prefillAppt.price}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,margin:"6px 0 10px"}}>
+        {[["paid","✅ שולם בשטח"],["debt","⏳ חוב"],["office","🏢 מול המשרד"]].map(([k,l])=>{const on=f.paymentStatus===k;return <button key={k} type="button" onClick={()=>setF(x=>({...x,paymentStatus:k,paymentDone:k==="paid",paymentAmount:k==="paid"&&!x.paymentAmount?x.agreedPrice:x.paymentAmount,paymentDebt:k==="debt"&&!x.paymentDebt?x.agreedPrice:x.paymentDebt}))} style={{padding:"10px 6px",borderRadius:10,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#fef2f2":"#fff",color:on?"#991b1b":"#7f1d1d",fontSize:14,fontWeight:on?800:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;})}
+      </div>
+      {f.paymentStatus==="paid"&&<div>
+        <div style={{fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:5}}>איך שולם? *</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>{PAY_METHODS.map(m=>{const on=f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",on?"":m)} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m}</button>;})}</div>
+        <div style={{maxWidth:240}}><Inp label="סכום שהתקבל בפועל (₪)" type="number" value={f.paymentAmount} onChange={v=>set("paymentAmount",v)}/></div>
+        {f.agreedPrice&&f.paymentAmount&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)&&<div style={{fontSize:13,color:"#991b1b",fontWeight:700}}>נשארה יתרה של ₪{parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)} — תירשם כחוב</div>}
         <div style={{fontSize:12,color:"#991b1b",marginTop:2}}>🧾 יופיע ב"חשבוניות" ברשימת "ממתינים לחשבונית" עד שתופק חשבונית</div>
       </div>}
-      {!f.paymentDone&&<Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="ישלם בהעברה..."/>}
+      {f.paymentStatus==="debt"&&<div>
+        <div style={{maxWidth:240}}><Inp label="סכום החוב (₪)" type="number" value={f.paymentDebt} onChange={v=>set("paymentDebt",v)}/></div>
+        <Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="למשל: ישלם בהעברה עד יום ראשון"/>
+      </div>}
+      {f.paymentStatus==="office"&&<Inp label="הערה לפקידה" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="למשל: חשבונית לחברת הניהול, תשלום שוטף+30"/>}
     </div>
     </>)}
     {sec("worker","👷","מדביר",[f.workerName,f.workerLicense?"רישיון "+f.workerLicense:""].filter(Boolean).join(" · "),f.workerName?"ok":"req",<>
@@ -2052,7 +2076,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(f.paymentDone&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
@@ -2143,6 +2167,8 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
         <pre style={{margin:0,fontFamily:"Arial",fontSize:12,whiteSpace:"pre-wrap",lineHeight:1.8}}>{data.safety}</pre>
       </div>}
       {data.notes&&<div style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,whiteSpace:"pre-wrap"}}><b>הערות:</b> {data.notes}</div>}
+      {data.paymentDebt&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#991b1b"}}>💳 <b>חוב (פנימי):</b> ₪{data.paymentDebt}{data.agreedPrice?" מתוך ₪"+data.agreedPrice+" שסוכם":""}</div>}
+      {data.paymentStatus==="office"&&<div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13}}>🏢 <b>תשלום מול המשרד (פנימי)</b>{data.agreedPrice?" · סוכם ₪"+data.agreedPrice:""}</div>}
       {data.paymentDone&&(data.paymentMethod||data.paymentAmount)&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#166534"}}>💳 <b>שולם בשטח (פנימי, לא נשלח ללקוח):</b> {data.paymentMethod}{data.paymentAmount?" · ₪"+data.paymentAmount:""}</div>}
       {!data.paymentDone&&data.paymentNote&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#991b1b"}}>💳 <b>הערה לפקידה (פנימי, לא נשלח ללקוח):</b> {data.paymentNote}</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20,borderTop:"1px solid #e5e7eb",paddingTop:16}}>
@@ -2180,7 +2206,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -2278,7 +2304,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
                   {l.address&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {l.address}</div>}
                   {(l.structureType||l.workerName)&&<div>{l.structureType?"🏠 "+l.structureType:""}{l.structureType&&l.workerName?"  ·  ":""}{l.workerName?"👷 "+l.workerName:""}</div>}
                   <div style={{fontSize:13,fontWeight:600,color:l.paymentDone?(l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId))))?"#15803d":"#c2410c"):"#b91c1c"}}>
-                    {l.paymentDone?("💳 שולם"+(l.paymentMethod?" · "+l.paymentMethod:"")+(l.paymentAmount?" · ₪"+l.paymentAmount:"")+((l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId)))))?" · 🧾 חשבונית הופקה":" · ⏳ ממתין לחשבונית")):("💳 לא שולם"+(l.paymentNote?" — "+l.paymentNote:""))}
+                    {l.paymentDone?("💳 שולם"+(l.paymentMethod?" · "+l.paymentMethod:"")+(l.paymentAmount?" · ₪"+l.paymentAmount:"")+((l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId)))))?" · 🧾 חשבונית הופקה":" · ⏳ ממתין לחשבונית")):((l.paymentStatus==="office"?"🏢 תשלום מול המשרד":"💳 חוב"+(l.paymentDebt?" ₪"+l.paymentDebt:""))+(l.paymentNote?" — "+l.paymentNote:""))}
                   </div>
                   {l.materials?.length>0&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🧪 {l.materials.map(m=>m.name).join(", ")}</div>}
                 </div>
@@ -3371,7 +3397,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -6610,7 +6636,7 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
   const pending=appointments.filter(a=>a.status==="ממתין");
   const done=appointments.filter(a=>a.status==="בוצע").length;
   const debts=customers.filter(c=>c.status==="חוב");
-  const payNotes=execLogs.filter(l=>!l.paymentDone&&l.paymentNote);
+  const payNotes=execLogs.filter(l=>!l.deleted&&(l.paymentDebt||l.paymentStatus==="office"||(!l.paymentDone&&l.paymentNote)));
   const noInvoice=appointments.filter(a=>a.status==="בוצע"&&!finance.some(f=>f.apptId===a.id));
   const openDebt=finance.filter(f=>f.status==="חוב").reduce((s,f)=>s+f.amount,0);
   const months=[];
@@ -6735,8 +6761,8 @@ function Dashboard({customers,appointments,finance,workers,execLogs,maintenance=
     </div>}
     {(payNotes.length>0||noInvoice.length>0)&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
       {payNotes.length>0&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"14px 18px",gridColumn:noInvoice.length>0?"1":"1/-1"}}>
-        <div style={{fontWeight:600,color:CLR.danger,marginBottom:8,fontSize:14}}>💳 הערות תשלום ({payNotes.length})</div>
-        {payNotes.map((l,i)=><div key={i} style={{padding:"4px 0",borderBottom:"1px solid #fca5a544",fontSize:13}}><b>{l.clientName}</b>{" — "}{l.paymentNote}</div>)}
+        <div style={{fontWeight:600,color:CLR.danger,marginBottom:8,fontSize:14}}>💳 חובות והערות תשלום מיומני ביצוע ({payNotes.length})</div>
+        {payNotes.map((l,i)=><div key={i} style={{padding:"4px 0",borderBottom:"1px solid #fca5a544",fontSize:13}}><b>{l.clientName}</b>{l.paymentDebt?" — חוב ₪"+l.paymentDebt:""}{l.paymentStatus==="office"?" — תשלום מול המשרד":""}{l.paymentNote?" — "+l.paymentNote:""}</div>)}
       </div>}
       {noInvoice.length>0&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"14px 18px",gridColumn:payNotes.length>0?"2":"1/-1"}}>
         <div style={{fontWeight:600,color:CLR.accent,marginBottom:8,fontSize:14}}>🧾 ממתינים לחשבונית ({noInvoice.length})</div>
