@@ -585,6 +585,8 @@ function AdminPanel({authUser,onClose}){
 }
 
 const PEST_TYPES_CRM = ["ג'וקים","תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים","צרעות","שלשולים"];
+// מזיקים עם רמת נגיעות לכל מזיק: "תיקן אמריקאי (בינונית), נמלים (קלה)"
+const pestsWithLevels=l=>{ const lv=(l&&l.pestLevels)||{}; return (l&&l.pest||[]).map(p=>lv[p]?p+" (נגיעות "+lv[p]+")":p).join(", ")+((!l||!l.pestLevels||!Object.keys(l.pestLevels).length)&&l&&l.pestLevel?" · נגיעות "+l.pestLevel:""); };
 const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
 const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["דבורים","צרעות"]:[p]);
 // Serial numbers for execution logs: plain integers starting at 1001
@@ -1118,7 +1120,7 @@ function execLogHtml({company,docNum,log,chemicals}){
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
       <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔬 פרטי הטיפול</div>
       ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>המקום המטופל:</b> ${log.scope.join(" · ")}</div>`:""}
-      <div style="font-size:13px;"><b>מזיקים:</b> ${(log.pest||[]).join(", ")} ${log.pestLevel?" · נגיעות "+log.pestLevel:""} ${log.warranty?" · אחריות "+log.warranty+" חו'":""}</div>
+      <div style="font-size:13px;"><b>מזיקים:</b> ${pestsWithLevels(log)} ${log.warranty?" · אחריות "+log.warranty+" חו'":""}</div>
       ${log.extermination_notes?`<div style="font-size:13px;margin-top:4px;"><b>הנחיות:</b> ${log.extermination_notes}</div>`:""}
     </div>
     <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🧪 חומרי הדברה בשימוש</div>
@@ -1162,7 +1164,7 @@ function printInvoice(inv){
 }
 // שליחת סיכום יומן ביצוע ללקוח בוואטסאפ
 function execLogWAText(log){
-  const pests=(log.pest||[]).join(", ");
+  const pests=pestsWithLevels(log);
   const mats=(log.materials||[]).filter(m=>m&&m.name).map(m=>"\n  • "+m.name+(m.active?" ("+m.active+")":"")+(m.method?" — "+m.method:"")+(m.stations?" · "+m.stations+" תחנות":"")+((m.areas||[]).length?" · "+m.areas.join(", "):"")).join("");
   return ["שלום "+(log.clientName||"")+" 👋","",
     "מצורף סיכום הטיפול שבוצע אצלכם — "+COMPANY.name,
@@ -1754,11 +1756,11 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
         const areas=APPLY_AREAS[m.method]||DEFAULT_AREAS;
         const extra=(m.areas||[]).filter(a=>!areas.includes(a));
         const isOpen=openMat===m.name;
-        const needDose=m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim();
-        if(!isOpen) return <div key={m.name+i} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",borderRadius:12,padding:"10px 12px",border:"1px solid "+(needDose?"#fca5a5":CLR.border)}}>
+        const needDose=m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim(); const needBatch=!String(m.batch||"").trim();
+        if(!isOpen) return <div key={m.name+i} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",borderRadius:12,padding:"10px 12px",border:"1px solid "+(needDose||needBatch?"#fca5a5":CLR.border)}}>
           <button type="button" onClick={()=>setOpenMat(m.name)} style={{flex:1,minWidth:0,background:"none",border:"none",textAlign:"right",cursor:"pointer",fontFamily:"inherit",padding:0}}>
             <span style={{display:"block",fontWeight:800,fontSize:14,color:"#0f172a"}}>🧪 {m.name} <span style={{fontWeight:500,fontSize:12,color:CLR.muted}}>· {m.method||"ריסוס"}{m.stations?" · "+m.stations+" תחנות":""}</span></span>
-            <span style={{display:"block",fontSize:12,color:needDose?"#b91c1c":"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{needDose?"חסר מינון — לחץ למילוי":(m.dose||"")}{(m.areas||[]).length?" · "+m.areas.join(", "):""}</span>
+            <span style={{display:"block",fontSize:12,color:needDose||needBatch?"#b91c1c":"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{needDose?"חסר מינון — לחץ למילוי":needBatch?"חסר מספר אצווה — לחץ למילוי":(m.dose||"")}{(m.areas||[]).length?" · "+m.areas.join(", "):""}</span>
           </button>
           <button type="button" onClick={()=>setOpenMat(m.name)} style={{border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 10px",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>ערוך</button>
         </div>;
@@ -1782,7 +1784,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               <Inp label={opts.length?"או רשום מינון אחר":"מינון לפי התווית (נשמר לפעם הבאה)"} value={m.dose||""} onChange={v=>updateField(m.name,"dose",v)} placeholder="למשל: 50 סמ״ק ל־10 ליטר"/>
             </div>; })()}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <Inp label="מספר אצווה" value={m.batch||""} onChange={v=>updateField(m.name,"batch",v)} placeholder="נשמר לפעם הבאה"/>
+            <Inp label="מספר אצווה *" value={m.batch||""} onChange={v=>updateField(m.name,"batch",v)} placeholder="נשמר לפעם הבאה"/>
             <div>
               <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>צורת טיפול</label>
               <select value={m.method||"ריסוס"} onChange={e=>updateField(m.name,"method",e.target.value)}
@@ -1909,6 +1911,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     pest:          initialData?.pest          || splitPests(Array.isArray(prefillAppt?.pests)&&prefillAppt.pests.length?prefillAppt.pests:(prefillAppt?.pestType?[prefillAppt.pestType]:[])),
     customPest:    initialData?.customPest    || "",
     pestLevel:     initialData?.pestLevel     || "",
+    pestLevels:    initialData?.pestLevels    || (initialData?.pestLevel&&["קלה","בינונית","גבוהה"].includes(initialData.pestLevel)?Object.fromEntries((initialData.pest||[]).map(p=>[p,initialData.pestLevel])):{}),
     materials:     initialData?.materials_raw || initialData?.materials || [],
     extermination_notes: initialData?.extermination_notes || "",
     warranty:      initialData?.warranty      || "",
@@ -1985,9 +1988,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
 
   const safety=null; // הנחיות בטיחות
   const allPests=[...f.pest,...(f.customPest?[f.customPest]:[])];
-  const valid=f.clientName&&f.address&&allPests.length>0&&f.materials.length>0;
+  const levelPests=allPests.filter(p=>p!=="חרקי מזון");
+  const missingLevel=levelPests.filter(p=>!f.pestLevels[p]);
+  const missingBatch=f.materials.filter(m=>!String(m.batch||"").trim());
+  const valid=f.clientName&&f.address&&allPests.length>0&&(f.materials.length>0||f.devices.length>0);
 
-  const PEST_LEVELS=["קלה","בינונית","גבוהה","חמורה"];
+  const PEST_LEVELS=["קלה","בינונית","גבוהה"];
   const LICENSE_TYPES=["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי"];
 
   const SEC_ORDER=["client","place","pests","chem",...(stations.length?["stations"]:[]),"devices","reentry","instr","notes","pay","worker"];
@@ -2019,7 +2025,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
 
     </>)}
     {sec("place","🏠","המקום המטופל",placeSum,placeSum?"ok":"opt",<PlaceEditor place={f.place} onChange={v=>set("place",v)}/>)}
-    {sec("pests","🐛","מזיקים ורמת נגיעות",[allPests.join(", "),f.pestLevel?"נגיעות "+f.pestLevel:""].filter(Boolean).join(" · "),allPests.length?"ok":"req",<>
+    {sec("pests","🐛","מזיקים ורמת נגיעות",levelPests.map(p=>f.pestLevels[p]?p+" ("+f.pestLevels[p]+")":p).join(", ")||allPests.join(", "),allPests.length&&!missingLevel.length?"ok":"req",<>
     <div style={{marginBottom:14}}>
       <PestPickerDk selected={f.pest} onChange={v=>set("pest",v)}/>
       <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center"}}>
@@ -2029,20 +2035,18 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>
     </div>
 
-    <div style={{marginBottom:14}}>
-      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>רמת נגיעות</label>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,maxWidth:420}}>
-        {PEST_LEVELS.map(lv=>(
-          <button key={lv} type="button" onClick={()=>set("pestLevel",f.pestLevel===lv?"":lv)}
-            style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(f.pestLevel===lv?"#2563eb":"#e2e8f0"),background:f.pestLevel===lv?"#eff6ff":"#fff",color:f.pestLevel===lv?"#1e3a8a":"#334155",fontSize:14,fontWeight:f.pestLevel===lv?700:500,cursor:"pointer",fontFamily:"inherit"}}>
-            {lv}
-          </button>
-        ))}
-      </div>
-    </div>
-
+    {levelPests.length>0&&<div style={{marginTop:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px"}}>
+      <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:4}}>רמת נגיעות לכל מזיק *</div>
+      {levelPests.map(p=><div key={p} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderTop:"1px dashed #e2e8f0",flexWrap:"wrap"}}>
+        <span style={{flex:"1 1 110px",fontSize:14,fontWeight:700,color:f.pestLevels[p]?"#0f172a":"#b91c1c"}}>{p}</span>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5,flex:"0 0 220px"}}>
+          {PEST_LEVELS.map(lv=>{const on=f.pestLevels[p]===lv;return <button key={lv} type="button" onClick={()=>setF(x=>({...x,pestLevels:{...x.pestLevels,[p]:on?"":lv}}))}
+            style={{padding:"6px 4px",borderRadius:8,border:"1.5px solid "+(on?"#2563eb":"#e2e8f0"),background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{lv}</button>;})}
+        </div>
+      </div>)}
+    </div>}
     </>)}
-    {sec("chem","🧪","חומרי הדברה",f.materials.map(m=>m.name).join(", "),f.materials.length?"ok":"req",<>
+    {sec("chem","🧪","חומרי הדברה",f.materials.map(m=>m.name).join(", ")||(f.devices.length?"ללא חומר — מוצרי הדברה בלבד":""),missingBatch.length?"req":(f.materials.length?"ok":(f.devices.length?"opt":"req")),<>
     <div style={{marginBottom:14}}>
       <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)} pests={allPests}/>
     </div>
@@ -2182,12 +2186,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת ומזיקים – חובה, ולפחות חומר הדברה או מוצר הדברה אחד"); if(missingLevel.length) return alert("בחר רמת נגיעות ל: "+missingLevel.join(", ")); if(missingBatch.length) return alert("חסר מספר אצווה ל: "+missingBatch.map(m=>m.name).join(", ")); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
       </div>; })()}
-    {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* שדות חובה: שם לקוח, כתובת, מזיקים, חומרים</div>}
+    {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* חובה: שם לקוח, כתובת, מזיקים + רמת נגיעות, חומר או מוצר הדברה, אצווה לכל חומר</div>}
     </div>
   </div></CompactCtx.Provider>;
 }
@@ -2239,8 +2243,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
         <div style={{fontWeight:700,fontSize:14,marginBottom:6}}>🔬 פרטי הטיפול</div>
         {(data.scope||[]).length>0&&<div style={{fontSize:13,marginBottom:4}}><b>המקום המטופל:</b> {data.scope.join(" · ")}</div>}
         <div style={{display:"flex",gap:20,flexWrap:"wrap",fontSize:13}}>
-          <span><b>מזיקים:</b> {(data.pest||[]).join(", ")}</span>
-          {data.pestLevel&&<span><b>נגיעות:</b> {data.pestLevel}</span>}
+          <span><b>מזיקים:</b> {pestsWithLevels(data)}</span>
           {data.warranty&&<span><b>אחריות:</b> {data.warranty} חודשים</span>}
         </div>
         {data.extermination_notes&&<div style={{marginTop:6,fontSize:13}}><b>הנחיות:</b> {data.extermination_notes}</div>}
@@ -2313,7 +2316,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{}};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -3504,7 +3507,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{}};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
