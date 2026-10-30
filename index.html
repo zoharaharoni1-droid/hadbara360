@@ -597,11 +597,16 @@ const DEVICE_TYPES = [
 ];
 const DEVICE_SPOTS = ["מטבח","מתחת לכיור","ארונות","חדר שירות","מחסן","חצר","מרפסת","חדר אשפה","מקלט"];
 // ── זמני שהייה מחוץ למקום המטופל
-const REENTRY_GROUPS = [{k:"adults",l:"מבוגרים"},{k:"kids",l:"ילדים ותינוקות"},{k:"pregnant",l:"נשים בהריון"},{k:"pets",l:"כלבים וחתולים"},{k:"birds",l:"ציפורים ודגים"}];
-const REENTRY_OPTS = ["0.5","1","2","3","4","6","8","12","24"];
+const REENTRY_GROUPS = [{k:"adults",l:"מבוגרים"},{k:"babies",l:"תינוקות עד גיל 2 ונשים בהריון"},{k:"animals",l:"בעלי חיים (כלבים, חתולים, ציפורים וכו')"}];
+// קבוצות ישנות (יומנים שנשמרו לפני הפישוט) — לתצוגה בלבד
+const REENTRY_LEGACY = [{k:"kids",l:"ילדים ותינוקות"},{k:"pregnant",l:"נשים בהריון"},{k:"pets",l:"כלבים וחתולים"},{k:"birds",l:"ציפורים ודגים"}];
+const REENTRY_OPTS = ["0.5","1","2","3","4","6","8","12","24","48"];
+const normReentry = r => { r=r||{}; const mx=(...v)=>{const n=v.map(parseFloat).filter(x=>!isNaN(x)); return n.length?String(Math.max(...n)):"";};
+  return {adults:r.adults||"", babies:r.babies||mx(r.kids,r.pregnant), animals:r.animals||mx(r.pets,r.birds)}; };
 const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
 const REENTRY_LABEL_ADULTS = {"דלתא סופר":"1","טמפריד":"1","דינופליי":"1"};
-const reentryLines = r => REENTRY_GROUPS.filter(g=>r&&r[g.k]).map(g=>g.l+": "+hrsLabel(r[g.k]));
+const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g.k]);
+const reentryLines = r => reentryShown(r).map(g=>g.l+": "+hrsLabel(r[g.k]));
 // ── הנחיות ללקוח — כפתורים מוכנים
 const INSTR_BASE = [
   "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
@@ -1132,7 +1137,7 @@ function execLogHtml({company,docNum,log,chemicals}){
     <tbody>${log.devices.map((d,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${d.type}</td><td style="padding:6px 10px;">${d.qty||1}</td><td style="padding:6px 10px;">${d.location||"—"}</td></tr>`).join("")}</tbody></table>`:""}
     ${reentryLines(log.reentry).length?`<div style="border:2px solid #f97316;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#fff7ed;">
       <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${REENTRY_GROUPS.filter(g=>log.reentry[g.k]).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
+      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${reentryShown(log.reentry).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
     ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
       <ul style="margin:0;padding-right:18px;font-size:13px;line-height:1.8;">${log.instructions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
@@ -1718,7 +1723,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     paymentMethod: initialData?.paymentMethod || "",
     paymentAmount: initialData?.paymentAmount ?? (prefillAppt?.price||""),
     devices:       initialData?.devices       || [],
-    reentry:       initialData?.reentry       || {},
+    reentry:       initialData?.reentry ? normReentry(initialData.reentry) : {},
     instructions:  initialData?.instructions  || [],
     date:          initialData?.date          || prefillAppt?.date          || todayStr(),
     workerName:    initialData?.workerName    || defaultWorker.name || "",
@@ -1744,7 +1749,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     const prev=suggestFromHistory(execLogs,f.workerName,matNames,f.pest);
     const hasSpray=f.materials.some(m=>!m.method||m.method==="ריסוס");
     if(!touched.current.reentry){
-      let r=prev&&prev.reentry?{...prev.reentry}:{};
+      let r=prev&&prev.reentry?normReentry(prev.reentry):{};
       if(!prev||!prev.reentry){ const lab=matNames.map(n=>REENTRY_LABEL_ADULTS[n]).filter(Boolean).map(Number); if(lab.length) r.adults=String(Math.max(...lab)); }
       setF(x=>({...x,reentry:r}));
     }
@@ -1753,7 +1758,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       setF(x=>({...x,instructions:ins}));
     }
   },[matKey,pestKey]);
-  const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:x.reentry[k]===v?"":v}}));};
+  const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:v}}));};
   const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
   const [instrAdd,setInstrAdd]=useState("");
   const addDevice=type=>setF(x=>({...x,devices:x.devices.some(d=>d.type===type)?x.devices:[...x.devices,{type,qty:1,location:""}]}));
@@ -1889,14 +1894,17 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
     {/* זמן מחוץ למקום המטופל */}
-    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{fontWeight:800,fontSize:14,color:"#9a3412",marginBottom:2}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
-      <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מתמלא אוטומטית לפי טיפולים קודמים שלך עם אותם חומרים — לחיצה משנה, לחיצה חוזרת מבטלת</div>
-      {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",padding:"6px 0",borderTop:"1px dashed #fed7aa"}}>
-        <span style={{fontSize:13,fontWeight:700,minWidth:104}}>{g.l}</span>
-        {REENTRY_OPTS.map(o=>{const on=f.reentry[g.k]===o;return <button key={o} type="button" onClick={()=>setReentry(g.k,o)} style={{padding:"5px 9px",borderRadius:8,border:"1.5px solid "+(on?"#ea580c":"#fed7aa"),background:on?"#ea580c":"#fff",color:on?"#fff":"#7c2d12",fontSize:13,fontWeight:on?800:500,cursor:"pointer",fontFamily:"inherit",minWidth:34}}>{o==="0.5"?"½":o}</button>;})}
-        <span style={{fontSize:12,color:CLR.muted}}>שעות</span>
-      </div>)}
+    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 14px",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:14,color:"#9a3412",marginBottom:8}}>⏱️ זמן מחוץ למקום אחרי הטיפול <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(נזכר לפי החומר)</span></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:8}}>
+        {REENTRY_GROUPS.map(g=><label key={g.k} style={{display:"block"}}>
+          <span style={{display:"block",fontSize:12,fontWeight:700,color:"#7c2d12",marginBottom:3}}>{g.l}</span>
+          <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",borderRadius:10,border:"1.5px solid "+(f.reentry[g.k]?"#ea580c":"#fed7aa"),background:"#fff",fontSize:15,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
+            <option value="">— לא צוין —</option>
+            {REENTRY_OPTS.map(o=><option key={o} value={o}>{hrsLabel(o)}</option>)}
+          </select>
+        </label>)}
+      </div>
     </div>
 
     {/* הנחיות ללקוח */}
@@ -2056,7 +2064,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
       </div>}
       {reentryLines(data.reentry).length>0&&<div style={{border:"2px solid #f97316",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#fff7ed"}}>
         <div style={{fontWeight:700,color:"#c2410c",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{REENTRY_GROUPS.filter(g=>data.reentry[g.k]).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{reentryShown(data.reentry).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
       </div>}
       {(data.instructions||[]).length>0&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
         <div style={{fontWeight:700,color:"#166534",fontSize:14,marginBottom:6}}>📋 הנחיות ללקוח</div>
