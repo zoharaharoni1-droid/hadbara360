@@ -1064,9 +1064,9 @@ function execLogHtml({company,docNum,log,chemicals}){
     const ch=chemicals.find(c=>c.name===m.name)||{};
     return `<tr style="background:${i%2===0?"#f9fafb":"#fff"};">
       <td style="padding:7px 10px;font-weight:600;">${m.name}</td>
-      <td style="padding:7px 10px;">${ch.mfr||"—"}</td>
+      <td style="padding:7px 10px;">${m.maker||ch.mfr||"—"}${m.reg?`<br><span style="font-size:10px;color:#666">רישום ${m.reg}</span>`:""}</td>
       <td style="padding:7px 10px;font-size:11px;">${m.active||ch.active||"—"}</td>
-      <td style="padding:7px 10px;">${m.method||ch.method||"—"}${m.stations?" · "+m.stations+" תחנות":""}</td>
+      <td style="padding:7px 10px;">${m.method||ch.method||"—"}${m.stations?" · "+m.stations+" תחנות":""}${m.dose?`<br><span style="font-size:11px;color:#555">${m.dose}</span>`:""}</td>
       <td style="padding:7px 10px;font-size:11px;">${(m.areas||[]).join(", ")||"—"}</td>
       <td style="padding:7px 10px;color:#555;">${m.batch||"—"}</td>
     </tr>`;}).join("");
@@ -1394,6 +1394,30 @@ function DkBtn({children,onClick,variant="primary",disabled=false,style={}}){
 // ── מאגר התכשירים הרשמי (המשרד להגנת הסביבה, data.gov.il) — מורשים למדבירים ──
 // [שם, בעל רישום, מס' רישום, תוארית, חומר פעיל, ייעוד, תוקף]
 const REG_SNAPSHOT = [["טרמיטקס", "א.ע יזמות ופרוייקטים", "678", "אבקה", "Diflubenzuron 0.250%", "טרמיטים", "01/08/2032"], ["למבדה סטאר אולטרה קאפ - CS", "חברת רימי כימיקלים בע\"מ", "567", "תרכיז רחיף מיקרוקפסולרי (CS)", "lambda-cyhalothrin (ISO) 9.700%", "חרקים זוחלים אחרים, נמלים, פישפשי מיטה, פרעושים, קרציות קשות, תיקנים", "06/03/2032"], ["פלייקו 2 לתברואה", "דורקי פיתוח ושיווק בע\"מ", "490", "תרכיז מתחלב (EC)", "Permethrin 20.000%", "זבובים בוגרים, יתושים בוגרים, תיקנים", "26/10/2032"], ["זירו-פליי לתברואה", "תפזול תעשיות כימיות בע\"מ", "688", "תרכיז נוזלי", "Dinotefuran 18.000%", "זבובים בוגרים, חרקים זוחלים אחרים, נמלים, פישפשי מיטה, פרעושים, תיקנים", "15/02/2028"], ["שובל", "דור.קי פיתוח ושיווק בע\"מ", "1074", "שמן", "White mineral oil (petroleum) 97.000%", "זחלי יתושים", "04/06/2027"], ["סטופ ג'ל נמלים", "אקו פלוס -ייצור חומרי הדברה וחיטוי", "692", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.010%", "נמלים, נמלת האש הקטנה", "29/09/2028"], ["סטופ ג'ל תיקנים", "אקו פלוס -ייצור חומרי הדברה וחיטוי", "693", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.050%", "תיקנים", "29/09/2028"], ["ברודיטופ וקס בלוק", "תפזול תעשיות כימיות בע\"מ", "457", "פתיון מוכן לשימוש בלוקים", "brodifacoum 0.005%", "חולדות, עכברים", "20/05/2031"], ["ברודיטופ ג'ל", "תפזול תעשיות כימיות בע\"מ", "658", "פתיון ג'ל", "brodifacoum 0.005%", "חולדות, עכברים", "02/04/2031"], ["גוליבר תיקנים", "אפקטיבי הדברות", "668", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.050%", "תיקנים", "08/08/2031"], ["רעם", "אר.פי.סי החברה להדברה - נס הרים", "654", "תרכיז רחיף", "bifenthrin 10.000%", "נמלים", "08/10/2030"], ["כופתיון פלוס", "אר.פי.סי החברה להדברה - נס הרים", "583", "פתיון מוכן לשימוש כופתיות", "brodifacoum 0.005%", "חולדות, עכברים", "07/06/2030"], ["פסטיון פלוס פסטה", "אר.פי.סי החברה להדברה - נס הרים", "584", "פיתיון מוכן לשימוש בצורת פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "07/06/2030"], ["דלתא סופר", "תפזול תעשיות כימיות בע\"מ", "487", "תרכיז מתחלב", "deltamethrin (ISO) 2.500%, s-bioallethrin 2.000%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, פישפשי מיטה, תיקנים", "11/03/2030"], ["אדוויון 20", "זרעים גדרה בע\"מ", "641", "גרגרים רחיפים", "indoxacarb 20.000%", "נמלים", "18/03/2031"], ["in2care", "גדות אגרו בע\"מ", "676", "פתיון מרוכז אבקה", "Beauveria bassiana 10.000%, Pyriproxyfen 75.000%", "זחלי יתושים, יתושים בוגרים", "09/05/2026"], ["ספיר", "חברת רימי כימיקלים בע\"מ", "479", "מיקרואמולסיה", "cypermethrin 20.000%, MGK 264 6.400%", "זבובים בוגרים, יתושים בוגרים, נמלים, פרוקי רגלים אחרים, פרעושים, תיקנים", "19/02/2027"], ["פרמיס 350", "לידור אלמנטס בע\"מ- ירושלים", "473", "תרכיז רחיף", "imidacloprid (ISO) 30.500%", "טרמיטים", "22/01/2026"], ["מאסטר פליי", "סאסאטק אגש\"ח בע\"מ", "604", "נוזל", "Dinotefuran 12.000%", "זבובים בוגרים", "18/02/2027"], ["סולו בלוק", "חברת רימי כימיקלים בע\"מ", "362", "פתיון מוכן לשימוש בלוקים", "brodifacoum 0.005%", "חולדות, עכברים", "26/12/2028"], ["אלמוג", "חברת רימי כימיקלים בע\"מ", "646", "תרכיז רחיף", "deltamethrin (ISO) 4.750%", "חרקים זוחלים אחרים, נמלים, תיקנים", "28/02/2029"], ["דרגון", "אר.פי.סי החברה להדברה - נס הרים", "640", "תרכיז רחיף", "bifenthrin 9.600%", "חרקים זוחלים אחרים, פישפשי מיטה, תיקנים", "18/06/2030"], ["דלתא מקס", "סיקמקס בע\"מ", "597", "נוזל מתחלב", "deltamethrin (ISO) 1.600%, Piperonyl Butoxide 5.000%, Pyriproxyfen 1.000%", "פרעושים, תיקנים", "20/01/2026"], ["דרקר 10.2", "אר.פי.סי החברה להדברה - נס הרים", "569", "תרכיז רחיף מיקרוקפסולרי", "cypermethrin 10.000%, TETRAMETHRIN 2.000%, Piperonyl Butoxide 10.000%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, נמלים, תיקנים", "21/06/2028"], ["פירתרון", "נורון חברה לייבוא ולייצור בע\"מ", "417", "תרכיז לערפול", "pyrethrum 3.000%, MGK 264 10.000%, Piperonyl Butoxide 6.000%", "יתושים בוגרים", "14/03/2028"], ["פרמקס 20", "חברת רימי כימיקלים בע\"מ", "325", "תרכיז מתחלב", "Permethrin 20.000%", "זבובים בוגרים, יתושים בוגרים", "21/02/2028"], ["ברודיטופ פסטה לתברואה", "תפזול תעשיות כימיות בע\"מ", "423", "פיתיון מוכן לשימוש בצורת פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "17/02/2028"], ["שוהם", "חברת רימי כימיקלים בע\"מ", "534", "תרכיז רחיף", "bifenthrin 10.000%", "חרקים זוחלים אחרים, טרמיטים, נמלים, פרעושים, תיקנים", "31/12/2027"], ["רטרים בלוק", "חברת רימי כימיקלים בע\"מ", "306", "פתיון מוכן לשימוש בלוקים", "bromadiolone 0.005%", "חולדות, עכברים", "14/02/2028"], ["פאלקון", "אר.פי.סי החברה להדברה - נס הרים", "675", "תרכיז מתחלב", "bifenthrin 5.000%, imidacloprid (ISO) 10.000%", "נמלים, תיקנים", "14/05/2026"], ["אדמירל סופר", "אדמה פתרונות לחקלאות בע\"מ-אשדוד", "631", "תרכיז רחיף", "bifenthrin 4.710%, novaluron 4.710%", "נמלים, פישפשי מיטה, פרעושים, תיקנים", "27/02/2028"], ["פרמתרול 25", "תפזול תעשיות כימיות בע\"מ", "205", "אבקה רטיבה", "Permethrin 25.000%", "זבובים בוגרים, יתושים בוגרים, נמלים, תיקנים", "15/02/2028"], ["מורין דיפה פסטה", "אדמה פתרונות לחקלאות בע\"מ-ארומה", "474", "פיתיון מוכן לשימוש בצורת פסטה", "difenacoum 0.005%", "חולדות, עכברים", "22/02/2028"], ["סנטור", "אדמה פתרונות לחקלאות בע\"מ-ארומה", "542", "תחליב שמן במים", "lambda-cyhalothrin (ISO) 9.700%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, פישפשי מיטה, קרציות קשות, תיקנים", "15/02/2028"], ["ברקת", "חברת רימי כימיקלים בע\"מ", "488", "מיקרואמולסיה", "cypermethrin 20.000%, Pyriproxyfen 0.800%, MGK 264 6.400%", "פרעושים", "18/07/2027"], ["פרמנונה 200", "סיקמקס בע\"מ", "302", "נוזל מתחלב", "Permethrin 20.000%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, נמלים, תיקנים", "08/03/2028"], ["פנטום פרו", "אלמנדה ישראל בע\"מ", "360", "תרכיז רחיף מיקרוקפסולרי", "cyphenothrin 10.000%", "פרעושים, תיקנים", "23/11/2029"], ["סיפזול 20", "תפזול תעשיות כימיות בע\"מ", "489", "תרכיז מתחלב", "cypermethrin 20.000%", "זבובים בוגרים, תיקנים", "28/09/2029"], ["רטיברום 2 לתברואה", "אדמה פתרונות לחקלאות בע\"מ-אשדוד", "652", "פיתיון מוכן לשימוש בצורת פסטה", "bromadiolone 0.005%", "חולדות, עכברים", "16/02/2030"], ["רימקס", "חברת רימי כימיקלים בע\"מ", "329", "אבקה רטיבה", "Permethrin 25.000%", "זבובים בוגרים, חרקים זוחלים אחרים, יתושים בוגרים, נמלים, תיקנים", "25/01/2029"], ["דמנד", "זרעים גדרה בע\"מ", "634", "תרכיז רחיף מיקרוקפסולרי", "lambda-cyhalothrin (ISO) 9.600%", "נמלים, פישפשי מיטה, תיקנים", "19/03/2030"], ["נימיקס 45", "אדמה פתרונות לחקלאות בע\"מ-אשדוד", "500", "תרכיז מתחלב", "Azadirachtin 4.500%", "תהלוכן האורן", "24/10/2028"], ["סיפרין לתברואה", "חברת רימי כימיקלים בע\"מ", "332", "תרכיז מתחלב", "cypermethrin 20.000%", "זבובים בוגרים, זחלי יתושים, יתושים בוגרים, נמלים, פרעושים, תיקנים", "27/04/2028"], ["רימי 90 נוזלי", "חברת רימי כימיקלים בע\"מ", "245", "תרכיז מתחלב", "Pyriproxyfen 5.000%", "זחלי יתושים, זחלי פרעושים, רימות זבובים, תיקנים", "23/06/2026"], ["סיפרימי", "חברת רימי כימיקלים בע\"מ", "247", "אבקה רטיבה", "cypermethrin 10.000%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, נמלים, תיקנים", "15/09/2026"], ["אדמירל", "אדמה פתרונות לחקלאות בע\"מ", "492", "תרכיז רחיף", "bifenthrin 7.900%", "טרמיטים, נמלים, פרעושים, תיקנים", "06/06/2028"], ["מגלון בלוק לתברואה", "סיקמקס בע\"מ", "499", "פתיון מוכן לשימוש בלוקים", "bromadiolone 0.005%", "חולדות, עכברים", "24/02/2028"], ["זאגור פסטה", "סיקמקס בע\"מ", "513", "פיתיון מוכן לשימוש בצורת פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "09/02/2028"], ["סיפרמקס", "סיקמקס בע\"מ", "294", "נוזל מתחלב", "cypermethrin 20.000%", "זבובים בוגרים, זחלי יתושים, חרקים מעופפים אחרים", "07/03/2028"], ["אימפקט", "אקו-כם פילד סיסטם בע\"מ", "598", "תרכיז רחיף", "cypermethrin 20.000%, cyromazine 5.000%", "פרעושים", "05/10/2027"], ["מקספורס פורטה", "לידור אלמנטס בע\"מ- ירושלים", "563", "ג'ל", "fipronil 0.050%", "תיקנים", "14/09/2028"], ["צרעון", "סאסאטק אגש\"ח בע\"מ", "625", "אירוסול", "cypermethrin 0.090%, TETRAMETHRIN 0.180%, Piperonyl Butoxide 0.850%", "צרעות", "31/01/2029"], ["תרסיפ 20", "תרסיס חברה לחימיקלים חקלאיים ותעשיתיים בעמ", "370", "תרכיז מתחלב", "cypermethrin 20.000%", "זחלי יתושים", "10/05/2028"], ["טפיר", "אדמה פתרונות לחקלאות בע\"מ-ארומה", "674", "תרכיז רחיף", "bifenthrin 5.000%, imidacloprid (ISO) 25.000%", "נמלים", "07/02/2026"], ["מוריברום ברודיפקום בלוק", "א.ע יזמות ופרוייקטים", "686", "פתיון מוכן לשימוש בלוקים", "brodifacoum 0.005%", "חולדות, עכברים", "27/03/2027"], ["מוריברום ברודיפקום פסטה", "א.ע יזמות ופרוייקטים", "685", "פיתיון מוכן לשימוש בצורת פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "19/03/2027"], ["טמפריד", "לידור אלמנטס בע\"מ- ירושלים", "618", "", "Beta-Cyfluthrin 10.880%, imidacloprid (ISO) 21.650%", "זבובים בוגרים, חרקים זוחלים אחרים, נמלים, פישפשי מיטה, פרוקי רגלים אחרים, תיקנים", "01/01/2027"], ["דיפון 100", "סאסאטק אגש\"ח בע\"מ", "624", "תרסיס", "difenacoum 0.075%", "חולדות, עכברים", "14/08/2028"], ["טוטל", "סיקמקס בע\"מ", "616", "תרכיז מתחלב (EC)", "fipronil 5.000%", "טרמיטים", "15/02/2032"], ["דינופליי", "חברת רימי כימיקלים בע\"מ", "435", "אבקה מסיסה", "Dinotefuran 12.000%", "זבובים בוגרים, פישפשי מיטה", "23/03/2031"], ["טרמיט ג'ל", "אר.פי.סי החברה להדברה - נס הרים", "578", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.050%", "טרמיטים", "24/11/2031"], ["סיפרפקט 200", "דור.קי פיתוח ושיווק בע\"מ", "493", "תרכיז מתחלב (EC)", "cypermethrin 20.000%, dipentene 5.000%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, תיקנים", "28/07/2032"], ["נמסיס פיתיון לטרמיטים", "חברת רימי כימיקלים בע\"מ", "666", "פיתיון מרוכז אבקה", "chlorfluazuron 0.100%", "טרמיטים", "24/06/2031"], ["גוליבר נמלים", "אפקטיבי הדברות", "667", "ג'ל", "fipronil 0.010%", "נמלים", "08/08/2031"], ["בי - 10", "סיקמקס בע\"מ", "589", "נוזל", "bifenthrin 10.000%", "נמלים, תיקנים", "08/07/2031"], ["פרמתרול אבוקות עשן", "תפזול תעשיות כימיות בע\"מ", "276", "אבוקת עשן", "Permethrin 13.500%", "תיקנים", "09/06/2030"], ["רטרים פסטה", "חברת רימי כימיקלים בע\"מ", "460", "פיתיון מוכן לשימוש בצורת פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "28/09/2030"], ["אלפא ג'ל", "רועי נעים", "620", "ג'ל", "fipronil 0.010%", "טרמיטים, נמלים", "15/04/2030"], ["דורפליי נוזל לתברואה", "דור.קי פיתוח ושיווק בע\"מ", "677", "תרכיז נוזלי", "Dinotefuran 12.000%", "זבובים בוגרים", "14/05/2026"], ["דלתא פורטה לתברואה", "", "484", "תחליב שמן במים", "deltamethrin (ISO) 1.600%, Pyriproxyfen 1.000%", "נמלים, פרעושים, תיקנים", "03/11/2030"], ["רקויאם", "", "543", "אבקה מסיסה", "chlorfluazuron 0.100%", "טרמיטים", "26/11/2030"], ["אקספרו 314", "א.ע יזמות ופרוייקטים", "608", "תרכיז רחיף", "bifenthrin 9.600%", "חרקים זוחלים אחרים, נמלים, פישפשי מיטה, תיקנים", "06/08/2032"], ["פרו ג'ל נמלים וטרמיטים", "תפזול תעשיות כימיות בע\"מ", "627", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.010%", "טרמיטים, נמלים", "28/10/2032"], ["פיקס ג'ל", "אר.פי.סי החברה להדברה", "610", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.010%", "נמלים, נמלת האש הקטנה", "28/07/2029"], ["סופר ג'ל", "אר.פי.סי החברה להדברה", "611", "פיתיון מוכן לשימוש ג'ל", "fipronil 0.050%", "תיקנים", "28/07/2029"], ["גאוטוקס", "אדמה פתרונות לחקלאות בע\"מ", "689", "אבקה", "Permethrin 0.600%, Piperonyl Butoxide 0.100%", "נמלים, תיקנים", "14/09/2029"], ["אודם", "חברת רימי כימיקלים בע\"מ", "653", "תרכיז רחיף", "bifenthrin 4.000%, imidacloprid (ISO) 5.000%", "חרקים זוחלים אחרים, יתושים בוגרים, נמלים, תיקנים", "21/03/2030"], ["טרמינטור", "תפזול תעשיות כימיות בע\"מ", "591", "", "imidacloprid (ISO) 35.000%", "טרמיטים", "09/07/2031"], ["סיזמיק", "אדמה פתרונות לחקלאות בע\"מ-אשדוד", "673", "תרחיף קפסולות CS", "lambda-cyhalothrin (ISO) 9.990%", "זבובים בוגרים, חרקים זוחלים אחרים, חרקים מעופפים אחרים, יתושים בוגרים, נמלים, פרוקי רגלים אחרים, פרעושים, תיקנים", "15/02/2032"], ["דוקסם PDS", "אדמה פתרונות לחקלאות בע\"מ-ארומה", "659", "", "Indoxacarb 0.788%", "נמלים, תיקנים", "31/08/2031"], ["דורסיד אבקה", "אר.פי.סי החברה להדברה - נס הרים", "572", "אבקה", "cypermethrin 0.600%", "נמלים, תיקנים", "22/09/2032"], ["טרמינול", "תפזול תעשיות כימיות בע\"מ", "615", "תרכיז רחיף", "fipronil 9.100%", "טרמיטים", "07/12/2031"], ["מורין בלוק פורטה לתברואה", "אדמה פתרונות לחקלאות בע\"מ", "467", "תחנת פיתיון", "bromadiolone 0.005%", "חולדות, עכברים", "16/05/2031"], ["מורין פקום פסטה", "אדמה פתרונות לחקלאות בע\"מ-ארומה", "506", "פיתיון מוכן לשימוש פסטה", "brodifacoum 0.005%", "חולדות, עכברים", "16/05/2031"], ["באג", "", "581", "תרחיף נוזלי", "bifenthrin 4.000%, imidacloprid (ISO) 5.000%", "יתושים בוגרים", "20/05/2031"]];
+// אופני הכנה מתוך התוויות הרשמיות (מאומת מול תווית המשרד להגנת הסביבה)
+// pests: מילות מפתח לזיהוי המזיק בטופס
+const DOSE_LABELS = {
+ "רימקס":[{pests:["זבוב","יתוש","מעופפ"],label:"זבובים, יתושים ומעופפים",dose:"100 גרם ל־10 ליטר (0.25%) · 10 ליטר ל־כ־250 מ״ר"},
+          {pests:["תיקן","נמל","זוחל","ג׳וק","ג'וק"],label:"תיקנים וזוחלים",dose:"200 גרם ל־10 ליטר (0.5%) · 10 ליטר ל־כ־250 מ״ר"}],
+ "דלתא סופר":[{pests:["זבוב","מעופפ","יתוש"],label:"זבובים ומעופפים",dose:"40 סמ״ק ל־5 ליטר מים (0.036%) · 5 ליטר ל־100 מ״ר"},
+          {pests:["תיקן","פשפש","זוחל","ג׳וק","ג'וק","נמל"],label:"פשפש מיטה, תיקנים וזוחלים",dose:"50 סמ״ק ל־5 ליטר מים (0.045%) · 5 ליטר ל־100 מ״ר"}],
+ "ספיר":[{pests:["זבוב","יתוש","מעופפ"],label:"זבובים, יתושים ומעופפים",dose:"50–75 סמ״ק ל־10 ליטר (0.1–0.15%) · 1 ליטר ל־20 מ״ר"},
+          {pests:["תיקן","נמל","זוחל","ג׳וק","ג'וק"],label:"תיקנים, נמלים וזוחלים",dose:"75–100 סמ״ק ל־10 ליטר (0.15–0.2%) · 1 ליטר ל־25 מ״ר"},
+          {pests:["פרעוש"],label:"פרעושים",dose:"100 סמ״ק ל־10 ליטר (0.2%) · 1 ליטר ל־10 מ״ר"}],
+};
+function doseOptions(name, memory){
+  const base=(DOSE_LABELS[name]||[]).map(o=>({...o,src:"label"}));
+  const used=((memory[name]||{}).doses||[]).filter(d=>d&&!base.some(o=>o.dose===d)).map(d=>({label:"שימוש קודם",dose:d,pests:[],src:"used"}));
+  return [...base,...used];
+}
+function pickDose(name, pests, memory){
+  const opts=doseOptions(name,memory); const P=(pests||[]).join(" ");
+  const mem=(memory[name]||{}).byPest||{};
+  for(const p of (pests||[])){ if(mem[p]) return mem[p]; }
+  const hit=opts.find(o=>o.pests.some(k=>P.includes(k)));
+  if(hit) return hit.dose;
+  return opts.length===1?opts[0].dose:"";
+}
 const REG_CATS = [["mine","⭐ שלי"],["spray","ריסוס"],["gel","ג'לים"],["rodent","רעלים למכרסמים"],["powder","אבקה יבשה"],["granule","גרגירים ופתיונות"],["other","אחר"],["all","הכל"]];
 const CAT_METHOD = {spray:"ריסוס", gel:"ג'ל", rodent:"תחנת האכלה", powder:"אבקה", granule:"פיזור גרגירים", other:"אחר"};
 const REG_OVERRIDE = {"טמפריד":"spray","טרמינטור":"spray","דוקסם PDS":"other"};
@@ -1440,10 +1464,14 @@ function chemMemory(execLogs){
   const mem={};
   [...(execLogs||[])].sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))).forEach(l=>(l.materials||[]).forEach(m=>{
     if(!m||!m.name) return; const o=mem[m.name]||{};
-    mem[m.name]={batch:m.batch||o.batch||"",method:m.method||o.method||"",active:m.active||o.active||"",reg:m.reg||o.reg||"",cat:m.cat||o.cat||""};
+    const doses=[...new Set([...(o.doses||[]),...(m.dose?[m.dose]:[])])];
+    const byPest={...(o.byPest||{})}; if(m.dose) (l.pest||[]).forEach(p=>{ byPest[p]=m.dose; });
+    mem[m.name]={batch:m.batch||o.batch||"",method:m.method||o.method||"",active:m.active||o.active||"",reg:m.reg||o.reg||"",cat:m.cat||o.cat||"",maker:m.maker||o.maker||"",doses,byPest};
   }));
   const loc=chemMemLoad();
-  Object.keys(loc).forEach(k=>{ mem[k]={...(mem[k]||{}),...Object.fromEntries(Object.entries(loc[k]).filter(([,v])=>v))}; });
+  Object.keys(loc).forEach(k=>{ const L=loc[k]; const M=mem[k]||{};
+    mem[k]={...M,...Object.fromEntries(Object.entries(L).filter(([kk,v])=>v&&kk!=="byPest"&&kk!=="doses")),
+      doses:[...new Set([...(M.doses||[]),...(L.doses||[])])], byPest:{...(M.byPest||{}),...(L.byPest||{})}}; });
   return mem;
 }
 // החומרים שהמדביר כבר עבד איתם — לפי תדירות
@@ -1454,7 +1482,7 @@ function myChemicals(execLogs, workerName){
   Object.keys(chemMemLoad()).forEach(n=>{ if(!cnt[n]) cnt[n]=0.5; });
   return Object.keys(cnt).sort((a,b)=>(cnt[b]-cnt[a])||String(last[b]||"").localeCompare(String(last[a]||"")));
 }
-function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[]}){
+function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]}){
   const reg=useRegProducts();
   const [q,setQ]=useState("");
   const [cat,setCat]=useState(mine.length?"mine":"spray");
@@ -1464,17 +1492,18 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[]}){
   const TREAT_OPTIONS=["ריסוס","ג'ל","תחנת האכלה","פיזור גרגירים","אבקה","ערפול","השמדת קן","אחר"];
   const byName=React.useMemo(()=>{const m={}; reg.forEach(r=>{m[r[0]]=r;}); return m;},[reg]);
   const legacy=name=>CHEMICALS.find(c=>c.name===name)||{};
-  const infoOf=name=>{ const r=byName[name]; if(r) return {active:r[4],reg:r[2],cat:regCat(r),expired:regExpired(r),form:r[3]}; const l=legacy(name); return {active:l.active||"",reg:"",cat:l.method==="ג'ל"?"gel":l.method==="תחנת האכלה"?"rodent":"spray"}; };
+  const infoOf=name=>{ const r=byName[name]; if(r) return {active:r[4],reg:r[2],cat:regCat(r),expired:regExpired(r),form:r[3],maker:r[1]}; const l=legacy(name); return {active:l.active||"",reg:"",maker:l.mfr||"",cat:l.method==="ג'ל"?"gel":l.method==="תחנת האכלה"?"rodent":"spray"}; };
   const add=(name,custom,ccat)=>{
     const mem=memory[name]||{}; const inf=infoOf(name); const c=ccat||mem.cat||inf.cat||"spray";
     const method=mem.method||treatMethod[name]||CAT_METHOD[c]||"ריסוס";
-    onChange([...selected,{name,batch:mem.batch||"",method:TREAT_OPTIONS.includes(method)?method:"ריסוס",active:inf.active||mem.active||"",reg:inf.reg||mem.reg||"",cat:c,areas:[],stations:"",custom:!!custom}]);
-    chemMemSave(name,{cat:c,reg:inf.reg||mem.reg||""});
+    onChange([...selected,{name,batch:mem.batch||"",method:TREAT_OPTIONS.includes(method)?method:"ריסוס",active:inf.active||mem.active||"",reg:inf.reg||mem.reg||"",maker:inf.maker||mem.maker||"",cat:c,dose:pickDose(name,pests,memory),areas:[],stations:"",custom:!!custom}]);
+    chemMemSave(name,{cat:c,reg:inf.reg||mem.reg||"",maker:inf.maker||mem.maker||""});
   };
   const toggle=name=>{ if(selected.find(m=>m.name===name)) onChange(selected.filter(m=>m.name!==name)); else add(name); };
   const updateField=(name,field,val)=>{
     onChange(selected.map(m=>m.name===name?{...m,[field]:val}:m));
-    if(field==="batch"||field==="method"||field==="active") chemMemSave(name,{[field]:val});
+    if(field==="batch"||field==="method"||field==="active"||field==="maker") chemMemSave(name,{[field]:val});
+    if(field==="dose"&&val){ const L=chemMemLoad()[name]||{}; const byPest={...(L.byPest||{})}; (pests||[]).forEach(p=>{byPest[p]=val;}); chemMemSave(name,{byPest,doses:[...new Set([...(L.doses||[]),val])]}); }
   };
   const toggleArea=(m,a)=>{ const cur=m.areas||[]; updateField(m.name,"areas",cur.includes(a)?cur.filter(x=>x!==a):[...cur,a]); };
   const addCustom=()=>{ const n=customChem.trim(); if(!n) return; if(!selected.find(m=>m.name===n)) add(n,true,customCat); setCustomChem(""); setShowCustom(false); };
@@ -1502,6 +1531,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[]}){
             <span style={{fontWeight:700,fontSize:14,color:"#0f172a"}}>{r[0]}</span>
             {exp&&<span style={{marginRight:6,fontSize:11,color:"#b91c1c",fontWeight:700}}>· רישום פג</span>}
             <span style={{display:"block",fontSize:12,color:CLR.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",direction:"ltr",textAlign:"right"}}>{r[4]||"—"}</span>
+            {r[1]&&<span style={{display:"block",fontSize:11,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🏭 {r[1]}</span>}
           </span>
           {r[2]&&<span style={{fontSize:11,color:CLR.muted,flexShrink:0}}>רישום {r[2]}</span>}
         </button>;})}
@@ -1521,7 +1551,20 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[]}){
             <span style={{fontWeight:800,fontSize:14,color:CLR.primary}}>🧪 {m.name}{m.reg?<span style={{fontWeight:400,fontSize:12,color:CLR.muted}}> · רישום {m.reg}</span>:null}</span>
             <button type="button" onClick={()=>onChange(selected.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer",fontSize:18}}>✕</button>
           </div>
-          <Inp label="הרכב / חומר פעיל *" value={m.active||""} onChange={v=>updateField(m.name,"active",v)} placeholder="למשל: Deltamethrin 2.5%"/>
+          <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:8}}>
+            <Inp label="הרכב / חומר פעיל *" value={m.active||""} onChange={v=>updateField(m.name,"active",v)} placeholder="למשל: Deltamethrin 2.5%"/>
+            <Inp label="יצרן / בעל רישום" value={m.maker||""} onChange={v=>updateField(m.name,"maker",v)} placeholder="למשל: רימי"/>
+          </div>
+          {(()=>{ const opts=doseOptions(m.name,memory); const showInput=m.method!=="ג'ל"&&m.method!=="תחנת האכלה";
+            if(!showInput&&!opts.length) return null;
+            return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px",marginBottom:8}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:6}}>⚗️ אופן הכנה (מינון) *</div>
+              {opts.length>0&&<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:8}}>
+                {opts.map((o,k)=>{const on=m.dose===o.dose;return <button key={k} type="button" onClick={()=>updateField(m.name,"dose",o.dose)} style={{textAlign:"right",padding:"8px 10px",borderRadius:8,border:`1.5px solid ${on?"#2563eb":"#bfdbfe"}`,background:on?"#2563eb":"#fff",color:on?"#fff":"#1e3a8a",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>
+                  <b>{on?"✓ ":""}{o.label}</b>{o.src==="label"?<span style={{fontSize:11,opacity:.8}}> (לפי התווית)</span>:null}<br/>{o.dose}</button>;})}
+              </div>}
+              <Inp label={opts.length?"או רשום מינון אחר":"מינון לפי התווית (נשמר לפעם הבאה)"} value={m.dose||""} onChange={v=>updateField(m.name,"dose",v)} placeholder="למשל: 50 סמ״ק ל־10 ליטר"/>
+            </div>; })()}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             <Inp label="מספר אצווה" value={m.batch||""} onChange={v=>updateField(m.name,"batch",v)} placeholder="נשמר לפעם הבאה"/>
             <div>
@@ -1692,7 +1735,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     {/* Chemicals */}
     <div style={{marginBottom:14}}>
       <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>חומרי הדברה *</label>
-      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)}/>
+      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)} pests={allPests}/>
     </div>
 
     {stations.length>0&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
@@ -1769,7 +1812,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
 
-    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    {(()=>{ const go=send=>{ if(!valid) return alert("שם לקוח, כתובת, מזיקים וחומרים – חובה"); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
@@ -1824,9 +1867,9 @@ function ExecLogPreview({data,onBack,onApprove,saved,phone,approveLabel}){
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead><tr style={{background:"#1a5c3a",color:"#fff"}}>{["שם מסחרי","חומרים פעילים","אופן יישום","אזורים","מס׳ אצווה"].map(h=><th key={h} style={{padding:"7px 10px",textAlign:"right",fontWeight:600}}>{h}</th>)}</tr></thead>
           <tbody>{data.materials.map((m,i)=>{const ch=CHEMICALS.find(c=>c.name===m.name)||{};return <tr key={i} style={{background:i%2===0?"#f9fafb":"#fff"}}>
-            <td style={{padding:"6px 10px",fontWeight:600}}>{m.name}</td>
+            <td style={{padding:"6px 10px",fontWeight:600}}>{m.name}{m.maker?<div style={{fontSize:11,fontWeight:400,color:"#555"}}>{m.maker}{m.reg?" · רישום "+m.reg:""}</div>:null}</td>
             <td style={{padding:"6px 10px",fontSize:11}}>{m.active||ch.active||"—"}</td>
-            <td style={{padding:"6px 10px"}}>{m.method||ch.method||"—"}{m.stations?" · "+m.stations+" תחנות":""}</td>
+            <td style={{padding:"6px 10px"}}>{m.method||ch.method||"—"}{m.stations?" · "+m.stations+" תחנות":""}{m.dose?<div style={{fontSize:11,color:"#555"}}>{m.dose}</div>:null}</td>
             <td style={{padding:"6px 10px",fontSize:11}}>{(m.areas||[]).join(", ")||"—"}</td>
             <td style={{padding:"6px 10px",color:"#555"}}>{m.batch||"—"}</td>
           </tr>;})}</tbody>
