@@ -1192,9 +1192,91 @@ function sendReviewRequest(name,phone){
   const text=["שלום"+(first?" "+first:"")+" 👋","","תודה שבחרתם ב"+COMPANY.name+" 🙏","אם הייתם מרוצים, נשמח מאוד אם תקדישו דקה לכתוב לנו ביקורת בגוגל. זה עוזר לנו מאוד:","",googleReviewUrl(),"","תודה רבה!"].join("\n");
   window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(text),"_blank");
 }
-function sendExecLogWA(log,phone){
+// ── יומן ביצוע כקובץ PDF רשמי (ממוספר, עם לוגו) ──
+let __jspdf=null;
+function loadJsPdf(){
+  if(window.jspdf&&window.jspdf.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  if(__jspdf) return __jspdf;
+  __jspdf=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    sc.onload=()=>res(window.jspdf.jsPDF); sc.onerror=()=>{__jspdf=null; rej(new Error('טעינת מחולל ה-PDF נכשלה'));}; document.head.appendChild(sc); });
+  return __jspdf;
+}
+function execLogFileName(log){ return "יומן-ביצוע-"+(log.docNum||log.id||"")+".pdf"; }
+// מצייר את המסמך בעזרת הדפדפן עצמו (עברית מדויקת), ומחלק לעמודי A4 בגבולות של שורות/בלוקים
+async function execLogPdfBlob(log){
+  const JsPDF=await loadJsPdf();
+  const W=794, PAGE_H=Math.floor(W*297/210), PAD=34;
+  const css=`*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,'Segoe UI',sans-serif;} table{width:100%;border-collapse:collapse;}`;
+  const host=document.createElement('div');
+  host.style.cssText=`position:fixed;left:0;top:0;width:${W}px;background:#fff;z-index:-1;opacity:0;pointer-events:none;`;
+  host.innerHTML=`<div dir="rtl" style="width:${W}px;padding:${PAD}px;background:#fff;color:#111;direction:rtl;font-family:Arial,'Segoe UI',sans-serif;"><style>${css}</style>${execLogHtml({company:COMPANY,docNum:log.docNum||"",log,chemicals:CHEMICALS})}</div>`;
+  document.body.appendChild(host);
+  try{
+    const root=host.firstChild;
+    await Promise.all([...root.querySelectorAll('img')].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
+    const H=Math.ceil(root.getBoundingClientRect().height);
+    // נקודות חיתוך אפשריות: סוף של כל בלוק/שורה
+    const top0=root.getBoundingClientRect().top;
+    const cuts=new Set([H]);
+    root.querySelectorAll('div,tr,li,table,ul').forEach(el=>{ const r=el.getBoundingClientRect(); if(r.height>0&&r.height<PAGE_H*0.9) cuts.add(Math.round(r.bottom-top0)); });
+    const sorted=[...cuts].filter(c=>c>0&&c<=H).sort((a,b)=>a-b);
+    // ציור ל-SVG
+    const xhtml=new XMLSerializer().serializeToString(root);
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xhtml}</foreignObject></svg>`;
+    const img=new Image();
+    await new Promise((res,rej)=>{ img.onload=res; img.onerror=()=>rej(new Error('ציור המסמך נכשל')); img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg); });
+    const SC=2; const full=document.createElement('canvas'); full.width=W*SC; full.height=H*SC;
+    const fx=full.getContext('2d'); fx.fillStyle="#fff"; fx.fillRect(0,0,full.width,full.height); fx.drawImage(img,0,0,full.width,full.height);
+    full.toDataURL('image/jpeg',0.5); // בודק שהציור מותר (Safari חוסם) — זורק שגיאה אם לא
+    const pdf=new JsPDF({unit:'mm',format:'a4',orientation:'portrait'});
+    let y=0, page=0;
+    while(y<H-2){
+      let end=y+PAGE_H; if(end<H){ const c=sorted.filter(c=>c>y+PAGE_H*0.5&&c<=y+PAGE_H); end=c.length?c[c.length-1]:y+PAGE_H; } else end=H;
+      const sliceH=end-y; const pc=document.createElement('canvas'); pc.width=W*SC; pc.height=sliceH*SC;
+      const px=pc.getContext('2d'); px.fillStyle="#fff"; px.fillRect(0,0,pc.width,pc.height); px.drawImage(full,0,y*SC,W*SC,sliceH*SC,0,0,W*SC,sliceH*SC);
+      if(page>0) pdf.addPage();
+      pdf.addImage(pc.toDataURL('image/jpeg',0.92),'JPEG',0,0,210,sliceH*210/W);
+      page++; y=end;
+    }
+    const n=pdf.getNumberOfPages(); if(n>1) for(let i=1;i<=n;i++){ pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(150); pdf.text(i+" / "+n,105,292,{align:'center'}); }
+    return pdf.output('blob');
+  } finally { host.remove(); }
+}
+// מעלה את ה-PDF ומחזיר קישור מאובטח לשנה
+async function uploadExecLogPdf(log){
+  const blob=await execLogPdfBlob(log);
+  if(!sb) throw new Error('אין חיבור לשרת');
+  const path=`execlogs/${String(log.docNum||log.id||"x").replace(/[^0-9A-Za-z_-]/g,"")}-${Date.now()}.pdf`;
+  const up=await sb.storage.from('contracts').upload(path,blob,{contentType:'application/pdf',upsert:false});
+  if(up.error) throw up.error;
+  const su=await sb.storage.from('contracts').createSignedUrl(path,60*60*24*365);
+  if(su.error) throw su.error;
+  return {url:su.data.signedUrl,blob};
+}
+// שליחה בוואטסאפ: קובץ PDF רשמי (קישור ישיר) ישר לצ'אט של הלקוח
+async function sendExecLogWA(log,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
-  window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(execLogWAText(log)),"_blank");
+  if(!ph) return alert("אין טלפון ללקוח");
+  const w=window.open("","_blank");
+  try{ if(w) w.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;font-size:20px;text-align:center">⏳ מכין את יומן הביצוע כ-PDF...</body></html>'); }catch(e){}
+  try{
+    const {url}=await uploadExecLogPdf(log);
+    const text=["שלום "+(log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
+    const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
+    if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
+  }catch(e){
+    try{ if(w) w.close(); }catch(_){}
+    if(confirm("יצירת ה-PDF נכשלה ("+(e.message||e)+").\nלשלוח במקום סיכום בהודעת טקסט?")) window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(execLogWAText(log)),"_blank");
+  }
+}
+// שיתוף כקובץ (בטלפון נפתח תפריט השיתוף — וואטסאפ, מייל...) או הורדה במחשב
+async function shareExecLogPdf(log){
+  try{
+    const blob=await execLogPdfBlob(log);
+    const file=new File([blob],execLogFileName(log),{type:'application/pdf'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:"יומן ביצוע "+(log.docNum||"")}); return; }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=execLogFileName(log); document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
+  }catch(e){ if(e&&e.name==="AbortError") return; alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
 }
 function printExecLog(log){
   openPrintWindow(`יומן ביצוע ${log.docNum||""}`, execLogHtml({company:COMPANY,docNum:log.docNum||"",log,chemicals:CHEMICALS}));
@@ -1813,7 +1895,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     materials:     initialData?.materials_raw || initialData?.materials || [],
     extermination_notes: initialData?.extermination_notes || "",
     warranty:      initialData?.warranty      || "",
-    notes:         initialData?.notes         || prefillAppt?.notes || "",
+    notes:         initialData?.notes         || "",
     paymentDone:   initialData?.paymentDone   ?? true,
     paymentNote:   initialData?.paymentNote   || "",
     paymentMethod: initialData?.paymentMethod || "",
@@ -2011,7 +2093,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     {sec("notes","📝","הערות ואחריות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):"",f.warranty?"אחריות "+f.warranty+" חו׳":""].filter(Boolean).join(" · "),f.notes||f.warranty?"ok":"opt",<>
     <div style={{marginBottom:14}}>
-      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>📝 הערות / תיאור הטיפול</label>
+      {prefillAppt?.notes&&<div style={{background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:8,padding:"7px 10px",marginBottom:8,fontSize:13,color:"#475569"}}>📌 <b>הערות מההזמנה (פנימי — לא נשלח ללקוח):</b> {prefillAppt.notes}</div>}
+      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>📝 הערות / תיאור הטיפול <span style={{fontWeight:400}}>(מופיע במסמך ללקוח)</span></label>
       <textarea value={f.notes} onChange={e=>set("notes",e.target.value)} rows={5} placeholder="למשל: ביצעתי ריסוס בפנלים כנגד תיקנים ונמלים, הונח ג'ל במטבח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical",minHeight:120}}/>
       {f.extermination_notes&&<div style={{fontSize:12,color:CLR.muted,marginTop:4}}>תיאור קודם: {f.extermination_notes}</div>}
     </div>
@@ -2027,9 +2110,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>
       {f.paymentStatus==="paid"&&<div>
         <div style={{fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:5}}>איך שולם? *</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>{PAY_METHODS.map(m=>{const on=f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",on?"":m)} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m}</button>;})}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:8}}>{[...PAY_METHODS,"אחר"].map(m=>{const custom=!!f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod); const on=m==="אחר"?(custom||f.paymentMethod==="אחר"):f.paymentMethod===m;return <button key={m} type="button" onClick={()=>set("paymentMethod",m==="אחר"?(on?"":"אחר"):(on?"":m))} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#dc2626":"#fff",color:on?"#fff":"#7f1d1d",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{m==="אחר"&&custom?f.paymentMethod:m}</button>;})}</div>
+        {f.paymentMethod&&!PAY_METHODS.includes(f.paymentMethod)&&<Inp label="צורת תשלום אחרת" value={f.paymentMethod==="אחר"?"":f.paymentMethod} onChange={v=>set("paymentMethod",v||"אחר")} placeholder="למשל: צ'ק דחוי ל-15/11, שני תשלומים..."/>}
         <div style={{maxWidth:240}}><Inp label="סכום שהתקבל בפועל (₪)" type="number" value={f.paymentAmount} onChange={v=>set("paymentAmount",v)}/></div>
         {f.agreedPrice&&f.paymentAmount&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)&&<div style={{fontSize:13,color:"#991b1b",fontWeight:700}}>נשארה יתרה של ₪{parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)} — תירשם כחוב</div>}
+        <Inp label="הערות לתשלום (פנימי)" value={f.paymentNote} onChange={v=>set("paymentNote",v)} placeholder="למשל: שולם חלק בביט וחלק במזומן"/>
         <div style={{fontSize:12,color:"#991b1b",marginTop:2}}>🧾 יופיע ב"חשבוניות" ברשימת "ממתינים לחשבונית" עד שתופק חשבונית</div>
       </div>}
       {f.paymentStatus==="debt"&&<div>
@@ -2112,8 +2197,9 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
     {saved&&<div style={{background:"#dcfce7",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"10px 14px",marginBottom:12,fontWeight:700,fontSize:14}}>✅ יומן הביצוע נשמר במערכת אוטומטית ({docNum})</div>}
     <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
       <Btn v="ghost" sm onClick={onBack}>← {saved?"תיקון":"חזרה לעריכה"}</Btn>
-      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); sendExecLogWA(log,phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 שלח ללקוח</Btn>
-      <Btn sm v="secondary" onClick={()=>printExecLog({...log,docNum})}>📄 PDF</Btn>
+      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); sendExecLogWA({...log,docNum},phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 שלח ללקוח</Btn>
+      <Btn sm v="secondary" onClick={()=>shareExecLogPdf({...log,docNum})}>📎 קובץ PDF</Btn>
+      <Btn sm v="secondary" onClick={()=>printExecLog({...log,docNum})}>🖨️ הדפסה</Btn>
       {saved&&<Btn sm v="secondary" onClick={()=>sendReviewRequest(log.clientName,phone)} style={{background:"#fef9c3",color:"#854d0e",border:"1px solid #fde047"}}>⭐ בקשת ביקורת</Btn>}
       {onApprove&&<Btn onClick={onApprove} style={{flex:1}}>{approveLabel||"✓ סיום"}</Btn>}
     </div>
