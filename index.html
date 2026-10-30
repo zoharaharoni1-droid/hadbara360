@@ -150,7 +150,7 @@ const { useState } = React;
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
-const COMPANY = { name: "הדברה 360", licensePrefix: "ח.פ. 12-345678" };
+const COMPANY = { name: "הדברה 360", licensePrefix: "ח.פ. 304-856-412" };
 
 const CLR = {
   primary:"#16a34a", primaryLight:"#f0fdf4", primaryMid:"#22c55e",
@@ -1867,7 +1867,26 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   </div>;
 }
 
-function ExecLogPreview({data,onBack,onApprove,saved,phone,approveLabel}){
+class ErrorBoundary extends React.Component{
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(err){return {err};}
+  componentDidCatch(err,info){try{console.error("UI error:",err,info);}catch(e){}}
+  render(){ if(!this.state.err) return this.props.children;
+    return <div style={{padding:24,direction:"rtl",fontFamily:"system-ui,sans-serif",textAlign:"center"}}>
+      <div style={{fontSize:40}}>⚠️</div>
+      <div style={{fontWeight:700,fontSize:17,margin:"8px 0"}}>משהו השתבש בתצוגה</div>
+      <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>הנתונים שמורים. אפשר לחזור ולהמשיך לעבוד.</div>
+      <button onClick={()=>{this.setState({err:null}); if(this.props.onReset) this.props.onReset();}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontSize:15,fontWeight:700,marginLeft:8}}>חזרה</button>
+      <button onClick={()=>location.reload()} style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:10,padding:"10px 20px",fontSize:15}}>רענון</button>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:14,direction:"ltr"}}>{String(this.state.err&&this.state.err.message||"")}</div>
+    </div>; }
+}
+function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}){
+  // Form data and saved logs use different field names — normalize so the preview never crashes
+  const src={...(saved||{}),...(rawData||{})};
+  const data={...src,
+    worker:{name:(src.worker&&src.worker.name)||src.workerName||"",license:(src.worker&&src.worker.license)||src.workerLicense||""},
+    materials:src.materials||[], pest:src.pest||[], scope:src.scope||[]};
   const docNum=data.docNum||saved?.docNum||"(יוקצה בשמירה)";
   const log=saved||data;
   return <div>
@@ -1919,7 +1938,7 @@ function ExecLogPreview({data,onBack,onApprove,saved,phone,approveLabel}){
       {data.notes&&<div style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13}}><b>הערות:</b> {data.notes}</div>}
       {!data.paymentDone&&data.paymentNote&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"8px 12px",marginBottom:14,fontSize:13,color:"#991b1b"}}>💳 <b>הערה לפקידה (פנימי, לא נשלח ללקוח):</b> {data.paymentNote}</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20,borderTop:"1px solid #e5e7eb",paddingTop:16}}>
-        <div><div style={{fontSize:12,color:"#555",marginBottom:20}}>חתימת מדביר:</div><div style={{borderBottom:"1px solid #999",marginBottom:4}}/><div style={{fontSize:11,color:"#555"}}>{data.worker.name} | רישיון {data.worker.license}</div></div>
+        <div><div style={{fontSize:12,color:"#555",marginBottom:20}}>חתימת מדביר:</div><div style={{borderBottom:"1px solid #999",marginBottom:4}}/><div style={{fontSize:11,color:"#555"}}>{data.worker.name}{data.worker.license?" | רישיון "+data.worker.license:""}</div></div>
         <div><div style={{fontSize:12,color:"#555",marginBottom:20}}>חתימת לקוח:</div><div style={{borderBottom:"1px solid #999",marginBottom:4}}/><div style={{fontSize:11,color:"#555"}}>{data.clientName}</div></div>
       </div>
       <div style={{textAlign:"center",marginTop:16,fontSize:10,color:"#aaa"}}>{COMPANY.name} | {docNum} | {fmtDate(data.date)}</div>
@@ -7590,7 +7609,7 @@ function App(){
 
 const root=ReactDOM.createRoot(document.getElementById("root"));
 try{
-  root.render(<App />);
+  root.render(<ErrorBoundary><App /></ErrorBoundary>);
 }catch(e){
   document.getElementById("root").innerHTML=`<div style="padding:40px;color:#dc2626;font-family:sans-serif;direction:rtl"><h2>שגיאה בטעינה</h2><pre style="font-size:12px;margin-top:12px;white-space:pre-wrap">${e.stack}</pre></div>`;
 }
