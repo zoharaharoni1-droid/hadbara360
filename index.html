@@ -431,7 +431,7 @@ function AdminPanel({authUser,onClose}){
     if(nu!==undefined&&nu!==editUser.username){
       if(!nu||String(nu).trim()!==nu){setMsg('שם המשתמש לא יכול להיות ריק או להתחיל/להסתיים ברווח');return;}
       const ur=await sb.rpc('admin_set_username',{p_user_id:String(editUser.id),p_username:nu});
-      if(ur.error){setMsg('לא ניתן לשנות שם משתמש עדיין — צריך להריץ את סקריפט ה-SQL (admin_set_username)');return;}
+      if(ur.error){setMsg('שגיאה בשינוי שם המשתמש: '+(ur.error.message||''));return;}
       if(ur.data!=='ok'){setMsg('שגיאה: '+ur.data);return;}
     }
     if(editUser._newpwd){
@@ -464,7 +464,7 @@ function AdminPanel({authUser,onClose}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",direction:"rtl",padding:16}}>
       <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:700,maxHeight:"90vh",overflow:"auto",boxShadow:"0 25px 80px rgba(0,0,0,0.2)"}}>
-        <div style={{padding:"24px 28px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{padding:"16px 18px",borderBottom:"1px solid #e2e8f0",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"#fff",zIndex:2}}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <button onClick={()=>setShowLog(false)} style={{fontSize:18,fontWeight:800,border:"none",background:"none",cursor:"pointer",color:showLog?"#94a3b8":"#0f172a",fontFamily:"inherit"}}>👥 משתמשים</button>
             <button onClick={()=>{setShowLog(true);loadLog();}} style={{fontSize:18,fontWeight:800,border:"none",background:"none",cursor:"pointer",color:showLog?"#0f172a":"#94a3b8",fontFamily:"inherit"}}>📜 פעילות</button>
@@ -488,51 +488,36 @@ function AdminPanel({authUser,onClose}){
             {logRows.length===0&&!logErr&&<div style={{color:"#64748b",fontSize:13}}>אין עדיין פעילות רשומה</div>}
           </div>
         </div>}
-        {!showLog&&<div style={{padding:"20px 28px"}}>
-          <div style={{background:"#fef9c3",border:"1px solid #fde047",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:6}}>⭐ קישור לביקורת בגוגל</div>
-            <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>הקישור שנשלח ללקוחות בכפתור "בקשת ביקורת". מעתיקים אותו מפרופיל העסק בגוגל ← "בקשת ביקורות". נשמר במכשיר הזה.</div>
-            <div style={{display:"flex",gap:6}}>
-              <input value={reviewUrl} onChange={e=>setReviewUrl(e.target.value)} placeholder="https://g.page/r/..." style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,direction:"ltr"}}/>
-              <button onClick={()=>{try{ if(reviewUrl.trim()) localStorage.setItem('h360_review_url',reviewUrl.trim()); else localStorage.removeItem('h360_review_url'); }catch(e){} setMsg('✅ קישור הביקורת נשמר');}} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#16a34a",color:"#fff",fontWeight:700,cursor:"pointer"}}>שמור</button>
-            </div>
-          </div>
-          {msg&&<div style={{background:"#f0fdf4",color:"#16a34a",borderRadius:8,padding:"10px 16px",marginBottom:16,fontSize:13}}>{msg}</div>}
+        {!showLog&&(()=>{
+          const IN={width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:15,fontFamily:"inherit",background:"#fff"};
+          const LB={fontSize:13,color:"#475569",display:"block",marginBottom:5,fontWeight:600};
+          const GRID={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12,marginBottom:12};
+          const isErr=msg&&!msg.startsWith("✅");
+          const roleBadge=r=>({background:r==="מנהל"?"#fef3c7":r==="פקידה"?"#e0f2fe":"#f0fdf4",color:r==="מנהל"?"#b45309":r==="פקידה"?"#0369a1":"#15803d",padding:"2px 10px",borderRadius:20,fontWeight:700,fontSize:12});
+          return <div style={{padding:"16px 16px 24px"}}>
+          {msg&&<div style={{background:isErr?"#fef2f2":"#f0fdf4",color:isErr?"#b91c1c":"#15803d",border:"1px solid "+(isErr?"#fecaca":"#bbf7d0"),borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:14,display:"flex",justifyContent:"space-between",gap:8}}><span>{msg}</span><button onClick={()=>setMsg("")} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",fontSize:16}}>✕</button></div>}
 
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <span style={{fontWeight:700,fontSize:15}}>משתמשים רשומים</span>
-            <button onClick={()=>setShowAdd(!showAdd)}
-              style={{padding:"8px 18px",background:CLR.primary,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13}}>
-              + הוסף משתמש
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:10}}>
+            <span style={{fontWeight:800,fontSize:17}}>משתמשים <span style={{color:"#94a3b8",fontWeight:600,fontSize:14}}>({users.length})</span></span>
+            <button onClick={()=>{setShowAdd(!showAdd);setEditUser(null);}}
+              style={{padding:"9px 16px",background:showAdd?"#f1f5f9":CLR.primary,color:showAdd?"#475569":"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:14}}>
+              {showAdd?"סגור":"+ משתמש חדש"}
             </button>
           </div>
 
           {showAdd&&(
-            <div style={{background:"#f8fafc",borderRadius:12,padding:20,marginBottom:20,border:`1.5px solid ${CLR.border}`}}>
-              <h3 style={{margin:"0 0 16px",fontSize:15,fontWeight:700}}>משתמש חדש</h3>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם מלא</label>
-                  <input value={newU.name} onChange={e=>setNewU({...newU,name:e.target.value})}
-                    style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
-                <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם משתמש (לכניסה)</label>
-                  <input value={newU.username} onChange={e=>setNewU({...newU,username:e.target.value})}
-                    style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
-                <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>סיסמה</label>
-                  <input type="password" value={newU.password} onChange={e=>setNewU({...newU,password:e.target.value})}
-                    style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
-                <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>תפקיד</label>
-                  <select value={newU.role} onChange={e=>setNewU({...newU,role:e.target.value})}
-                    style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}>
-                    <option>מנהל</option><option>פקידה</option><option>מדביר</option>
-                  </select></div>
+            <div style={{background:"#f8fafc",borderRadius:14,padding:16,marginBottom:16,border:`1.5px solid ${CLR.border}`}}>
+              <div style={{fontSize:16,fontWeight:800,marginBottom:12}}>משתמש חדש</div>
+              <div style={GRID}>
+                <div><label style={LB}>שם תצוגה</label><input value={newU.name} onChange={e=>setNewU({...newU,name:e.target.value})} style={IN}/></div>
+                <div><label style={LB}>שם משתמש לכניסה</label><input value={newU.username} autoComplete="off" onChange={e=>setNewU({...newU,username:e.target.value})} style={{...IN,direction:"ltr",textAlign:"right"}}/></div>
+                <div><label style={LB}>סיסמה</label><input type="password" autoComplete="new-password" value={newU.password} onChange={e=>setNewU({...newU,password:e.target.value})} style={{...IN,direction:"ltr"}}/></div>
+                <div><label style={LB}>תפקיד</label><select value={newU.role} onChange={e=>setNewU({...newU,role:e.target.value})} style={IN}><option>מנהל</option><option>פקידה</option><option>מדביר</option></select></div>
               </div>
-              {newU.role!=="מנהל"&&<div>
-                <label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>הרשאות (מה מותר לראות)</label>
-                <PermToggle perms={newU.permissions} setPerms={p=>setNewU({...newU,permissions:p})}/>
-              </div>}
+              {newU.role!=="מנהל"&&<div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermToggle perms={newU.permissions} setPerms={p=>setNewU({...newU,permissions:p})}/></div>}
               <div style={{marginTop:16,display:"flex",gap:8}}>
-                <button onClick={saveNew} style={{padding:"9px 20px",background:CLR.primary,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13}}>✅ שמור</button>
-                <button onClick={()=>setShowAdd(false)} style={{padding:"9px 20px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,cursor:"pointer",fontSize:13}}>ביטול</button>
+                <button onClick={saveNew} style={{flex:1,padding:"11px 20px",background:CLR.primary,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15}}>✅ צור משתמש</button>
+                <button onClick={()=>setShowAdd(false)} style={{padding:"11px 20px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:15}}>ביטול</button>
               </div>
             </div>
           )}
@@ -540,61 +525,43 @@ function AdminPanel({authUser,onClose}){
           {loading?<div style={{textAlign:"center",padding:40,color:"#64748b"}}>טוען...</div>:(
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {users.map(u=>(
-                <div key={u.id} style={{background:u.active?"#fff":"#f8fafc",border:`1.5px solid ${u.active?CLR.border:"#e2e8f0"}`,borderRadius:12,padding:"14px 18px"}}>
+                <div key={u.id} style={{background:u.active?"#fff":"#f8fafc",border:`1.5px solid ${editUser?.id===u.id?CLR.primary:CLR.border}`,borderRadius:14,padding:"14px 16px"}}>
                   {editUser?.id===u.id?(
                     <div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                        <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם מלא</label>
-                          <input value={editUser.name} onChange={e=>setEditUser({...editUser,name:e.target.value})}
-                            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}/></div>
-                        <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>שם משתמש לכניסה</label>
-                          <input value={editUser._newuser??editUser.username??""} autoComplete="off" onChange={e=>setEditUser({...editUser,_newuser:e.target.value})}
-                            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,direction:"ltr"}}/></div>
-                        <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>תפקיד</label>
-                          <select value={editUser.role} onChange={e=>setEditUser({...editUser,role:e.target.value})}
-                            style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13}}>
-                            <option>מנהל</option><option>פקידה</option><option>מדביר</option>
-                          </select></div>
-                        <div><label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>סיסמה חדשה (אופציונלי)</label>
-                          <div style={{display:"flex",gap:6}}><input type="text" placeholder="השאר ריק לשמור קיימת" value={editUser._newpwd||""} autoComplete="off"
-                            onChange={e=>setEditUser({...editUser,_newpwd:e.target.value})}
-                            style={{flex:1,minWidth:0,padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,direction:"ltr"}}/>
-                            <button type="button" onClick={()=>setEditUser({...editUser,_newpwd:genPassword()})} title="צור סיסמה"
-                            style={{padding:"6px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",background:"#f8fafc",cursor:"pointer",fontSize:12,whiteSpace:"nowrap"}}>🎲 צור</button></div>
-                          <div style={{fontSize:11,color:"#64748b",marginTop:4}}>הסיסמה מוצגת רק עכשיו. רשמו ומסרו לעובד לפני השמירה.</div></div>
-                        <div style={{display:"flex",alignItems:"flex-end"}}>
-                          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
-                            <input type="checkbox" checked={editUser.active} onChange={e=>setEditUser({...editUser,active:e.target.checked})}/>
-                            משתמש פעיל
-                          </label>
-                        </div>
+                      <div style={{fontSize:16,fontWeight:800,marginBottom:12}}>✏️ עריכת {u.name}</div>
+                      <div style={GRID}>
+                        <div><label style={LB}>שם תצוגה</label><input value={editUser.name} onChange={e=>setEditUser({...editUser,name:e.target.value})} style={IN}/></div>
+                        <div><label style={LB}>שם משתמש לכניסה</label><input value={editUser._newuser??editUser.username??""} autoComplete="off" onChange={e=>setEditUser({...editUser,_newuser:e.target.value})} style={{...IN,direction:"ltr",textAlign:"right"}}/>
+                          {editUser._newuser!==undefined&&editUser._newuser!==editUser.username&&<div style={{fontSize:12,color:"#b45309",marginTop:4}}>מהשמירה — הכניסה תהיה עם השם החדש</div>}</div>
+                        <div><label style={LB}>תפקיד</label><select value={editUser.role} onChange={e=>setEditUser({...editUser,role:e.target.value})} style={IN}><option>מנהל</option><option>פקידה</option><option>מדביר</option></select></div>
+                        <div><label style={LB}>סיסמה חדשה (לא חובה)</label>
+                          <div style={{display:"flex",gap:6}}><input type="text" placeholder="ריק = בלי שינוי" value={editUser._newpwd||""} autoComplete="off" onChange={e=>setEditUser({...editUser,_newpwd:e.target.value})} style={{...IN,flex:1,minWidth:0,direction:"ltr"}}/>
+                            <button type="button" onClick={()=>setEditUser({...editUser,_newpwd:genPassword()})} title="צור סיסמה" style={{padding:"0 12px",borderRadius:10,border:"1.5px solid #e2e8f0",background:"#f8fafc",cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}}>🎲 צור</button></div>
+                          {editUser._newpwd&&<div style={{fontSize:12,color:"#64748b",marginTop:4}}>רשמו ומסרו לעובד לפני השמירה — אחר כך היא לא מוצגת.</div>}</div>
                       </div>
-                      {editUser.role!=="מנהל"&&<div>
-                        <label style={{fontSize:12,color:"#64748b",display:"block",marginBottom:4}}>הרשאות</label>
-                        <PermToggle perms={editUser.permissions||{}} setPerms={p=>setEditUser({...editUser,permissions:p})}/>
-                      </div>}
-                      <div style={{marginTop:12,display:"flex",gap:8}}>
-                        <button onClick={saveEdit} style={{padding:"8px 18px",background:CLR.primary,color:"#fff",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:13}}>✅ שמור</button>
-                        <button onClick={()=>setEditUser(null)} style={{padding:"8px 18px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:8,cursor:"pointer",fontSize:13}}>ביטול</button>
+                      {u.id!==authUser.id&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,marginBottom:12}}>
+                        <input type="checkbox" checked={editUser.active} onChange={e=>setEditUser({...editUser,active:e.target.checked})} style={{width:18,height:18}}/> משתמש פעיל</label>}
+                      {editUser.role!=="מנהל"&&<div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermToggle perms={editUser.permissions||{}} setPerms={p=>setEditUser({...editUser,permissions:p})}/></div>}
+                      <div style={{marginTop:14,display:"flex",gap:8}}>
+                        <button onClick={saveEdit} style={{flex:1,padding:"11px 18px",background:CLR.primary,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15}}>✅ שמור</button>
+                        <button onClick={()=>setEditUser(null)} style={{padding:"11px 18px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:15}}>ביטול</button>
                       </div>
                     </div>
                   ):(
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
-                      <div>
-                        <span style={{fontWeight:700,fontSize:14,color:u.active?"#0f172a":"#94a3b8"}}>{u.name}</span>
-                        <span style={{fontSize:12,color:"#64748b",marginRight:10}}>@{u.username}</span>
-                        <span style={{fontSize:11,background:u.role==="מנהל"?"#fef3c7":u.role==="פקידה"?"#e0f2fe":"#f0fdf4",
-                          color:u.role==="מנהל"?"#d97706":u.role==="פקידה"?"#0369a1":"#16a34a",
-                          padding:"2px 10px",borderRadius:20,fontWeight:600}}>{roleLabel(u.role)}</span>
-                        {!u.active&&<span style={{fontSize:11,color:"#ef4444",marginRight:8}}>⛔ לא פעיל</span>}
-                        {u.last_login&&<span style={{fontSize:11,color:"#94a3b8",marginRight:8}}>כניסה אחרונה: {new Date(u.last_login).toLocaleDateString('he-IL')}</span>}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontWeight:800,fontSize:16,color:u.active?"#0f172a":"#94a3b8"}}>{u.name}</span>
+                          <span style={roleBadge(u.role)}>{roleLabel(u.role)}</span>
+                          {!u.active&&<span style={{fontSize:12,color:"#ef4444",fontWeight:700}}>⛔ לא פעיל</span>}
+                          {u.id===authUser.id&&<span style={{fontSize:12,color:"#64748b"}}>(אתה)</span>}
+                        </div>
+                        <div style={{fontSize:13,color:"#64748b",marginTop:3,direction:"rtl"}}>כניסה: <span style={{direction:"ltr",unicodeBidi:"isolate",fontWeight:600,color:"#334155"}}>{u.username}</span>
+                          {u.last_login&&<span> · התחבר לאחרונה {new Date(u.last_login).toLocaleDateString('he-IL')}</span>}</div>
                       </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>setEditUser({...u,permissions:u.permissions||{}})}
-                          style={{padding:"6px 14px",background:"#f1f5f9",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}}>✏️ ערוך</button>
-                        {u.id!==authUser.id&&<button onClick={()=>toggleActive(u)}
-                          style={{padding:"6px 14px",background:u.active?"#fef2f2":"#f0fdf4",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:u.active?"#dc2626":"#16a34a"}}>
-                          {u.active?"⛔ נטרל":"✅ הפעל"}</button>}
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>{setEditUser({...u,permissions:u.permissions||{}});setShowAdd(false);setMsg("");}} style={{padding:"8px 14px",background:"#f1f5f9",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}}>✏️ ערוך</button>
+                        {u.id!==authUser.id&&<button onClick={()=>toggleActive(u)} title={u.active?"נטרל משתמש":"הפעל משתמש"} style={{padding:"8px 10px",background:u.active?"#fef2f2":"#f0fdf4",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,color:u.active?"#dc2626":"#16a34a"}}>{u.active?"⛔":"✅"}</button>}
                       </div>
                     </div>
                   )}
@@ -602,7 +569,16 @@ function AdminPanel({authUser,onClose}){
               ))}
             </div>
           )}
-        </div>}
+
+          <details style={{marginTop:22,background:"#fefce8",border:"1px solid #fde68a",borderRadius:12,padding:"10px 14px"}}>
+            <summary style={{cursor:"pointer",fontWeight:700,fontSize:14}}>⭐ קישור לביקורת בגוגל {reviewUrl?"· מוגדר ✓":"· לא מוגדר"}</summary>
+            <div style={{fontSize:13,color:"#64748b",margin:"8px 0"}}>הקישור שנשלח ללקוחות בכפתור "בקשת ביקורת". מעתיקים אותו מפרופיל העסק בגוגל ← "בקשת ביקורות".</div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={reviewUrl} onChange={e=>setReviewUrl(e.target.value)} placeholder="https://g.page/r/..." style={{...IN,flex:1,minWidth:0,direction:"ltr"}}/>
+              <button onClick={()=>{try{ if(reviewUrl.trim()) localStorage.setItem('h360_review_url',reviewUrl.trim()); else localStorage.removeItem('h360_review_url'); }catch(e){} setMsg('✅ קישור הביקורת נשמר');}} style={{padding:"0 16px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14}}>שמור</button>
+            </div>
+          </details>
+        </div>;})()}
       </div>
     </div>
   );
