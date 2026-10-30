@@ -647,13 +647,13 @@ function scopeFromProperty(p){
   const t=p.propertyType||"", out=[];
   if(t==="דירה"||t==="בית פרטי"){
     const parts=[t==="דירה"?"דירת":"בית", p.rooms?p.rooms+" חד'":"", p.floor?(p.floor==="קרקע"?"קומת קרקע":"קומה "+p.floor):""].filter(Boolean).join(" ");
-    out.push("ריסוס במבנה ("+parts+")");
+    out.push(parts);
     if(p.hasYard||p.floor==="קרקע") out.push("חצר / גינה");
   } else if(t==="בניין משותף"){
     out.push("בניין משותף"+(p.floors?" · "+p.floors+" קומות":""));
     (p.buildingAreas||[]).forEach(a=>out.push(a));
     if(p.sewers) out.push("בורות ביוב / פירים: "+p.sewers);
-  } else if(t){ out.push("טיפול ב"+t); if(p.hasYard) out.push("חצר / גינה"); }
+  } else if(t){ out.push(t); if(p.hasYard) out.push("חצר / גינה"); }
   return out;
 }
 const PROPERTY_TYPES = ["דירה","בית פרטי","בניין משותף","עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"];
@@ -1115,9 +1115,9 @@ function execLogHtml({company,docNum,log,chemicals}){
       <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
       <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
-    <div style="background:#fffbf0;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
       <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔬 פרטי הטיפול</div>
-      ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>היקף הטיפול:</b> ${log.scope.join(" · ")}</div>`:""}
+      ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>המקום המטופל:</b> ${log.scope.join(" · ")}</div>`:""}
       <div style="font-size:13px;"><b>מזיקים:</b> ${(log.pest||[]).join(", ")} ${log.pestLevel?" · נגיעות "+log.pestLevel:""} ${log.warranty?" · אחריות "+log.warranty+" חו'":""}</div>
       ${log.extermination_notes?`<div style="font-size:13px;margin-top:4px;"><b>הנחיות:</b> ${log.extermination_notes}</div>`:""}
     </div>
@@ -1135,8 +1135,8 @@ function execLogHtml({company,docNum,log,chemicals}){
     ${(log.devices||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 מוצרי הדברה</div>
     <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">מוצר</th><th style="padding:6px 10px;text-align:right;">כמות</th><th style="padding:6px 10px;text-align:right;">מיקום</th></tr></thead>
     <tbody>${log.devices.map((d,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${d.type}</td><td style="padding:6px 10px;">${d.qty||1}</td><td style="padding:6px 10px;">${d.location||"—"}</td></tr>`).join("")}</tbody></table>`:""}
-    ${reentryLines(log.reentry).length?`<div style="border:2px solid #f97316;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#fff7ed;">
-      <div style="font-weight:700;color:#c2410c;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+    ${reentryLines(log.reentry).length?`<div style="border:1.5px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#eff6ff;">
+      <div style="font-weight:700;color:#1e40af;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${reentryShown(log.reentry).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
     ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
@@ -1168,7 +1168,7 @@ function execLogWAText(log){
     "מצורף סיכום הטיפול שבוצע אצלכם — "+COMPANY.name,
     "📅 תאריך: "+fmtDate(log.date),
     log.address?"📍 כתובת: "+log.address:"",
-    (log.scope||[]).length?"🏠 היקף הטיפול: "+log.scope.join(" · "):"",
+    (log.scope||[]).length?"🏠 המקום המטופל: "+log.scope.join(" · "):"",
     pests?"🐛 מזיקים: "+pests:"",
     mats?"🧪 חומרים:"+mats:"",
     log.warranty?"🛡️ אחריות: "+log.warranty:"",
@@ -1568,6 +1568,24 @@ function myChemicals(execLogs, workerName){
   Object.keys(chemMemLoad()).forEach(n=>{ if(!cnt[n]) cnt[n]=0.5; });
   return Object.keys(cnt).sort((a,b)=>(cnt[b]-cnt[a])||String(last[b]||"").localeCompare(String(last[a]||"")));
 }
+// בחירה מרובה בטבלת כפתורים מסודרת + "אחר" להקלדה חופשית
+function GridChoice({items,isOn,onToggle,onOther,otherLabel="אחר",min=128,small}){
+  const [other,setOther]=useState(""); const [open,setOpen]=useState(false);
+  const addOther=()=>{const v=other.trim(); if(!v) return; onOther(v); setOther(""); setOpen(false);};
+  const tile=on=>({display:"flex",alignItems:"center",gap:7,minHeight:small?34:40,padding:small?"5px 8px":"7px 10px",borderRadius:8,border:"1.5px solid "+(on?"#2563eb":"#e2e8f0"),background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",fontSize:small?13:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",textAlign:"right",lineHeight:1.25,width:"100%",boxSizing:"border-box"});
+  const box=on=>({flexShrink:0,width:17,height:17,borderRadius:4,border:"1.5px solid "+(on?"#2563eb":"#cbd5e1"),background:on?"#2563eb":"#fff",color:"#fff",fontSize:11,display:"inline-flex",alignItems:"center",justifyContent:"center"});
+  return <div>
+    <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${min}px,1fr))`,gap:6}}>
+      {items.map(it=>{const on=isOn(it);return <button key={it} type="button" onClick={()=>onToggle(it)} style={tile(on)}><span style={box(on)}>{on?"✓":""}</span><span>{it}</span></button>;})}
+      {onOther&&!open&&<button type="button" onClick={()=>setOpen(true)} style={{...tile(false),border:"1.5px dashed #cbd5e1",color:"#2563eb",justifyContent:"center"}}>+ {otherLabel}</button>}
+    </div>
+    {onOther&&open&&<div style={{display:"flex",gap:6,marginTop:6}}>
+      <input autoFocus value={other} onChange={e=>setOther(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addOther();}}} placeholder={otherLabel+" — הקלד..."} style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:8,border:"1.5px solid #93c5fd",fontSize:14,fontFamily:"inherit"}}/>
+      <button type="button" onClick={addOther} style={{border:"none",background:"#2563eb",color:"#fff",borderRadius:8,padding:"0 14px",fontSize:14,fontWeight:700,cursor:"pointer"}}>הוסף</button>
+      <button type="button" onClick={()=>{setOpen(false);setOther("");}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:8,padding:"0 10px",fontSize:14,cursor:"pointer"}}>✕</button>
+    </div>}
+  </div>;
+}
 function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]}){
   const reg=useRegProducts();
   const [q,setQ]=useState("");
@@ -1661,16 +1679,14 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               </select>
             </div>
           </div>
-          {m.method==="תחנת האכלה"&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:700,color:"#9a3412"}}>🪤 מספר תחנות האכלה:</span>
-            <button type="button" onClick={()=>updateField(m.name,"stations",String(Math.max(0,(parseInt(m.stations)||0)-1)))} style={{width:34,height:34,borderRadius:8,border:"1px solid #fed7aa",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
-            <input type="number" inputMode="numeric" value={m.stations||""} onChange={e=>updateField(m.name,"stations",e.target.value)} style={{width:60,padding:"7px",borderRadius:8,border:"1px solid #fed7aa",fontSize:15,textAlign:"center"}}/>
-            <button type="button" onClick={()=>updateField(m.name,"stations",String((parseInt(m.stations)||0)+1))} style={{width:34,height:34,borderRadius:8,border:"1px solid #fed7aa",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button>
+          {m.method==="תחנת האכלה"&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>🪤 מספר תחנות האכלה:</span>
+            <button type="button" onClick={()=>updateField(m.name,"stations",String(Math.max(0,(parseInt(m.stations)||0)-1)))} style={{width:34,height:34,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
+            <input type="number" inputMode="numeric" value={m.stations||""} onChange={e=>updateField(m.name,"stations",e.target.value)} style={{width:60,padding:"7px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:15,textAlign:"center"}}/>
+            <button type="button" onClick={()=>updateField(m.name,"stations",String((parseInt(m.stations)||0)+1))} style={{width:34,height:34,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button>
           </div>}
-          <div style={{fontSize:13,color:CLR.muted,marginBottom:6}}>אזורי יישום (לחיצה לבחירה):</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {[...areas,...extra].map(a=>{const on=(m.areas||[]).includes(a);return <button key={a} type="button" onClick={()=>toggleArea(m,a)} style={chip(on)}>{on?"✓ ":""}{a}</button>;})}
-          </div>
+          <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
+          <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small/>
         </div>;
       })}
     </div>}
@@ -1683,15 +1699,15 @@ function PestPickerDk({selected,onChange}){
     if(p==="חרקי מזון"&&foodOn) return onChange(selected.filter(x=>x!=="חרקי מזון"&&!FOOD_PESTS.includes(x)));
     selected.includes(p)?onChange(selected.filter(x=>x!==p)):onChange([...selected,p]);
   };
-  const btn=on=>({background:on?CLR.accent+"33":"transparent",color:on?CLR.accent:CLR.muted,border:`1px solid ${on?CLR.accent:"#e2e8f0"}`,borderRadius:8,padding:"6px 11px",fontSize:14,cursor:"pointer",fontFamily:"inherit"});
+  const btn=on=>({background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",border:`1.5px solid ${on?"#2563eb":"#e2e8f0"}`,borderRadius:8,padding:"7px 12px",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
   return <div>
-    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))",gap:6}}>
       {PEST_TYPES_LOG.map(p=>{ const on=p==="חרקי מזון"?foodOn:selected.includes(p);
         return <button key={p} type="button" onClick={()=>toggle(p)} style={btn(on)}>{on?"✓ ":""}{p}{p==="חרקי מזון"?(foodOn?" ▲":" ▼"):""}</button>; })}
       {selected.filter(p=>!PEST_TYPES_LOG.includes(p)&&!FOOD_PESTS.includes(p)).map(p=><button key={p} type="button" onClick={()=>toggle(p)} style={btn(true)}>✓ {p}</button>)}
     </div>
-    {foodOn&&<div style={{marginTop:8,background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"10px 12px"}}>
-      <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:6}}>🌾 איזה חרקי מזון?</div>
+    {foodOn&&<div style={{marginTop:8,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"10px 12px"}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#075985",marginBottom:6}}>🌾 איזה חרקי מזון?</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {FOOD_PESTS.map(p=>{const on=selected.includes(p);return <button key={p} type="button" onClick={()=>toggle(p)} style={btn(on)}>{on?"✓ ":""}{p}</button>;})}
       </div>
@@ -1803,36 +1819,28 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:14}}><Inp label="כתובת מלאה *" value={f.address} onChange={v=>set("address",v)}/><Inp label="טלפון לקוח (לשליחה)" value={f.phone} onChange={v=>set("phone",v)}/></div>
 
-    {/* Structure + Pest level */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-      <Sel label="סוג מבנה (לא חובה)" value={f.structureType} onChange={v=>set("structureType",v)}
-        options={["","דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"]}/>
-      <div>
-        <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>רמת נגיעות</label>
-        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-          {PEST_LEVELS.map(lv=>(
-            <button key={lv} type="button" onClick={()=>set("pestLevel",lv)}
-              style={{padding:"6px 14px",borderRadius:8,border:"1.5px solid "+(f.pestLevel===lv?CLR.primary:CLR.border),background:f.pestLevel===lv?CLR.primary:"#fff",color:f.pestLevel===lv?"#fff":CLR.muted,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-              {lv}
-            </button>
-          ))}
-        </div>
+    {/* רמת נגיעות */}
+    <div style={{marginBottom:14}}>
+      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>רמת נגיעות</label>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,maxWidth:420}}>
+        {PEST_LEVELS.map(lv=>(
+          <button key={lv} type="button" onClick={()=>set("pestLevel",f.pestLevel===lv?"":lv)}
+            style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(f.pestLevel===lv?"#2563eb":"#e2e8f0"),background:f.pestLevel===lv?"#eff6ff":"#fff",color:f.pestLevel===lv?"#1e3a8a":"#334155",fontSize:14,fontWeight:f.pestLevel===lv?700:500,cursor:"pointer",fontFamily:"inherit"}}>
+            {lv}
+          </button>
+        ))}
       </div>
     </div>
 
-    {/* היקף הטיפול (מהזמנת העבודה) — אפשר להסיר מה שלא בוצע */}
+    {/* המקום המטופל (מהזמנת העבודה) — הטיפולים עצמם נרשמים כ"אזורי יישום" בכל חומר */}
     <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:13,color:"#075985",marginBottom:8}}>🏠 היקף הטיפול {f.scope.length?<span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(מהזמנת העבודה — ✕ להסרה)</span>:null}</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-        {f.scope.map((x,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,background:"#fff",border:"1px solid #7dd3fc",color:"#0c4a6e",borderRadius:20,padding:"6px 6px 6px 12px",fontSize:14,fontWeight:600}}>
-          {x}<button type="button" onClick={()=>set("scope",f.scope.filter((_,j)=>j!==i))} style={{border:"none",background:"#e0f2fe",color:"#0369a1",borderRadius:"50%",width:24,height:24,cursor:"pointer",fontSize:13}}>✕</button></span>)}
-        {f.scope.length===0&&<span style={{fontSize:13,color:CLR.muted}}>לא הוגדר — אפשר להוסיף</span>}
-      </div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {["ריסוס במבנה","חצר / גינה","בורות ביוב","חדר מדרגות","גג"].filter(x=>!f.scope.some(y=>y.startsWith(x))).map(x=><button key={x} type="button" onClick={()=>set("scope",[...f.scope,x])} style={{border:"1px dashed #7dd3fc",background:"transparent",color:"#0369a1",borderRadius:20,padding:"5px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ {x}</button>)}
-        <input value={scopeAdd} onChange={e=>setScopeAdd(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&scopeAdd.trim()){set("scope",[...f.scope,scopeAdd.trim()]);setScopeAdd("");}}} placeholder="אחר..." style={{flex:"1 1 90px",minWidth:80,padding:"5px 10px",borderRadius:20,border:"1px solid #bae6fd",fontSize:13,fontFamily:"inherit"}}/>
-        {scopeAdd.trim()&&<button type="button" onClick={()=>{set("scope",[...f.scope,scopeAdd.trim()]);setScopeAdd("");}} style={{border:"none",background:"#0284c7",color:"#fff",borderRadius:20,padding:"5px 12px",fontSize:13,cursor:"pointer"}}>הוסף</button>}
-      </div>
+      <div style={{fontWeight:700,fontSize:14,color:"#075985",marginBottom:2}}>🏠 המקום המטופל</div>
+      <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מהזמנת העבודה. את הנקודות עצמן (פנלים, ניקוזים, צירים...) מסמנים למטה ב"אזורי יישום" של כל חומר</div>
+      {f.scope.length>0&&<div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:8}}>
+        {f.scope.map((x,i)=><div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:"#fff",border:"1px solid #bae6fd",borderRadius:8,padding:"7px 10px",fontSize:14,fontWeight:600,color:"#0c4a6e"}}>
+          <span>{x}</span><button type="button" onClick={()=>set("scope",f.scope.filter((_,j)=>j!==i))} title="הסר" style={{border:"none",background:"none",color:"#64748b",cursor:"pointer",fontSize:16}}>✕</button></div>)}
+      </div>}
+      <GridChoice items={["דירה","בית פרטי","חצר / גינה","בורות ביוב","חדר מדרגות","גג","מחסן","עסק"].filter(x=>!f.scope.some(y=>y.startsWith(x)))} isOn={()=>false} onToggle={x=>set("scope",[...f.scope,x])} onOther={x=>set("scope",[...f.scope,x])} otherLabel="מקום אחר" min={104} small/>
     </div>
 
     {/* Pests */}
@@ -1852,12 +1860,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)} pests={allPests}/>
     </div>
 
-    {stations.length>0&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+    {stations.length>0&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8,flexWrap:"wrap"}}>
-        <div style={{fontWeight:800,fontSize:14,color:"#9a3412"}}>🪤 בדיקת תחנות האכלה ({stations.length})</div>
-        <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false})))} style={{border:"1px solid #fdba74",background:"#fff",color:"#9a3412",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
+        <div style={{fontWeight:800,fontSize:14,color:"#075985"}}>🪤 בדיקת תחנות האכלה ({stations.length})</div>
+        <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false})))} style={{border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
       </div>
-      {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+      {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
         <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>תחנה {st.num}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
           {STATION_ACTIVITY.map(a=>{const on=c.activity===a;const col=a==="פעילות גבוהה"?"#dc2626":a==="פעילות קלה"?"#ca8a04":a==="חסרה / פגומה"?"#475569":"#16a34a";return <button key={a} type="button" onClick={()=>setChk(st.num,{activity:a})} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${on?col:CLR.border}`,background:on?col:"#fff",color:on?"#fff":"#334155",fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{a}</button>;})}
@@ -1866,45 +1874,41 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       </div>;})}
     </div>}
     {/* מוצרי הדברה — מלכודות, תחנות ניטור, אמצעי מניעה */}
-    <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+    <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-        <div style={{fontWeight:800,fontSize:14,color:"#6b21a8"}}>🪤 מוצרי הדברה <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(מלכודות, ניטור, מניעה — לא חובה)</span></div>
-        <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{border:"1px solid #d8b4fe",background:"#fff",color:"#7e22ce",borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור":"+ הוסף"}</button>
+        <div style={{fontWeight:800,fontSize:14,color:"#0f172a"}}>🪤 מוצרי הדברה <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(מלכודות, ניטור, מניעה)</span></div>
+        <button type="button" onClick={()=>setDevOpen(o=>!o)} style={{border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{devOpen?"סגור":"+ הוסף"}</button>
       </div>
-      {devOpen&&<div style={{marginTop:10}}>{DEVICE_TYPES.map(g=><div key={g.g} style={{marginBottom:8}}>
-        <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:4}}>{g.g}</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{g.items.map(it=>{const on=f.devices.some(d=>d.type===it);return <button key={it} type="button" onClick={()=>on?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} style={{padding:"6px 11px",borderRadius:20,border:"1.5px solid "+(on?"#9333ea":"#e9d5ff"),background:on?"#9333ea":"#fff",color:on?"#fff":"#581c87",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{it}</button>;})}</div>
+      {devOpen&&<div style={{marginTop:10}}>{DEVICE_TYPES.map((g,gi)=><div key={g.g} style={{marginBottom:10}}>
+        <div style={{fontSize:12,color:CLR.muted,fontWeight:700,marginBottom:5}}>{g.g}</div>
+        <GridChoice items={[...g.items,...(gi===DEVICE_TYPES.length-1?f.devices.map(d=>d.type).filter(t=>!DEVICE_TYPES.some(G=>G.items.includes(t))):[])]} isOn={it=>f.devices.some(d=>d.type===it)} onToggle={it=>f.devices.some(d=>d.type===it)?set("devices",f.devices.filter(d=>d.type!==it)):addDevice(it)} onOther={gi===DEVICE_TYPES.length-1?addDevice:null} otherLabel="מוצר אחר" min={128} small/>
       </div>)}</div>}
-      {f.devices.map((d,i)=><div key={d.type} style={{background:"#fff",border:"1px solid #e9d5ff",borderRadius:10,padding:"8px 10px",marginTop:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      {f.devices.map((d,i)=><div key={d.type} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:"10px",marginTop:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
           <b style={{fontSize:14,flex:"1 1 140px"}}>{d.type}</b>
           <div style={{display:"flex",alignItems:"center",gap:4}}>
-            <button type="button" onClick={()=>setDevice(i,{qty:Math.max(1,(parseInt(d.qty)||1)-1)})} style={{width:30,height:30,borderRadius:8,border:"1px solid #d8b4fe",background:"#fff",fontSize:16,cursor:"pointer"}}>−</button>
+            <button type="button" onClick={()=>setDevice(i,{qty:Math.max(1,(parseInt(d.qty)||1)-1)})} style={{width:30,height:30,borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontSize:16,cursor:"pointer"}}>−</button>
             <input value={d.qty} onChange={e=>setDevice(i,{qty:e.target.value.replace(/[^0-9]/g,"")})} inputMode="numeric" style={{width:44,textAlign:"center",padding:"5px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:14}}/>
-            <button type="button" onClick={()=>setDevice(i,{qty:(parseInt(d.qty)||0)+1})} style={{width:30,height:30,borderRadius:8,border:"1px solid #d8b4fe",background:"#fff",fontSize:16,cursor:"pointer"}}>+</button>
+            <button type="button" onClick={()=>setDevice(i,{qty:(parseInt(d.qty)||0)+1})} style={{width:30,height:30,borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontSize:16,cursor:"pointer"}}>+</button>
             <span style={{fontSize:12,color:CLR.muted}}>יח׳</span>
           </div>
-          <button type="button" onClick={()=>set("devices",f.devices.filter((_,j)=>j!==i))} style={{border:"none",background:"none",color:CLR.danger,fontSize:18,cursor:"pointer"}}>✕</button>
+          <button type="button" onClick={()=>set("devices",f.devices.filter((_,j)=>j!==i))} title="הסר" style={{border:"none",background:"none",color:"#64748b",fontSize:16,cursor:"pointer"}}>✕</button>
         </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6,alignItems:"center"}}>
-          {DEVICE_SPOTS.map(sp=>{const on=(d.location||"").split(", ").includes(sp);return <button key={sp} type="button" onClick={()=>{const cur=(d.location||"").split(", ").filter(Boolean);setDevice(i,{location:(on?cur.filter(x=>x!==sp):[...cur,sp]).join(", ")});}} style={{padding:"4px 9px",borderRadius:20,border:"1px solid "+(on?"#9333ea":"#e2e8f0"),background:on?"#f3e8ff":"#fff",color:"#581c87",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>{sp}</button>;})}
-          <input value={d.location} onChange={e=>setDevice(i,{location:e.target.value})} placeholder="מיקום..." style={{flex:"1 1 110px",minWidth:90,padding:"5px 9px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:13,fontFamily:"inherit"}}/>
-        </div>
+        {(()=>{const cur=(d.location||"").split(", ").filter(Boolean); const spots=[...DEVICE_SPOTS,...cur.filter(x=>!DEVICE_SPOTS.includes(x))];
+          return <GridChoice items={spots} isOn={sp=>cur.includes(sp)} onToggle={sp=>setDevice(i,{location:(cur.includes(sp)?cur.filter(x=>x!==sp):[...cur,sp]).join(", ")})} onOther={sp=>{ if(!cur.includes(sp)) setDevice(i,{location:[...cur,sp].join(", ")}); }} otherLabel="מיקום אחר" min={100} small/>;})()}
       </div>)}
     </div>
 
     {/* זמן מחוץ למקום המטופל */}
-    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"10px 14px",marginBottom:14}}>
-      <div style={{fontWeight:800,fontSize:14,color:"#9a3412",marginBottom:8}}>⏱️ זמן מחוץ למקום אחרי הטיפול <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(נזכר לפי החומר)</span></div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:8}}>
-        {REENTRY_GROUPS.map(g=><label key={g.k} style={{display:"block"}}>
-          <span style={{display:"block",fontSize:12,fontWeight:700,color:"#7c2d12",marginBottom:3}}>{g.l}</span>
-          <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",borderRadius:10,border:"1.5px solid "+(f.reentry[g.k]?"#ea580c":"#fed7aa"),background:"#fff",fontSize:15,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
-            <option value="">— לא צוין —</option>
-            {REENTRY_OPTS.map(o=><option key={o} value={o}>{hrsLabel(o)}</option>)}
-          </select>
-        </label>)}
-      </div>
+    <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:"10px 14px",marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:14,color:"#0f172a",marginBottom:6}}>⏱️ זמן מחוץ למקום <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(נזכר לפי החומר)</span></div>
+      {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"4px 0"}}>
+        <span style={{fontSize:13,color:"#334155",fontWeight:600}}>{g.l}</span>
+        <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{flexShrink:0,width:112,padding:"5px 8px",borderRadius:8,border:"1.5px solid "+(f.reentry[g.k]?"#2563eb":"#e2e8f0"),background:"#fff",fontSize:13,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
+          <option value="">לא צוין</option>
+          {REENTRY_OPTS.map(o=><option key={o} value={o}>{hrsLabel(o)}</option>)}
+        </select>
+      </div>)}
     </div>
 
     {/* הנחיות ללקוח */}
@@ -2036,9 +2040,9 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
           <div style={row}><span style={ttl}>👤 לקוח:</span><span>{data.clientName}</span>{data.address&&<span>📍 {data.address}</span>}{data.structureType&&<span>🏠 {data.structureType}</span>}</div>
           <div style={row}><span style={ttl}>🧑‍🔧 מדביר:</span><span>{data.worker.name}</span>{data.worker.license&&<span>רישיון {data.worker.license}</span>}</div>
         </div>;})()}
-      <div style={{background:"#fffbf0",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+      <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14,marginBottom:6}}>🔬 פרטי הטיפול</div>
-        {(data.scope||[]).length>0&&<div style={{fontSize:13,marginBottom:4}}><b>היקף הטיפול:</b> {data.scope.join(" · ")}</div>}
+        {(data.scope||[]).length>0&&<div style={{fontSize:13,marginBottom:4}}><b>המקום המטופל:</b> {data.scope.join(" · ")}</div>}
         <div style={{display:"flex",gap:20,flexWrap:"wrap",fontSize:13}}>
           <span><b>מזיקים:</b> {(data.pest||[]).join(", ")}</span>
           {data.pestLevel&&<span><b>נגיעות:</b> {data.pestLevel}</span>}
@@ -2060,10 +2064,10 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
       </div>
       {(data.devices||[]).length>0&&<div style={{marginBottom:14}}>
         <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:"#1a5c3a"}}>🪤 מוצרי הדברה</div>
-        {data.devices.map((d,i)=><div key={i} style={{border:"1px solid #e9d5ff",background:"#faf5ff",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:13}}><b>{d.type}</b> × {d.qty||1}{d.location?<span style={{color:"#555"}}> · {d.location}</span>:null}</div>)}
+        {data.devices.map((d,i)=><div key={i} style={{border:"1px solid #e2e8f0",background:"#f8fafc",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:13}}><b>{d.type}</b> × {d.qty||1}{d.location?<span style={{color:"#555"}}> · {d.location}</span>:null}</div>)}
       </div>}
-      {reentryLines(data.reentry).length>0&&<div style={{border:"2px solid #f97316",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#fff7ed"}}>
-        <div style={{fontWeight:700,color:"#c2410c",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+      {reentryLines(data.reentry).length>0&&<div style={{border:"1.5px solid #93c5fd",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#eff6ff"}}>
+        <div style={{fontWeight:700,color:"#1e40af",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{reentryShown(data.reentry).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
       </div>}
       {(data.instructions||[]).length>0&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
