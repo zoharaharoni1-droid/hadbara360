@@ -1201,7 +1201,7 @@ function loadJsPdf(){
     sc.onload=()=>res(window.jspdf.jsPDF); sc.onerror=()=>{__jspdf=null; rej(new Error('טעינת מחולל ה-PDF נכשלה'));}; document.head.appendChild(sc); });
   return __jspdf;
 }
-function execLogFileName(log){ return "יומן-ביצוע-"+(log.docNum||log.id||"")+".pdf"; }
+function execLogFileName(log){ return execLogNiceName(log); }
 // מצייר את המסמך בעזרת הדפדפן עצמו (עברית מדויקת), ומחלק לעמודי A4 בגבולות של שורות/בלוקים
 async function execLogPdfBlob(log){
   const JsPDF=await loadJsPdf();
@@ -1242,14 +1242,21 @@ async function execLogPdfBlob(log){
     return pdf.output('blob');
   } finally { host.remove(); }
 }
-// מעלה את ה-PDF ומחזיר קישור מאובטח לשנה
+// שם קובץ ידידותי: "יומן ביצוע 1006 - הדברה 360 - 30.10.2026.pdf"
+function execLogNiceName(log){ const d=String(log.date||"").split("-"); const ds=d.length===3?d[2]+"."+d[1]+"."+d[0]:""; return "יומן ביצוע "+(log.docNum||"")+" - "+COMPANY.name+(ds?" - "+ds:"")+".pdf"; }
+// מעלה את ה-PDF ומחזיר קישור קצר באתר (hadbara360.co.il/d/?1006-301026-xxxx); אם אי אפשר — קישור מאובטח לשנה
 async function uploadExecLogPdf(log){
   const blob=await execLogPdfBlob(log);
   if(!sb) throw new Error('אין חיבור לשרת');
-  const path=`execlogs/${String(log.docNum||log.id||"x").replace(/[^0-9A-Za-z_-]/g,"")}-${Date.now()}.pdf`;
+  const d=String(log.date||"").split("-"); const ds=d.length===3?d[2]+d[1]+d[0].slice(2):"";
+  const rnd=Array.from(crypto.getRandomValues(new Uint8Array(8))).map(x=>"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x%56]).join("");
+  const id=[String(log.docNum||log.id||"x").replace(/[^0-9A-Za-z]/g,""),ds,rnd].filter(Boolean).join("-");
+  const pub=await sb.storage.from('docs').upload(id+".pdf",blob,{contentType:'application/pdf',upsert:false});
+  if(!pub.error) return {url:"hadbara360.co.il/d/?"+id,blob};
+  const path=`execlogs/${id}.pdf`;
   const up=await sb.storage.from('contracts').upload(path,blob,{contentType:'application/pdf',upsert:false});
   if(up.error) throw up.error;
-  const su=await sb.storage.from('contracts').createSignedUrl(path,60*60*24*365);
+  const su=await sb.storage.from('contracts').createSignedUrl(path,60*60*24*365,{download:execLogNiceName(log)});
   if(su.error) throw su.error;
   return {url:su.data.signedUrl,blob};
 }
