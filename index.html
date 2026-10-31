@@ -395,7 +395,7 @@ function LoginScreen({onLogin}){
 function AdminPanel({authUser,onClose}){
   const [users,setUsers]=React.useState([]);
   const [showLog,setShowLog]=React.useState(false);
-  const [reviewUrl,setReviewUrl]=React.useState(()=>{try{return localStorage.getItem('h360_review_url')||"";}catch(e){return "";}});
+  const [reviewUrl,setReviewUrl]=React.useState(()=>{try{return localStorage.getItem('h360_review_url')||GOOGLE_REVIEW_URL_DEFAULT;}catch(e){return GOOGLE_REVIEW_URL_DEFAULT;}});
   const [logRows,setLogRows]=React.useState([]);
   const [logUser,setLogUser]=React.useState("");
   const [logErr,setLogErr]=React.useState("");
@@ -1209,7 +1209,7 @@ function execLogWAText(log){
 }
 // ── בקשת ביקורת בגוגל ──
 // כשיהיה קישור ישיר לכתיבת ביקורת בפרופיל העסק בגוגל, להחליף אותו כאן
-const GOOGLE_REVIEW_URL_DEFAULT = "https://www.google.com/search?q=%D7%94%D7%93%D7%91%D7%A8%D7%94+360+%D7%91%D7%99%D7%A7%D7%95%D7%A8%D7%95%D7%AA";
+const GOOGLE_REVIEW_URL_DEFAULT = "https://g.page/r/CYrRnrAGjX5-EBM/review";
 function googleReviewUrl(){ try{ return localStorage.getItem('h360_review_url')||GOOGLE_REVIEW_URL_DEFAULT; }catch(e){ return GOOGLE_REVIEW_URL_DEFAULT; } }
 function sendReviewRequest(name,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
