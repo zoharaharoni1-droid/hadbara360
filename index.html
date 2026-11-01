@@ -1372,7 +1372,7 @@ function buildClientQuoteText({company,customerName,date,timeWindow,address,quot
   L.push(`*הצעת מחיר – ${company.name}*`);
   if(customerName) L.push(`לכבוד: ${customerName}`);
   if(address) L.push(`כתובת: ${address}`);
-  if(date) L.push(`מועד מתואם: ${fmtDate(date)}${timeWindow?` בין ${timeWindow}`:""}`);
+  if(date) L.push(`מועד מתואם: ${fmtDate(date)}${timeWindow?(timeWindow===ALL_DAY_TW?" · במהלך היום":` בין ${timeWindow}`):""}`);
   L.push("");
   L.push("*פירוט השירות והמחיר:*");
   if(quote&&quote.properties&&quote.properties.length){
@@ -1441,7 +1441,7 @@ function clientQuoteHtml({company,customerName,date,timeWindow,address,quote,pri
     <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:14px;">
       ${customerName?`<div><b>לכבוד:</b> ${customerName}</div>`:""}
       ${address?`<div><b>כתובת:</b> ${address}</div>`:""}
-      ${date?`<div><b>מועד מתואם:</b> ${fmtDate(date)}${timeWindow?` בין ${timeWindow}`:""}</div>`:""}
+      ${date?`<div><b>מועד מתואם:</b> ${fmtDate(date)}${timeWindow?(timeWindow===ALL_DAY_TW?" · במהלך היום":` בין ${timeWindow}`):""}</div>`:""}
     </div>
     <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:8px;">
       <thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:10px 12px;text-align:right;">שירות</th><th style="padding:10px 12px;text-align:left;">מחיר</th></tr></thead>
@@ -3540,7 +3540,7 @@ function printDaySchedule(date, appointments, workers){
     const wColor=workers.find(w=>w.name===name)?.color||"#1a5c3a";
     const rows=appts.map(a=>`
       <tr style="border-bottom:1px solid #e5e7eb;">
-        <td style="padding:8px 12px;font-weight:600;">${a.time}${a.timeWindow?" ("+a.timeWindow+")":""}</td>
+        <td style="padding:8px 12px;font-weight:600;">${isAllDay(a)?ALL_DAY_TW:a.time+(a.timeWindow?" ("+a.timeWindow+")":"")}</td>
         <td style="padding:8px 12px;">${a.customerName}</td>
         <td style="padding:8px 12px;">${a.pestType}${isPersonal(a)&&a.timeWindow?" ("+a.timeWindow+")":""}</td>
         <td style="padding:8px 12px;">${a.address}</td>
@@ -3601,6 +3601,9 @@ function exportMonthlyReport(year,month,appointments,finance,workers){
 }
 // ═══ משימות אישיות ביומן (סידורים, רופא, צ'ק...) — חוסמות את הזמן ולא נחשבות עבודה ═══
 const isPersonal=a=>!!a&&a.kind==="personal";
+const ALL_DAY_TW="במהלך היום";
+// "במהלך היום" — לא שעה קבועה, לא חוסם את היומן (אפשר לשבץ עוד עבודות באותו יום)
+const isAllDay=a=>!!a&&!a.blockDay&&(String(a.timeWindow||"").trim()===ALL_DAY_TW||(isPersonal(a)&&!!a.allDay));
 const PERSONAL_CHIPS=["🏦 בנק / צ'ק","🛒 קניות","🩺 רופא","🚗 מוסך / רכב","📦 סידורים","👨‍👩‍👧 משפחה","🍽️ הפסקה","📞 פגישה"];
 const PERSONAL_CLR="#7c3aed";
 function personalTitle(a){ return a.title||String(a.customerName||"").replace(/^📌\s*/,"")||"משימה"; }
@@ -3616,7 +3619,8 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
   const [date,setDate]=useState(task?.date||prefill.date||todayStr());
   const [from,setFrom]=useState(tw0[0]||task?.time||prefill.time||"09:00");
   const [to,setTo]=useState(tw0[1]||addHour(task?.time||prefill.time||"09:00"));
-  const [allDay,setAllDay]=useState(!!task?.allDay);
+  const [mode,setMode]=useState(task?(task.blockDay?"block":isAllDay(task)?"flex":"time"):(prefill.time?"time":"time"));
+  const allDay=mode!=="time";
   const [notes,setNotes]=useState(task?.notes||"");
   const [wid,setWid]=useState(String(task?.workerId??prefill.workerId??(me?me.id:"")));
   const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
@@ -3626,14 +3630,14 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
     const t=title.trim(); if(!t) return alert("כתוב מה המשימה (למשל: לקחת צ'ק)");
     if(!allDay&&to<=from) return alert("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
     const w=techs.find(x=>String(x.id)===String(wid));
-    const st=allDay?"07:00":from, en=allDay?"20:00":to;
+    const st=mode==="time"?from:"07:00", en=mode==="time"?to:"20:00";
     onSave({...(task||{}),kind:"personal",title:t,customerName:"📌 "+t,pestType:"משימה אישית",price:0,address:"",customerId:null,
-      date,time:st,timeWindow:st+"–"+en,allDay,notes,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),
+      date,time:st,timeWindow:mode==="flex"?ALL_DAY_TW:st+"–"+en,allDay:mode!=="time",blockDay:mode==="block",notes,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),
       status:done===true?"בוצע":done===false?"ממתין":(task?.status||"ממתין"),updatedAt:new Date().toISOString()});
   };
   return <div>
     <div style={{fontSize:12,color:"#5b21b6",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
-      📌 משימה אישית תופסת את הזמן ביומן — לא תשובץ לך הדברה באותה שעה. היא לא נכנסת לדוחות ולכסף.
+      📌 משימה אישית — לא נכנסת לדוחות ולכסף. "בשעה מסוימת" מסמנת את השעה כתפוסה; "במהלך היום" לא חוסמת כלום.
     </div>
     <label style={lbl}>מה המשימה?</label>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
@@ -3641,11 +3645,16 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
     </div>
     <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="כתוב חופשי — למשל: לקחת צ'ק מוועד הבית" style={{...fld,marginBottom:12,fontSize:15}} autoFocus={!task}/>
     <div style={{marginBottom:8}}><label style={lbl}>תאריך</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={fld}/></div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+    <label style={lbl}>מתי?</label>
+    <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:10}}>
+      {[["time","🕐 בשעה מסוימת"],["flex","☀️ במהלך היום"],["block","🚫 חוסם כל היום"]].map(([k,l])=><button key={k} type="button" onClick={()=>setMode(k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:mode===k?800:500,background:mode===k?"#fff":"transparent",color:mode===k?(k==="block"?"#b91c1c":PERSONAL_CLR):"#64748b",boxShadow:mode===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
+    </div>
+    {mode==="time"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
       <div><label style={lbl}>משעה</label><input type="time" value={from} disabled={allDay} onChange={e=>{const v=e.target.value;setFrom(v);if(to<=v)setTo(addHour(v));}} style={{...fld,opacity:allDay?.5:1}}/></div>
       <div><label style={lbl}>עד שעה</label><input type="time" value={to} disabled={allDay} onChange={e=>setTo(e.target.value)} style={{...fld,opacity:allDay?.5:1}}/></div>
-    </div>
-    <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,marginBottom:12,cursor:"pointer"}}><input type="checkbox" checked={allDay} onChange={e=>setAllDay(e.target.checked)} style={{width:18,height:18}}/>כל היום (היום חסום לעבודות)</label>
+    </div>}
+    {mode==="flex"&&<div style={{fontSize:12,color:"#5b21b6",marginBottom:10}}>☀️ תופיע ביומן למעלה, "במהלך היום". לא חוסמת שום שעה — אפשר לשבץ עבודות כרגיל.</div>}
+    {mode==="block"&&<div style={{fontSize:12,color:"#b91c1c",marginBottom:10}}>🚫 כל היום יסומן כתפוס (חופש, מילואים, יום סגור).</div>}
     {techs.length>1&&<div style={{marginBottom:12}}><label style={lbl}>ביומן של</label>
       <select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></div>}
     <label style={lbl}>פרטים (לא חובה)</label>
@@ -3699,7 +3708,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     setAppointments(as=>as.map(a=>{
       if(a.id!==apptId) return a;
       const w=newWorkerId?workers.find(x=>x.id===newWorkerId):null;
-      const nx={...a,date:newDate,time:newTime,timeWindow:"",...(w?{workerId:w.id,workerName:w.name}:{})};
+      const nx={...a,date:newDate,time:newTime,timeWindow:"",...(isPersonal(a)?{allDay:false,blockDay:false,timeWindow:newTime+"–"+String(Math.min(parseInt(newTime)+1,23)).padStart(2,"0")+":00"}:{}),...(w?{workerId:w.id,workerName:w.name}:{})};
       if(nx.date===a.date&&nx.time===a.time&&nx.workerId===a.workerId) return a;
       return apptWithHistory(a,nx,currentUser,"הזזה ביומן (גרירה)");
     }));
@@ -3732,7 +3741,8 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const sBg={"ממתין":"#fef9c3","בוצע":"#dcfce7","בדרך":"#dbeafe","בוטל":"#f3f4f6"};
   const filtered=appointments.filter(a=>{if(currentUser.role==="מדביר")return a.workerId===currentUser.id;if(viewWk!=="all")return a.workerId===parseInt(viewWk);return true;});
   const slotHour=t=>parseInt((t||"0").split(":")[0]);
-  const atSlot=(iso,t)=>filtered.filter(a=>a.date===iso&&slotHour(a.time)===slotHour(t));
+  const atSlot=(iso,t)=>filtered.filter(a=>a.date===iso&&!isAllDay(a)&&slotHour(a.time)===slotHour(t));
+  const allDayAt=iso=>filtered.filter(a=>a.date===iso&&isAllDay(a));
   const hasInvoice=id=>finance.some(f=>f.apptId===id);
 
   const MONTHS_HE=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -3798,7 +3808,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {calMode==="month"&&<MonthView year={monthYear.y} month={monthYear.m} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onDayClick={d=>{setDayDate(d);setCalMode("day");}}/>}
     {calMode==="week"&&narrow&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
       {days.map((d,i)=>{const iso=toISO(d);const isTdy=iso===todayStr();
-        const list=filtered.filter(a=>a.date===iso).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
+        const list=filtered.filter(a=>a.date===iso).sort((a,b)=>(isAllDay(b)-isAllDay(a))||String(a.time||"").localeCompare(String(b.time||"")));
         return <div key={i} style={{background:"#fff",border:`1px solid ${isTdy?CLR.primary:CLR.border}`,borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isTdy?CLR.primary:CLR.surface,color:isTdy?"#fff":"#0f172a"}}>
             <div style={{fontWeight:700,fontSize:15}}>יום {DAYS_HE[d.getDay()]} · {shortD(d)}{isTdy?" · היום":""}</div>
@@ -3807,7 +3817,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
           {list.length===0
             ? <div style={{padding:"10px 14px",fontSize:13,color:CLR.muted}}>אין תורים</div>
             : list.map(a=>{const prog=jobProgress(a,execLogs,finance);return <div key={a.id} onClick={()=>isPersonal(a)?setEditTask(a):setDetailAppt(a)} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
-                <div style={{fontWeight:800,fontSize:15,color:"#0f172a",minWidth:48,textAlign:"center"}}>{a.time||"—"}</div>
+                <div style={{fontWeight:800,fontSize:isAllDay(a)?11:15,color:isAllDay(a)?"#92400e":"#0f172a",minWidth:48,textAlign:"center"}}>{isAllDay(a)?"☀️ במהלך היום":(a.time||"—")}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
                   <div style={{fontSize:13,color:CLR.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.pestType}{a.workerName?" · 👷 "+a.workerName:""}</div>
@@ -3826,7 +3836,16 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
               {fmtD(d)}{isTdy&&<div style={{fontSize:9,opacity:0.8}}>היום</div>}
             </th>);})}
         </tr></thead>
-        <tbody>{slots.map(slot=><tr key={slot} style={{borderBottom:`1px solid ${CLR.border}`}}>
+        <tbody>
+        {days.some(d=>allDayAt(toISO(d)).length)&&<tr style={{borderBottom:`2px solid #fcd34d`,background:"#fffbeb"}}>
+          <td style={{padding:"4px 6px",fontSize:10,color:"#92400e",fontWeight:700,textAlign:"right",verticalAlign:"top",borderLeft:`1px solid ${CLR.border}`}}>☀️ במהלך היום</td>
+          {days.map((d,i)=>{const iso=toISO(d);return <td key={i} style={{padding:2,verticalAlign:"top",borderLeft:"1px solid "+CLR.border}}>
+            {allDayAt(iso).map(a=>{const pr=jobProgress(a,execLogs,finance);return <div key={a.id} draggable onDragStart={e=>{setDraggedId(a.id);e.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId(null);setDropTarget(null);}} onClick={e=>{e.stopPropagation();isPersonal(a)?setEditTask(a):setDetailAppt(a);}} style={{background:pr.color+"1a",borderRadius:5,padding:"3px 5px",marginBottom:2,borderRight:`3px solid ${isPersonal(a)?PERSONAL_CLR:wColor(a.workerId)}`,fontSize:10,cursor:"pointer"}}>
+              <div style={{fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{a.customerName}</div>
+              <div style={{fontSize:9,color:pr.color,fontWeight:600}}>{pr.label}</div></div>;})}
+          </td>;})}
+        </tr>}
+        {slots.map(slot=><tr key={slot} style={{borderBottom:`1px solid ${CLR.border}`}}>
           <td style={{padding:"4px 8px",fontSize:11,color:CLR.muted,fontWeight:600,background:CLR.surface,textAlign:"right",verticalAlign:"top",borderLeft:`1px solid ${CLR.border}`}}>{slot}</td>
           {days.map((d,i)=>{const iso=toISO(d);const appts=atSlot(iso,slot);const isTdy=iso===todayStr();
             const isDropHere=dropTarget&&dropTarget.iso===iso&&dropTarget.slot===slot;
@@ -3843,7 +3862,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 }
                 return "transparent";
               })(),borderLeft:"1px solid "+CLR.border,cursor:"pointer",minHeight:30,outline:isDropHere?"2px dashed "+CLR.primary:"none"}}
-              onClick={()=>{if(!appts.length){setPrefill({date:iso,time:slot});setNewKind("job");setShowNew(true);}}}
+              onClick={()=>{setPrefill({date:iso,time:slot});setNewKind("job");setShowNew(true);}}
               onDragOver={e=>{e.preventDefault();setDropTarget({iso,slot});}}
               onDragLeave={()=>setDropTarget(null)}
               onDrop={e=>{e.preventDefault();if(draggedId!=null){const wId=viewWk!=="all"?parseInt(viewWk):null;moveAppt(draggedId,iso,slot,wId);}setDraggedId(null);setDropTarget(null);}}>
@@ -3981,7 +4000,7 @@ function QuickChips({chips,onPick,isOn}){
 
 
 // ─── WhatsApp confirmation for new order ─────────────
-function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, address, company}){
+function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, address, company}){
 
   const INSTRUCTIONS = {
 
@@ -4116,7 +4135,8 @@ function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, address, co
   ];
   if(address) lines.push("📍 כתובת: "+address);
   if(date){ const [y,m,d]=date.split("-"); lines.push("📅 תאריך: "+d+"/"+m+"/"+y); }
-  if(timeFrom&&timeTo) lines.push("🕐 חלון הגעה: "+timeFrom+" – "+timeTo);
+  if(allDay) lines.push("🕐 מועד הגעה: במהלך היום");
+  else if(timeFrom&&timeTo) lines.push("🕐 חלון הגעה: "+timeFrom+" – "+timeTo);
   if(pests&&pests.length) lines.push("🔬 טיפול: "+pests.join(", "));
   lines.push("");
   lines.push("⚠️ *אנא אמתו שהכתובת נכונה — אם יש טעות נשמח שתיצרו קשר.*");
@@ -4259,7 +4279,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(!pick||!pick.n) return;
     const h=parseInt(String(pick.time||"08:00").split(":")[0]);
     const to=String(Math.min(h+2,21)).padStart(2,"0")+":00";
-    setF(x=>({...x,prefDate:pick.date,timeFrom:pick.time,timeTo:TIME_SLOTS.includes(to)?to:x.timeTo}));
+    setF(x=>({...x,prefDate:pick.date,allDay:false,timeFrom:pick.time,timeTo:TIME_SLOTS.includes(to)?to:x.timeTo}));
     if(pick.workerId!=null&&pick.workerId!==""){ setSchedWorker(String(pick.workerId)); setDoSchedule(true); }
   },[pick&&pick.n]);
   const [showCalc,setShowCalc]=useState(false);
@@ -4324,11 +4344,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     let schedInfo=null;
     if(doSchedule&&saved){
       const w=workers.find(x=>x.id===parseInt(schedWorker));
-      const timeWindow=`${f.timeFrom}–${f.timeTo}`;
+      const timeWindow=f.allDay?ALL_DAY_TW:`${f.timeFrom}–${f.timeTo}`;
       onSchedule({
         customerId:saved.id,customerName:saved.name,contactName:contactForDocs(),propertyNotes:f.propertyNotes||"",underground:isShared?f.underground:"0",
         workerId:parseInt(schedWorker),workerName:w?.name||"",
-        date:f.prefDate,time:f.timeFrom,timeWindow,
+        date:f.prefDate,time:f.allDay?"07:00":f.timeFrom,timeWindow,
         pestType:pestLabel(),pests:allPests(),
         price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),
         buildingAreas:f.buildingAreas,
@@ -4488,10 +4508,15 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     <FieldCard title="זמן מועדף להגעה">
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,alignItems:"end"}}>
         <div style={{gridColumn:"1 / -1"}}><Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/></div>
-        <Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>
-        <Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>
+        <label style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:f.allDay?"#fef9c3":"#f8fafc",border:`1px solid ${f.allDay?"#fcd34d":CLR.border}`,borderRadius:10,padding:"10px 12px",marginBottom:4}}>
+          <input type="checkbox" checked={!!f.allDay} onChange={e=>set("allDay",e.target.checked)} style={{width:18,height:18}}/>
+          <span><b>☀️ במהלך היום</b> — בלי שעה קבועה, לא חוסם את היומן</span>
+        </label>
+        {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>}
+        {!f.allDay&&<Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>}
       </div>
-      {f.prefDate&&<div style={{fontSize:12,color:CLR.primary}}>🕐 חלון הגעה: {fmtDate(f.prefDate)} בין {f.timeFrom} ל-{f.timeTo}</div>}
+      {f.prefDate&&<div style={{fontSize:12,color:CLR.primary}}>🕐 {f.allDay?<>הגעה: {fmtDate(f.prefDate)} · במהלך היום</>:<>חלון הגעה: {fmtDate(f.prefDate)} בין {f.timeFrom} ל-{f.timeTo}</>}</div>}
+      {f.prefDate&&!f.allDay&&<div style={{fontSize:11,color:CLR.muted,marginTop:4}}>💡 אפשר לשבץ כמה עבודות באותו חלון שעות — היומן לא חוסם חפיפות.</div>}
     </FieldCard>
 
     <FieldCard title="הערות">
@@ -4541,11 +4566,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       const addr=fullAddress();
       const allP=allPests();
       const phone=(f.phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
-      const text=buildOrderConfirmText({name:f.name,pests:allP,date:f.prefDate,timeFrom:f.timeFrom,timeTo:f.timeTo,address:addr,company:COMPANY});
+      const text=buildOrderConfirmText({name:f.name,pests:allP,date:f.prefDate,timeFrom:f.allDay?"":f.timeFrom,timeTo:f.allDay?"":f.timeTo,allDay:!!f.allDay,address:addr,company:COMPANY});
       const waUrl="https://wa.me/"+phone+"?text="+encodeURIComponent(text);
       return <Modal title="💬 שליחת אישור ללקוח בוואטסאפ" onClose={()=>setShowWAConfirm(false)} width={520}>
         <div style={{background:CLR.primaryLight,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13}}>
-          <b>{f.name}</b>{" · "}{f.phone}{f.prefDate?" · "+fmtDate(f.prefDate)+" "+f.timeFrom+"–"+f.timeTo:""}
+          <b>{f.name}</b>{" · "}{f.phone}{f.prefDate?" · "+fmtDate(f.prefDate)+" "+(f.allDay?ALL_DAY_TW:f.timeFrom+"–"+f.timeTo):""}
         </div>
         <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,padding:"14px",marginBottom:14,fontSize:13,whiteSpace:"pre-wrap",lineHeight:1.7,maxHeight:300,overflowY:"auto"}}>{text}</div>
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -4577,7 +4602,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </Modal>}
     {showSend&&(()=>{
       const addr=fullAddress();
-      const tw=`${f.timeFrom}–${f.timeTo}`;
+      const tw=f.allDay?ALL_DAY_TW:`${f.timeFrom}–${f.timeTo}`;
       const qPrice=parseInt(f.price)||(quote&&quote.total)||0;
       const text=buildClientQuoteText({company:COMPANY,customerName:f.name,date:f.prefDate,timeWindow:f.prefDate?tw:"",address:addr,quote,price:qPrice});
       const waUrl=`https://wa.me/${(f.phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972")}?text=${encodeURIComponent(text)}`;
@@ -4696,6 +4721,7 @@ function SplitView({right,left,storageKey,defaultRight=640,minRight=400,minLeft=
 
 // ── לוח זמינות המדבירים (ליד הזמנת עבודה) ──
 function apptRange(a){
+  if(a&&a.blockDay) return [7*60,21*60];
   const tw=String(a.timeWindow||"").split(/[–-]/).map(x=>x.trim());
   const toMin=t=>{const [h,m]=String(t||"").split(":").map(n=>parseInt(n));return isNaN(h)?null:h*60+(m||0);};
   let st=toMin(tw[0])??toMin(a.time), en=toMin(tw[1]);
@@ -4720,7 +4746,8 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
   const live=appointments.filter(a=>a.status!=="בוטל");
   const goDay=x=>{setDate(iso(x));setModeP("day");};
   const DAYS=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
-  const dayAppts=appointments.filter(a=>a.date===iso(d)&&a.status!=="בוטל");
+  const dayAllDay=appointments.filter(a=>a.date===iso(d)&&a.status!=="בוטל"&&isAllDay(a));
+  const dayAppts=appointments.filter(a=>a.date===iso(d)&&a.status!=="בוטל"&&!isAllDay(a));
   const toMin=t=>{const [h,m]=String(t||"").split(":").map(n=>parseInt(n));return isNaN(h)?null:h*60+(m||0);};
   const selSt=toMin(sel&&sel.timeFrom), selEn=toMin(sel&&sel.timeTo);
   const inSel=h=>sel&&sel.date===iso(d)&&selSt!=null&&selEn!=null&&h*60<selEn&&(h+1)*60>selSt;
@@ -4785,6 +4812,7 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
             {cols.map(w=><th key={w.id} style={{position:"sticky",top:0,background:CLR.primary,color:"#fff",fontSize:12,padding:6,zIndex:2,borderRight:"1px solid rgba(255,255,255,.25)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
               <span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:w.color||"#fff",marginLeft:4}}/>{w.name}
               <div style={{fontSize:10,opacity:.85,fontWeight:400}}>{dayAppts.filter(a=>String(a.workerId)===String(w.id)||a.workerName===w.name).length} תורים</div>
+              {(()=>{const ad=dayAllDay.filter(a=>String(a.workerId)===String(w.id)||a.workerName===w.name);return ad.length?<div title={ad.map(a=>a.customerName).join(" · ")} style={{fontSize:10,fontWeight:600,background:"rgba(255,255,255,.22)",borderRadius:6,padding:"1px 5px",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>☀️ {ad.length} במהלך היום</div>:null;})()}
             </th>)}
           </tr></thead>
           <tbody>{hours.map(h=><tr key={h} style={{background:inSel(h)?"#fef9c3":"transparent"}}>
@@ -4794,10 +4822,10 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
               const starts=mine.filter(a=>Math.floor(apptRange(a)[0]/60)===h||apptRange(a)[0]<7*60&&h===7);
               const busy=mine.length>0;
               const chosen=sel&&String(sel.workerId)===String(w.id)&&inSel(h);
-              return <td key={w.id} onClick={()=>!busy&&onPick&&onPick({date:iso(d),time:String(h).padStart(2,"0")+":00",workerId:w.id})}
-                style={{borderTop:`1px solid ${CLR.border}`,borderRight:`1px solid ${CLR.border}`,padding:3,verticalAlign:"top",height:40,cursor:busy?"default":"pointer",
-                  background:chosen?(busy?"#fecaca":"#bbf7d0"):busy?(w.color||CLR.primary)+"22":"transparent"}}
-                title={busy?"תפוס":"פנוי — לחץ לבחירה"}>
+              return <td key={w.id} onClick={()=>onPick&&onPick({date:iso(d),time:String(h).padStart(2,"0")+":00",workerId:w.id})}
+                style={{borderTop:`1px solid ${CLR.border}`,borderRight:`1px solid ${CLR.border}`,padding:3,verticalAlign:"top",height:40,cursor:"pointer",
+                  background:chosen?(busy?"#fde68a":"#bbf7d0"):busy?(w.color||CLR.primary)+"22":"transparent"}}
+                title={busy?"יש כבר עבודה בשעה הזו — אפשר להוסיף עוד (לחץ לבחירה)":"פנוי — לחץ לבחירה"}>
                 {starts.map(a=><div key={a.id} style={{fontSize:11,lineHeight:1.3,borderRight:`3px solid ${w.color||CLR.primary}`,paddingRight:4,marginBottom:2,overflow:"hidden"}}>
                   <b>{(a.timeWindow||a.time||"")}</b><div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.customerName||"—"}</div>
                 </div>)}
@@ -7058,7 +7086,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
         {myPersonal.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:"1px solid #ede9fe"}}>
-          <div style={{fontWeight:700,fontSize:13,minWidth:84,color:"#4c1d95"}}>{a.allDay?"כל היום":<span dir="ltr">{a.timeWindow||a.time}</span>}</div>
+          <div style={{fontWeight:700,fontSize:13,minWidth:84,color:"#4c1d95"}}>{a.blockDay?"כל היום":isAllDay(a)?"במהלך היום":<span dir="ltr">{a.timeWindow||a.time}</span>}</div>
           <div onClick={()=>onOpenAppt&&onOpenAppt(a)} style={{flex:1,minWidth:0,cursor:"pointer",textDecoration:a.status==="בוצע"?"line-through":"none",color:a.status==="בוצע"?"#94a3b8":"#0f172a",fontSize:14}}>{personalTitle(a)}{a.notes?<span style={{color:"#64748b",fontSize:12}}> · {a.notes}</span>:null}</div>
           <button onClick={()=>updateStatus(a,a.status==="בוצע"?"ממתין":"בוצע")} style={{border:"1px solid #c4b5fd",background:a.status==="בוצע"?"#ede9fe":"#fff",color:PERSONAL_CLR,borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{a.status==="בוצע"?"↺":"✓ בוצע"}</button>
         </div>)}
@@ -7281,7 +7309,7 @@ function ReminderBanner({appointments, customers, scheduledMsgs, currentUser}){
           const cust = customers.find(c=>c.id===appt.customerId||c.name===appt.customerName)||{};
           const phone = (cust.phone||'').replace(/[^0-9]/g,'').replace(/^0/,'972');
           const isToday = appt.date===today;
-          const timeLabel = appt.timeFrom ? ` · ${appt.timeFrom}` : appt.time ? ` · ${appt.time}` : '';
+          const timeLabel = isAllDay(appt) ? ' · במהלך היום' : appt.timeFrom ? ` · ${appt.timeFrom}` : appt.time ? ` · ${appt.time}` : '';
           const txt = encodeURIComponent(
             `שלום ${appt.customerName} 👋\n\n` +
             (isToday
@@ -8001,18 +8029,29 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
   const fmtDay = d => `יום ${dayNames[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
   const wColor = wid => { const w=workers.find(x=>x.id===wid); return w?.color||"#1a5c3a"; };
 
-  const dayAppts = (appointments||[]).filter(a => a.date===iso)
+  const dayAll = (appointments||[]).filter(a => a.date===iso)
     .sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
+  const allDayList = dayAll.filter(a=>isAllDay(a));
+  const dayAppts = dayAll.filter(a=>!isAllDay(a));
 
   return <div style={{direction:"rtl"}}>
     <div style={{fontWeight:700,fontSize:15,color:"#1a5c3a",marginBottom:12,padding:"8px 0 10px",borderBottom:"2px solid #e8f5ee",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span style={{fontSize:14}}>{dayAppts.length?"התורים של היום":""}</span>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
-        <span style={{fontSize:13,fontWeight:400,color:"#6b7280"}}>{dayAppts.length} תורים</span>
-        {dayAppts.length>0&&<button onClick={()=>printDaySchedule(date,appointments,workers)} style={{background:CLR.primary,color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>🖨️ הדפס</button>}
+        <span style={{fontSize:13,fontWeight:400,color:"#6b7280"}}>{dayAll.filter(a=>!isPersonal(a)).length} תורים</span>
+        {dayAll.length>0&&<button onClick={()=>printDaySchedule(date,appointments,workers)} style={{background:CLR.primary,color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:600}}>🖨️ הדפס</button>}
       </div>
     </div>
-    {dayAppts.length===0 && <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af",fontSize:14}}>
+    {allDayList.length>0&&<div style={{border:"1px solid #fcd34d",background:"#fffbeb",borderRadius:10,padding:"8px 10px",marginBottom:10}}>
+      <div style={{fontWeight:800,fontSize:13,color:"#92400e",marginBottom:6}}>☀️ במהלך היום <span style={{fontWeight:400,color:"#a16207",fontSize:12}}>· בלי שעה קבועה, לא חוסם</span></div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {allDayList.map(a=>{const pr=jobProgress(a,execLogs,finance);const pers=isPersonal(a);return <div key={a.id} onClick={()=>onApptClick(a)} style={{cursor:"pointer",background:pers?"#f5f3ff":"#fff",border:`2px ${pers?"dashed":"solid"} ${pers?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"6px 10px",flex:"1 1 200px",maxWidth:380,textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:6,alignItems:"center"}}><span style={{fontWeight:700,fontSize:13}}>{a.customerName}</span><span style={{fontSize:11,color:pr.color,fontWeight:600}}>{pr.label}</span></div>
+          <div style={{fontSize:11,color:"#6b7280"}}>{pers?(a.notes||""):(a.pestType+" · 📍 "+(a.address||"").slice(0,40))}{a.workerName?" · 👷 "+a.workerName:""}</div>
+        </div>;})}
+      </div>
+    </div>}
+    {dayAll.length===0 && <div style={{textAlign:"center",padding:"60px 20px",color:"#9ca3af",fontSize:14}}>
       אין תורים ביום זה
       <div style={{marginTop:12}}><button onClick={()=>onNewAppt(iso,"09:00")} style={{background:"#1a5c3a",color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",cursor:"pointer",fontWeight:600,fontSize:13}}>+ הוסף תור</button></div>
     </div>}
@@ -8024,8 +8063,8 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
         const isHour = slot.endsWith(":00");
         return <div key={slot} style={{display:"flex",minHeight:atSlot.length?72:36,borderBottom:"1px solid #f3f4f6",background:atSlot.length?"#fafffe":"#fff"}}>
           <div style={{width:54,flexShrink:0,padding:"6px 8px 0",fontSize:isHour?12:10,color:isHour?"#6b7280":"#d1d5db",fontWeight:isHour?600:400,borderLeft:"2px solid #e5e7eb",textAlign:"right"}}>{isHour?slot:""}</div>
-          <div style={{flex:1,padding:"4px 8px",display:"flex",flexWrap:"wrap",gap:6,alignItems:"flex-start",cursor:atSlot.length?"default":"pointer"}}
-            onClick={()=>atSlot.length===0&&onNewAppt(iso,slot)}>
+          <div style={{flex:1,padding:"4px 8px",display:"flex",flexWrap:"wrap",gap:6,alignItems:"flex-start",cursor:"pointer"}}
+            onClick={()=>onNewAppt(iso,slot)} title="לחץ להוספת תור/משימה בשעה הזו">
             {atSlot.map(a=>{
               const prog=jobProgress(a,execLogs,finance);
               return <div key={a.id} onClick={e=>{e.stopPropagation();onApptClick(a);}}
@@ -8034,12 +8073,13 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
                   <span style={{fontWeight:700,fontSize:13,color:"#111"}}>{a.time} · {a.customerName}</span>
                   <span style={{fontSize:11,color:prog.color,fontWeight:600,background:prog.color+"18",padding:"1px 7px",borderRadius:20}}>{prog.label}</span>
                 </div>
-                {isPersonal(a)?<div style={{fontSize:12,color:"#6b7280"}}>🕐 {a.allDay?"כל היום":<span dir="ltr">{a.timeWindow}</span>}{a.notes?" · "+a.notes.slice(0,60):""}{a.workerName?" · 👷 "+a.workerName:""}</div>:<>
+                {isPersonal(a)?<div style={{fontSize:12,color:"#6b7280"}}>🕐 {a.blockDay?"חוסם כל היום":isAllDay(a)?"במהלך היום":<span dir="ltr">{a.timeWindow}</span>}{a.notes?" · "+a.notes.slice(0,60):""}{a.workerName?" · 👷 "+a.workerName:""}</div>:<>
                 <div style={{fontSize:12,color:"#6b7280",marginBottom:1}}>🐛 {a.pestType} · 💰 ₪{a.price}</div>
                 <div style={{fontSize:11,color:"#9ca3af"}}>👷 {a.workerName} · 📍 {(a.address||"").slice(0,40)}</div></>}
               </div>;
             })}
-            {atSlot.length===0&&<div style={{fontSize:10,color:"#f3f4f6",padding:"2px 0",width:"100%",userSelect:"none"}}>+</div>}
+            {atSlot.length===0?<div style={{fontSize:10,color:"#f3f4f6",padding:"2px 0",width:"100%",userSelect:"none"}}>+</div>
+              :<div style={{alignSelf:"center",fontSize:16,color:"#94a3b8",border:"1px dashed #cbd5e1",borderRadius:8,padding:"2px 10px",userSelect:"none"}} title="הוסף עוד בשעה הזו">+</div>}
           </div>
         </div>;
       })}
@@ -8090,7 +8130,7 @@ function MonthView({year, month, appointments, workers, finance, execLogs, curre
               return <div key={a.id} style={{fontSize:10,padding:"2px 5px",borderRadius:4,marginBottom:2,
                 background:wColor(a.workerId)+"22",borderRight:`3px solid ${wColor(a.workerId)}`,
                 overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:"#111"}}>
-                {a.time} {a.customerName}
+                {isAllDay(a)?"☀️":a.time} {a.customerName}
               </div>;
             })}
             {day.appts.length>3&&<div style={{fontSize:10,color:"#6b7280",padding:"1px 4px"}}>+{day.appts.length-3} נוספים</div>}
