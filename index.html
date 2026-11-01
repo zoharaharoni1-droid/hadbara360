@@ -1458,6 +1458,7 @@ function clientQuoteHtml({company,customerName,date,timeWindow,address,quote,pri
 // Compute the overall progress of a job from its flags.
 // Returns {stage, label, color, steps:[{name,done}]}
 function jobProgress(appt, execLogs, finance){
+  if(appt&&appt.kind==="personal"){ const d=appt.status==="בוצע"; return {stage:"אישי",label:d?"✓ בוצע":"📌 אישי",color:"#7c3aed",steps:[],next:null,closed:d,personal:true}; }
   const log = execLogs?.find(l=>l.apptId===appt.id&&!l.deleted) || appt.executionLog || null;
   const workDone = !!log || appt.status==="בוצע";
   const docs = (finance||[]).filter(f=>!f.deleted&&f.category==="חשבונית"&&(String(f.apptId)===String(appt.id)||(log&&f.execLogId!=null&&String(f.execLogId)===String(log.id))||(log&&(f.execLogIds||[]).map(String).includes(String(log.id)))));
@@ -3541,7 +3542,7 @@ function printDaySchedule(date, appointments, workers){
       <tr style="border-bottom:1px solid #e5e7eb;">
         <td style="padding:8px 12px;font-weight:600;">${a.time}${a.timeWindow?" ("+a.timeWindow+")":""}</td>
         <td style="padding:8px 12px;">${a.customerName}</td>
-        <td style="padding:8px 12px;">${a.pestType}</td>
+        <td style="padding:8px 12px;">${a.pestType}${isPersonal(a)&&a.timeWindow?" ("+a.timeWindow+")":""}</td>
         <td style="padding:8px 12px;">${a.address}</td>
         <td style="padding:8px 12px;font-weight:700;">₪${a.price}</td>
         <td style="padding:8px 12px;color:#6b7280;font-size:12px;">${a.notes||""}</td>
@@ -3598,9 +3599,72 @@ function exportMonthlyReport(year,month,appointments,finance,workers){
   const aRows=mAppts.sort((a,b)=>a.date.localeCompare(b.date)).map(a=>`<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 10px;">${fmtDate(a.date)}</td><td style="padding:6px 10px;">${a.customerName}</td><td style="padding:6px 10px;">${a.pestType}</td><td style="padding:6px 10px;">${a.workerName}</td><td style="padding:6px 10px;font-weight:700;">₪${a.price}</td><td style="padding:6px 10px;">${a.status}</td></tr>`).join("");
   openPrintWindow("דוח "+names[month]+" "+year,`<div style="max-width:900px;margin:0 auto;"><div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:20px;"><div style="font-size:20px;font-weight:700;color:#1a5c3a;">🦟 ${COMPANY.name}</div><div style="text-align:left;font-size:18px;font-weight:700;color:#1a5c3a;">דוח ${names[month]} ${year}</div></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">${[["תורים",mAppts.length],["בוצעו",mAppts.filter(a=>a.status==="בוצע").length],["הכנסות","₪"+income.toLocaleString()],["רווח","₪"+(income-expense).toLocaleString()]].map(([l,v])=>`<div style="background:#f0f9f4;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:12px;color:#6b7280;">${l}</div><div style="font-size:20px;font-weight:700;color:#1a5c3a;">${v}</div></div>`).join("")}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;"><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מדבירים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;">תורים</th><th style="padding:7px;">בוצעו</th><th style="padding:7px;">שווי</th></tr></thead><tbody>${wRows}</tbody></table></div><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מזיקים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;">כמות</th></tr></thead><tbody>${pRows}</tbody></table></div></div><h3 style="color:#1a5c3a;margin-bottom:8px;">רשימת תורים</h3><table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">תאריך</th><th style="padding:7px;text-align:right;">לקוח</th><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;text-align:right;">מחיר</th><th style="padding:7px;text-align:right;">סטטוס</th></tr></thead><tbody>${aRows}</tbody></table></div>`);
 }
+// ═══ משימות אישיות ביומן (סידורים, רופא, צ'ק...) — חוסמות את הזמן ולא נחשבות עבודה ═══
+const isPersonal=a=>!!a&&a.kind==="personal";
+const PERSONAL_CHIPS=["🏦 בנק / צ'ק","🛒 קניות","🩺 רופא","🚗 מוסך / רכב","📦 סידורים","👨‍👩‍👧 משפחה","🍽️ הפסקה","📞 פגישה"];
+const PERSONAL_CLR="#7c3aed";
+function personalTitle(a){ return a.title||String(a.customerName||"").replace(/^📌\s*/,"")||"משימה"; }
+function myWorkerFor(currentUser,workers){
+  const ws=(workers||[]).filter(w=>!w.deleted);
+  return ws.find(w=>String(w.crmUserId)===String(currentUser&&currentUser.id))||ws.find(w=>String(w.name||"").trim()===String(currentUser&&currentUser.name||"").trim())||null;
+}
+function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelete,onCancel}){
+  const addHour=t=>{const [h,m]=String(t||"09:00").split(":").map(n=>parseInt(n)||0);const x=Math.min(h+1,23);return String(x).padStart(2,"0")+":"+String(m).padStart(2,"0");};
+  const tw0=String(task?.timeWindow||"").split(/[–-]/).map(s=>s.trim());
+  const me=myWorkerFor(currentUser,workers);
+  const [title,setTitle]=useState(task?personalTitle(task):"");
+  const [date,setDate]=useState(task?.date||prefill.date||todayStr());
+  const [from,setFrom]=useState(tw0[0]||task?.time||prefill.time||"09:00");
+  const [to,setTo]=useState(tw0[1]||addHour(task?.time||prefill.time||"09:00"));
+  const [allDay,setAllDay]=useState(!!task?.allDay);
+  const [notes,setNotes]=useState(task?.notes||"");
+  const [wid,setWid]=useState(String(task?.workerId??prefill.workerId??(me?me.id:"")));
+  const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
+  const fld={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,boxSizing:"border-box",background:"#f9fafb",fontFamily:"inherit"};
+  const lbl={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
+  const save=done=>{
+    const t=title.trim(); if(!t) return alert("כתוב מה המשימה (למשל: לקחת צ'ק)");
+    if(!allDay&&to<=from) return alert("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+    const w=techs.find(x=>String(x.id)===String(wid));
+    const st=allDay?"07:00":from, en=allDay?"20:00":to;
+    onSave({...(task||{}),kind:"personal",title:t,customerName:"📌 "+t,pestType:"משימה אישית",price:0,address:"",customerId:null,
+      date,time:st,timeWindow:st+"–"+en,allDay,notes,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),
+      status:done===true?"בוצע":done===false?"ממתין":(task?.status||"ממתין"),updatedAt:new Date().toISOString()});
+  };
+  return <div>
+    <div style={{fontSize:12,color:"#5b21b6",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
+      📌 משימה אישית תופסת את הזמן ביומן — לא תשובץ לך הדברה באותה שעה. היא לא נכנסת לדוחות ולכסף.
+    </div>
+    <label style={lbl}>מה המשימה?</label>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+      {PERSONAL_CHIPS.map(c=><button key={c} type="button" onClick={()=>setTitle(c.replace(/^\S+\s/,""))} style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:20,padding:"5px 12px",fontSize:13,cursor:"pointer",color:"#5b21b6",fontFamily:"inherit"}}>{c}</button>)}
+    </div>
+    <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="כתוב חופשי — למשל: לקחת צ'ק מוועד הבית" style={{...fld,marginBottom:12,fontSize:15}} autoFocus={!task}/>
+    <div style={{marginBottom:8}}><label style={lbl}>תאריך</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={fld}/></div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+      <div><label style={lbl}>משעה</label><input type="time" value={from} disabled={allDay} onChange={e=>{const v=e.target.value;setFrom(v);if(to<=v)setTo(addHour(v));}} style={{...fld,opacity:allDay?.5:1}}/></div>
+      <div><label style={lbl}>עד שעה</label><input type="time" value={to} disabled={allDay} onChange={e=>setTo(e.target.value)} style={{...fld,opacity:allDay?.5:1}}/></div>
+    </div>
+    <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,marginBottom:12,cursor:"pointer"}}><input type="checkbox" checked={allDay} onChange={e=>setAllDay(e.target.checked)} style={{width:18,height:18}}/>כל היום (היום חסום לעבודות)</label>
+    {techs.length>1&&<div style={{marginBottom:12}}><label style={lbl}>ביומן של</label>
+      <select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></div>}
+    <label style={lbl}>פרטים (לא חובה)</label>
+    <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="כתובת, טלפון, מה להביא..." style={{...fld,resize:"vertical",marginBottom:14}}/>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <Btn style={{flex:"2 1 160px",background:PERSONAL_CLR}} onClick={()=>save()}>💾 {task?"שמור שינויים":"הוסף ליומן"}</Btn>
+      {task&&task.status!=="בוצע"&&<Btn v="secondary" style={{flex:"1 1 120px"}} onClick={()=>save(true)}>✓ בוצע</Btn>}
+      {task&&task.status==="בוצע"&&<Btn v="secondary" style={{flex:"1 1 120px"}} onClick={()=>save(false)}>↺ החזר לפתוח</Btn>}
+      {task&&onDelete&&<Btn v="ghost" style={{flex:"1 1 100px",color:"#dc2626"}} onClick={()=>{if(confirm("למחוק את המשימה מהיומן?")) onDelete(task);}}>🗑️ מחק</Btn>}
+      {!task&&<Btn v="ghost" style={{flex:"1 1 100px"}} onClick={onCancel}>ביטול</Btn>}
+    </div>
+  </div>;
+}
+
 function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[],openReq=null,onOpenDone}){
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
+  const [newKind,setNewKind]=useState("job");
+  const [editTask,setEditTask]=useState(null);
   const [prefill,setPrefill]=useState({});
   const [viewWk,setViewWk]=useState("all");
   const [narrow,setNarrow]=useState(()=>window.innerWidth<700);
@@ -3621,6 +3685,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     if(!openReq) return;
     const a=appointments.find(x=>String(x.id)===String(openReq.id)); if(!a) return;
     if(a.date){ setCalMode("day"); setDayDate(new Date(a.date+"T12:00:00")); }
+    if(isPersonal(a)){ setEditTask(a); return; }
     setDetailAppt(a); if(openReq.mode==="log") setLogAppt(a);
   },[openReq&&openReq.n]);
   const backIfReq=()=>{ if(openReq&&onOpenDone) onOpenDone(); };
@@ -3690,7 +3755,8 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
           <button key={m} onClick={()=>setCalMode(m)} style={{flex:1,padding:"8px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:calMode===m?700:500,background:calMode===m?"#fff":"transparent",color:calMode===m?"#1a5c3a":"#6b7280"}}>{l}</button>
         ))}
       </div>
-      <Btn sm onClick={()=>{setPrefill(calMode==="day"?{date:toISO(dayDate)}:{});setShowNew(true);}}>+ תור חדש</Btn>
+      <Btn sm onClick={()=>{setPrefill(calMode==="day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
+      <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
     </div>
     {/* שורה 2: ניווט — החצים מצביעים החוצה */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
@@ -3707,7 +3773,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
       {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
         <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
-      <Btn sm v="secondary" onClick={()=>exportAppointments(appointments)}>📥 ייצא</Btn>
+      <Btn sm v="secondary" onClick={()=>exportAppointments(appointments.filter(a=>!isPersonal(a)))}>📥 ייצא</Btn>
       <Btn sm v="ghost" onClick={()=>{
         if(calMode==="day") printDaySchedule(dayDate,appointments,workers);
         else if(calMode==="week") printDaySchedule(days[0],appointments,workers);
@@ -3728,7 +3794,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     </div>
     {/* Slot load map — for color coding */}
     {(()=>{ window._slotLoad={}; days.forEach(d=>{const iso=toISO(d);filtered.filter(a=>a.date===iso).forEach(a=>{const key=iso+"_"+slotHour(a.time);window._slotLoad[key]=(window._slotLoad[key]||0)+1;});}); return null; })()}
-    {calMode==="day"&&<DayView date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={a=>setDetailAppt(a)} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setShowNew(true);}}/>}
+    {calMode==="day"&&<DayView date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={a=>isPersonal(a)?setEditTask(a):setDetailAppt(a)} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setNewKind("job");setShowNew(true);}}/>}
     {calMode==="month"&&<MonthView year={monthYear.y} month={monthYear.m} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onDayClick={d=>{setDayDate(d);setCalMode("day");}}/>}
     {calMode==="week"&&narrow&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
       {days.map((d,i)=>{const iso=toISO(d);const isTdy=iso===todayStr();
@@ -3736,11 +3802,11 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         return <div key={i} style={{background:"#fff",border:`1px solid ${isTdy?CLR.primary:CLR.border}`,borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isTdy?CLR.primary:CLR.surface,color:isTdy?"#fff":"#0f172a"}}>
             <div style={{fontWeight:700,fontSize:15}}>יום {DAYS_HE[d.getDay()]} · {shortD(d)}{isTdy?" · היום":""}</div>
-            <button onClick={()=>{setPrefill({date:iso});setShowNew(true);}} style={{background:isTdy?"rgba(255,255,255,0.2)":"#fff",color:isTdy?"#fff":CLR.primary,border:`1px solid ${isTdy?"rgba(255,255,255,0.4)":CLR.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ תור</button>
+            <button onClick={()=>{setPrefill({date:iso});setNewKind("job");setShowNew(true);}} style={{background:isTdy?"rgba(255,255,255,0.2)":"#fff",color:isTdy?"#fff":CLR.primary,border:`1px solid ${isTdy?"rgba(255,255,255,0.4)":CLR.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ תור</button>
           </div>
           {list.length===0
             ? <div style={{padding:"10px 14px",fontSize:13,color:CLR.muted}}>אין תורים</div>
-            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);return <div key={a.id} onClick={()=>setDetailAppt(a)} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
+            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);return <div key={a.id} onClick={()=>isPersonal(a)?setEditTask(a):setDetailAppt(a)} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
                 <div style={{fontWeight:800,fontSize:15,color:"#0f172a",minWidth:48,textAlign:"center"}}>{a.time||"—"}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
@@ -3756,7 +3822,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         <thead><tr style={{background:CLR.primary}}>
           <th style={{width:56,padding:"9px 8px",color:"#fff",fontSize:11,textAlign:"right",borderLeft:"1px solid rgba(255,255,255,0.2)"}}>שעה</th>
           {days.map((d,i)=>{const iso=toISO(d);const isTdy=iso===todayStr();return(
-            <th key={i} onClick={()=>{setPrefill({date:iso});setShowNew(true);}} style={{padding:"8px 6px",color:"#fff",fontSize:11,fontWeight:isTdy?700:500,textAlign:"center",background:isTdy?"rgba(255,255,255,0.2)":"transparent",borderLeft:"1px solid rgba(255,255,255,0.2)",cursor:"pointer"}}>
+            <th key={i} onClick={()=>{setPrefill({date:iso});setNewKind("job");setShowNew(true);}} style={{padding:"8px 6px",color:"#fff",fontSize:11,fontWeight:isTdy?700:500,textAlign:"center",background:isTdy?"rgba(255,255,255,0.2)":"transparent",borderLeft:"1px solid rgba(255,255,255,0.2)",cursor:"pointer"}}>
               {fmtD(d)}{isTdy&&<div style={{fontSize:9,opacity:0.8}}>היום</div>}
             </th>);})}
         </tr></thead>
@@ -3777,7 +3843,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 }
                 return "transparent";
               })(),borderLeft:"1px solid "+CLR.border,cursor:"pointer",minHeight:30,outline:isDropHere?"2px dashed "+CLR.primary:"none"}}
-              onClick={()=>{if(!appts.length){setPrefill({date:iso,time:slot});setShowNew(true);}}}
+              onClick={()=>{if(!appts.length){setPrefill({date:iso,time:slot});setNewKind("job");setShowNew(true);}}}
               onDragOver={e=>{e.preventDefault();setDropTarget({iso,slot});}}
               onDragLeave={()=>setDropTarget(null)}
               onDrop={e=>{e.preventDefault();if(draggedId!=null){const wId=viewWk!=="all"?parseInt(viewWk):null;moveAppt(draggedId,iso,slot,wId);}setDraggedId(null);setDropTarget(null);}}>
@@ -3787,7 +3853,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 draggable
                 onDragStart={e=>{setDraggedId(a.id);e.dataTransfer.effectAllowed="move";}}
                 onDragEnd={()=>{setDraggedId(null);setDropTarget(null);}}
-                onClick={e=>{e.stopPropagation();setDetailAppt(a);}}
+                onClick={e=>{e.stopPropagation();isPersonal(a)?setEditTask(a):setDetailAppt(a);}}
                 style={{background:prog.color+"1a",borderRadius:5,padding:"3px 5px",marginBottom:2,borderRight:`3px solid ${wColor(a.workerId)}`,fontSize:10,cursor:"grab",opacity:draggedId===a.id?0.4:1}}
                 title="גרור כדי לשבץ מחדש · לחץ לפרטים">
                 <div style={{fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>⠿ {a.customerName}</div>
@@ -3795,14 +3861,18 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{fontSize:9,color:prog.color,fontWeight:600}}>{prog.label}</div>
                   {a.collabName&&<div style={{fontSize:8,color:"#7c3aed",fontWeight:600}}>🤝 {a.collabName}</div>}
-                  <div onClick={e=>{e.stopPropagation();setReminderAppt(a);}} style={{fontSize:9,cursor:"pointer",padding:"1px 4px",borderRadius:4,background:"#dcfce7",color:"#166534"}}>💬</div>
+                  {!isPersonal(a)&&<div onClick={e=>{e.stopPropagation();setReminderAppt(a);}} style={{fontSize:9,cursor:"pointer",padding:"1px 4px",borderRadius:4,background:"#dcfce7",color:"#166534"}}>💬</div>}
                 </div>
               </div>;})}
             </td>);})}
         </tr>)}</tbody>
       </table>
     </div>}
-    {showNew&&<Modal title={"📝 הזמנת עבודה חדשה — "+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>setShowNew(false)} width={860}>
+    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>setShowNew(false)} width={newKind==="personal"?520:860}>
+      <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:12}}>
+        {[["job","🐜 הזמנת עבודה (לקוח)"],["personal","📌 משימה אישית / סידור"]].map(([k,l])=><button key={k} type="button" onClick={()=>setNewKind(k)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:newKind===k?800:500,background:newKind===k?"#fff":"transparent",color:newKind===k?(k==="personal"?PERSONAL_CLR:CLR.primary):"#64748b",boxShadow:newKind===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
+      </div>
+      {newKind==="personal"?<PersonalTaskForm prefill={prefill} workers={workers} currentUser={currentUser} onCancel={()=>setShowNew(false)} onSave={t=>{setAppointments(as=>[...as,{...t,id:nextId(as)}]);setShowNew(false);}}/>:<>
       <div style={{fontSize:12,color:CLR.muted,marginBottom:12,background:CLR.primaryLight,borderRadius:8,padding:"8px 12px"}}>
         📅 נפתח מהיומן — התאריך והשעה מולאו מראש. השלם את שאר הפרטים ושגר.
       </div>
@@ -3815,7 +3885,12 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
           else if(saved) alert(`✅ נשמר תיק הדברה: ${saved.name}`);
           setShowNew(false);
         }}
-        onCancel={()=>setShowNew(false)}/>
+        onCancel={()=>setShowNew(false)}/></>}
+    </Modal>}
+    {editTask&&<Modal title={"📌 "+personalTitle(editTask)} onClose={()=>{setEditTask(null);backIfReq();}} width={520}>
+      <PersonalTaskForm task={editTask} workers={workers} currentUser={currentUser}
+        onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
+        onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
     {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:[{method:"מזומן",amount:String(_amt),date:todayStr(),details:{}}]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {detailAppt&&<ApptDetailModal appt={detailAppt} customers={customers} workers={workers} currentUser={currentUser}
@@ -4736,7 +4811,7 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
 }
 
 function NewOrderPage({customers,setCustomers,appointments,setAppointments,workers,goToCustomers}){
-  const recent=[...appointments].sort((a,b)=>(b.date||"").localeCompare(a.date||"")||b.id-a.id);
+  const recent=appointments.filter(a=>!isPersonal(a)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||b.id-a.id);
   const [wide,setWide]=useState(()=>window.innerWidth>=1150);
   React.useEffect(()=>{const f=()=>setWide(window.innerWidth>=1150);window.addEventListener("resize",f);return()=>window.removeEventListener("resize",f);},[]);
   const [slot,setSlot]=useState({});
@@ -6917,9 +6992,10 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
   // רק תורים של המדביר הזה להיום, ממוינים לפי שעה
   const myAppts = React.useMemo(()=>{
     return appointments
-      .filter(a => isMine(a) && a.date===today && a.status!=="בוטל" && !a.deleted)
+      .filter(a => !isPersonal(a) && isMine(a) && a.date===today && a.status!=="בוטל" && !a.deleted)
       .sort((a,b)=>(a.time||a.timeFrom||"00:00").localeCompare(b.time||b.timeFrom||"00:00"));
   },[appointments, currentUser.id, currentUser.name, workers, today]);
+  const myPersonal = appointments.filter(a => isPersonal(a) && isMine(a) && a.date===today && !a.deleted).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
 
   const total = myAppts.length;
   const done  = myAppts.filter(a=>a.status==="בוצע").length;
@@ -6978,6 +7054,15 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         </div>
       </div>
 
+      {/* משימות אישיות של היום */}
+      {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
+        <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
+        {myPersonal.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:"1px solid #ede9fe"}}>
+          <div style={{fontWeight:700,fontSize:13,minWidth:84,color:"#4c1d95"}}>{a.allDay?"כל היום":<span dir="ltr">{a.timeWindow||a.time}</span>}</div>
+          <div onClick={()=>onOpenAppt&&onOpenAppt(a)} style={{flex:1,minWidth:0,cursor:"pointer",textDecoration:a.status==="בוצע"?"line-through":"none",color:a.status==="בוצע"?"#94a3b8":"#0f172a",fontSize:14}}>{personalTitle(a)}{a.notes?<span style={{color:"#64748b",fontSize:12}}> · {a.notes}</span>:null}</div>
+          <button onClick={()=>updateStatus(a,a.status==="בוצע"?"ממתין":"בוצע")} style={{border:"1px solid #c4b5fd",background:a.status==="בוצע"?"#ede9fe":"#fff",color:PERSONAL_CLR,borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{a.status==="בוצע"?"↺":"✓ בוצע"}</button>
+        </div>)}
+      </div>}
       {/* רשימת תורים */}
       {myAppts.length===0 ? (
         <div style={{background:"#fff",borderRadius:16,padding:"40px 20px",textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
@@ -7944,13 +8029,14 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
             {atSlot.map(a=>{
               const prog=jobProgress(a,execLogs,finance);
               return <div key={a.id} onClick={e=>{e.stopPropagation();onApptClick(a);}}
-                style={{background:"#fff",border:`2px solid ${wColor(a.workerId)}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+                style={{background:isPersonal(a)?"#f5f3ff":"#fff",border:`2px ${isPersonal(a)?"dashed":"solid"} ${isPersonal(a)?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                   <span style={{fontWeight:700,fontSize:13,color:"#111"}}>{a.time} · {a.customerName}</span>
                   <span style={{fontSize:11,color:prog.color,fontWeight:600,background:prog.color+"18",padding:"1px 7px",borderRadius:20}}>{prog.label}</span>
                 </div>
+                {isPersonal(a)?<div style={{fontSize:12,color:"#6b7280"}}>🕐 {a.allDay?"כל היום":<span dir="ltr">{a.timeWindow}</span>}{a.notes?" · "+a.notes.slice(0,60):""}{a.workerName?" · 👷 "+a.workerName:""}</div>:<>
                 <div style={{fontSize:12,color:"#6b7280",marginBottom:1}}>🐛 {a.pestType} · 💰 ₪{a.price}</div>
-                <div style={{fontSize:11,color:"#9ca3af"}}>👷 {a.workerName} · 📍 {(a.address||"").slice(0,40)}</div>
+                <div style={{fontSize:11,color:"#9ca3af"}}>👷 {a.workerName} · 📍 {(a.address||"").slice(0,40)}</div></>}
               </div>;
             })}
             {atSlot.length===0&&<div style={{fontSize:10,color:"#f3f4f6",padding:"2px 0",width:"100%",userSelect:"none"}}>+</div>}
@@ -8245,6 +8331,7 @@ function App(){
     // תורים של לקוח שנמחק (או הועבר לסל) לא מוצגים; שחזור הלקוח מחזיר אותם
     return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); return !!c&&!c.deleted; });
   },[appointments,customers]);
+  const jobAppointments = React.useMemo(()=>activeAppointments.filter(a=>!isPersonal(a)),[activeAppointments]);
   const activeFinance = React.useMemo(()=>activeOnly(finance),[finance]);
   const activeNotes = React.useMemo(()=>activeOnly(notes),[notes]);
   const activeMaintenance = React.useMemo(()=>activeOnly(maintenance),[maintenance]);
@@ -8328,7 +8415,7 @@ function App(){
 
   return(
     <div style={{direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",minHeight:"100vh",background:"#f8fafc"}}>
-      {showSearch&&<GlobalSearch customers={customers} appointments={appointments} finance={finance} execLogs={execLogs} notes={notes} workers={activeWorkers} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
+      {showSearch&&<GlobalSearch customers={customers} appointments={jobAppointments} finance={finance} execLogs={execLogs} notes={notes} workers={activeWorkers} onNavigate={t=>setTab(t)} onClose={()=>setShowSearch(false)}/>}
 
       {/* ── SIDEBAR (desktop only) ── */}
       {!isFullTab&&!isMobile&&<aside style={{position:"fixed",top:0,right:0,bottom:0,width:230,background:"#0f172a",display:"flex",flexDirection:"column",zIndex:200,overflow:"hidden"}}>
@@ -8479,25 +8566,25 @@ function App(){
         {/* Content */}
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
-              <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
+              <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}}/>}
-              {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
+              {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
-            {tab==="dashboard"&&<Dashboard customers={customers} appointments={activeAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
+            {tab==="dashboard"&&<Dashboard customers={customers} appointments={jobAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
-            {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
+            {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={jobAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
             {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
-            {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={activeAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
-            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
-            {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
+            {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
+            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
+            {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
-            {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={activeAppointments}/>}
-            {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={activeAppointments} templates={msgTemplates}/>}
-            {tab==="regional"&&<RegionalStats appointments={activeAppointments} customers={customers} workers={activeWorkers} finance={activeFinance}/>}
-            {tab==="finance"&&<Finance finance={activeFinance} setFinance={setFinance} customers={customers} appointments={activeAppointments} workers={activeWorkers}/>}
-            {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={activeAppointments}/>}
-            {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={activeAppointments}/>}
+            {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}
+            {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={jobAppointments} templates={msgTemplates}/>}
+            {tab==="regional"&&<RegionalStats appointments={jobAppointments} customers={customers} workers={activeWorkers} finance={activeFinance}/>}
+            {tab==="finance"&&<Finance finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
+            {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
+            {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments}/>}
             {tab==="trash"&&<TrashBin items={deletedItems} currentUser={user}/>}
             </div>
 
