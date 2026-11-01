@@ -1299,6 +1299,7 @@ async function sendExecLogWA(log,phone){
     const text=["שלום "+(log.contactName||log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
+    try{ window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
   }catch(e){
     try{ if(w) w.close(); }catch(_){}
     if(confirm("יצירת ה-PDF נכשלה ("+(e.message||e)+").\nלשלוח במקום סיכום בהודעת טקסט?")) window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(execLogWAText(log)),"_blank");
@@ -1309,7 +1310,7 @@ async function shareExecLogPdf(log){
   try{
     const blob=await execLogPdfBlob(log);
     const file=new File([blob],execLogFileName(log),{type:'application/pdf'});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:"יומן ביצוע "+(log.docNum||"")}); return; }
+    if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:"יומן ביצוע "+(log.docNum||"")}); try{ window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=execLogFileName(log); document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},2000);
   }catch(e){ if(e&&e.name==="AbortError") return; alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
 }
@@ -1410,27 +1411,30 @@ function clientQuoteHtml({company,customerName,date,timeWindow,address,quote,pri
 // Compute the overall progress of a job from its flags.
 // Returns {stage, label, color, steps:[{name,done}]}
 function jobProgress(appt, execLogs, finance){
-  const log = execLogs?.find(l=>l.apptId===appt.id) || appt.executionLog || null;
+  const log = execLogs?.find(l=>l.apptId===appt.id&&!l.deleted) || appt.executionLog || null;
   const workDone = !!log || appt.status==="בוצע";
-  const invoice = finance?.find(f=>f.apptId===appt.id) || null;
-  const invoiced = !!invoice;
+  const invoice = finance?.find(f=>!f.deleted&&(f.apptId===appt.id||(log&&f.execLogId!=null&&String(f.execLogId)===String(log.id)))) || null;
+  const invoiced = !!invoice || !!(log&&log.invoiceNum);
   const paid = (log?.paymentDone===true) || (invoice && invoice.status==="שולם");
+  // יומן שנשלח ללקוח (יומנים מלפני שהתחלנו לעקוב נחשבים נשלחו)
+  const sent = !!(log && (log.sentAt || (log.date && log.date < "2026-11-01")));
   const cancelled = appt.status==="בוטל";
 
   const steps=[
     {name:"שובץ",done:true},
-    {name:"בוצעה הדברה",done:workDone},
-    {name:"הופקה חשבונית",done:invoiced},
-    {name:"התקבל תשלום",done:paid},
+    {name:"בוצע",done:workDone},
+    {name:"יומן נשלח",done:sent},
+    {name:"חשבונית",done:invoiced},
+    {name:"שולם",done:paid},
   ];
+  const next = !workDone?null:!log?"מילוי יומן ביצוע":!sent?"שליחת יומן ללקוח":!invoiced?"הפקת חשבונית":!paid?"קבלת תשלום":null;
 
-  if(cancelled) return {stage:"בוטל",label:"בוטל",color:"#9ca3af",steps};
-  if(workDone&&invoiced&&paid) return {stage:"הושלם",label:"✓ הושלם",color:"#16a34a",steps};
-  if(workDone&&invoiced) return {stage:"ממתין לתשלום",label:"ממתין לתשלום",color:"#d97706",steps};
-  if(workDone&&paid) return {stage:"בוצע, חסרה חשבונית",label:"בוצע · חסר חשבונית",color:"#d97706",steps};
-  if(workDone) return {stage:"בוצעה הדברה",label:"בוצעה הדברה",color:"#2563eb",steps};
-  if(appt.status==="בדרך") return {stage:"בדרך",label:"בדרך ללקוח",color:"#2563eb",steps};
-  return {stage:"ממתין",label:"ממתין לביצוע",color:"#854d0e",steps};
+  if(cancelled) return {stage:"בוטל",label:"בוטל",color:"#9ca3af",steps,next:null};
+  if(workDone&&sent&&invoiced&&paid) return {stage:"הושלם",label:"✓ נסגר",color:"#16a34a",steps,next:null,closed:true};
+  if(workDone) return {stage:"בוצע",label:"הבא: "+next,color:"#d97706",steps,next};
+  if(appt.status==="בדרך") return {stage:"בדרך",label:"בדרך ללקוח",color:"#2563eb",steps,next:null};
+  if(appt.status==="הגעתי") return {stage:"הגעתי",label:"בטיפול",color:"#ea580c",steps,next:null};
+  return {stage:"ממתין",label:"ממתין לביצוע",color:"#854d0e",steps,next:null};
 }
 
 // Small horizontal progress tracker
@@ -3434,7 +3438,9 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {(appt.status==="בוצע"||hasLog)&&cust.phone&&<Btn v="secondary" onClick={()=>sendReviewRequest(appt.customerName,cust.phone)} style={{background:"#fef9c3",color:"#854d0e",border:"1px solid #fde047"}}>⭐ בקשת ביקורת</Btn>}
       {!hasLog
         ? <Btn onClick={()=>{onFillLog(appt);}} style={{flex:1}}>✍️ מלא יומן ביצוע</Btn>
-        : <div style={{flex:1,textAlign:"center",color:"#16a34a",fontWeight:600,padding:"9px 0"}}>✅ יומן ביצוע מולא</div>}
+        : (()=>{ const lg=(execLogs||[]).find(l=>l.apptId===appt.id&&!l.deleted); const ph=(lg&&lg.phone)||cust.phone||"";
+            if(lg&&!prog.steps[2].done) return <Btn onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח"); sendExecLogWA(lg,ph); }} style={{flex:1,background:"#25D366",color:"#fff",border:"none"}}>📤 שלח יומן ללקוח</Btn>;
+            return <div style={{flex:1,textAlign:"center",color:"#16a34a",fontWeight:600,padding:"9px 0"}}>✅ {prog.steps[2].done?"יומן נשלח ללקוח":"יומן ביצוע מולא"}</div>; })()}
       {!hasInvoice&&currentUser.role!=="מדביר"&&<Btn v="accent" onClick={()=>onInvoice(appt)}>🧾 הפק חשבונית</Btn>}
       {hasInvoice&&invoice?.status!=="שולם"&&currentUser.role!=="מדביר"&&<Btn onClick={()=>onMarkPaid(invoice)}>💰 סמן כשולם</Btn>}
     </div>
@@ -3523,7 +3529,7 @@ function exportMonthlyReport(year,month,appointments,finance,workers){
   const aRows=mAppts.sort((a,b)=>a.date.localeCompare(b.date)).map(a=>`<tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:6px 10px;">${fmtDate(a.date)}</td><td style="padding:6px 10px;">${a.customerName}</td><td style="padding:6px 10px;">${a.pestType}</td><td style="padding:6px 10px;">${a.workerName}</td><td style="padding:6px 10px;font-weight:700;">₪${a.price}</td><td style="padding:6px 10px;">${a.status}</td></tr>`).join("");
   openPrintWindow("דוח "+names[month]+" "+year,`<div style="max-width:900px;margin:0 auto;"><div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:20px;"><div style="font-size:20px;font-weight:700;color:#1a5c3a;">🦟 ${COMPANY.name}</div><div style="text-align:left;font-size:18px;font-weight:700;color:#1a5c3a;">דוח ${names[month]} ${year}</div></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">${[["תורים",mAppts.length],["בוצעו",mAppts.filter(a=>a.status==="בוצע").length],["הכנסות","₪"+income.toLocaleString()],["רווח","₪"+(income-expense).toLocaleString()]].map(([l,v])=>`<div style="background:#f0f9f4;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:12px;color:#6b7280;">${l}</div><div style="font-size:20px;font-weight:700;color:#1a5c3a;">${v}</div></div>`).join("")}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;"><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מדבירים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;">תורים</th><th style="padding:7px;">בוצעו</th><th style="padding:7px;">שווי</th></tr></thead><tbody>${wRows}</tbody></table></div><div><h3 style="color:#1a5c3a;margin-bottom:8px;">מזיקים</h3><table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;">כמות</th></tr></thead><tbody>${pRows}</tbody></table></div></div><h3 style="color:#1a5c3a;margin-bottom:8px;">רשימת תורים</h3><table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid #e5e7eb;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:7px;text-align:right;">תאריך</th><th style="padding:7px;text-align:right;">לקוח</th><th style="padding:7px;text-align:right;">מזיק</th><th style="padding:7px;text-align:right;">מדביר</th><th style="padding:7px;text-align:right;">מחיר</th><th style="padding:7px;text-align:right;">סטטוס</th></tr></thead><tbody>${aRows}</tbody></table></div>`);
 }
-function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[]}){
+function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[],openReq=null,onOpenDone}){
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
   const [prefill,setPrefill]=useState({});
@@ -3541,6 +3547,14 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [reminderAppt,setReminderAppt]=useState(null);
   const [dupAppt,setDupAppt]=useState(null);
   const [viewCustId,setViewCustId]=useState(null);
+  // פתיחה ישירה של תור מ"המשימות שלי" — וחזרה לשם בסגירה
+  React.useEffect(()=>{
+    if(!openReq) return;
+    const a=appointments.find(x=>String(x.id)===String(openReq.id)); if(!a) return;
+    if(a.date){ setCalMode("day"); setDayDate(new Date(a.date+"T12:00:00")); }
+    setDetailAppt(a); if(openReq.mode==="log") setLogAppt(a);
+  },[openReq&&openReq.n]);
+  const backIfReq=()=>{ if(openReq&&onOpenDone) onOpenDone(); };
   const handleDuplicate=appt=>{
     const base={...appt,id:null,date:"",time:"09:00",timeWindow:"",status:"ממתין",executionLog:null};
     setDupAppt(base);
@@ -3734,11 +3748,11 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         }}
         onCancel={()=>setShowNew(false)}/>
     </Modal>}
-    {invAppt&&<InvoiceModal appt={invAppt} customers={customers} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setInvAppt(null);}}/>}
+    {invAppt&&<InvoiceModal appt={invAppt} customers={customers} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setInvAppt(null);backIfReq();}}/>}
     {detailAppt&&<ApptDetailModal appt={detailAppt} customers={customers} workers={workers} currentUser={currentUser}
       execLogs={execLogs} finance={finance}
       hasInvoice={hasInvoice(detailAppt.id)} hasLog={apptHasLog(detailAppt.id)}
-      onClose={()=>setDetailAppt(null)}
+      onClose={()=>{setDetailAppt(null);backIfReq();}}
       onFillLog={a=>{setLogAppt(a);}}
       onInvoice={a=>{setDetailAppt(null);setInvAppt(a);}}
       onMarkPaid={inv=>{setFinance(fs=>fs.map(f=>f.id===inv.id?{...f,status:"שולם"}:f));setDetailAppt(null);}}
@@ -3774,7 +3788,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
       currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}
-      onClose={()=>{setLogAppt(null);setDetailAppt(null);}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
+      onClose={()=>{setLogAppt(null);setDetailAppt(null);backIfReq();}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
   </div>;
 }
 
@@ -6451,7 +6465,7 @@ function RegionalStats({appointments,customers,workers,finance}){
   </div>;
 }
 // ─── תצוגת מדביר ─────────────────────────────────────────────────────────
-function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[]}){
+function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[], finance=[], onOpenAppt}){
   const today = todayStr();
   const [expandedId, setExpandedId] = React.useState(null);
   const [note, setNote] = React.useState({});
@@ -6473,26 +6487,6 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
 
   const updateStatus = (appt, newStatus) => {
     setAppointments(prev => prev.map(a => a.id===appt.id ? {...a, status:newStatus, updatedAt:new Date().toISOString()} : a));
-    // אם "בוצע" — שמור ביומן ביצוע אוטומטי
-    if(newStatus==="בוצע"){
-      const cust = customers.find(c=>c.id===appt.customerId||c.name===appt.customerName)||{};
-      const logNote = note[appt.id]||"";
-      setExecLogs(prev=>[...prev,{
-        id: Date.now(),
-        date: today,
-        appointmentId: appt.id,
-        workerId: currentUser.id,
-        workerName: currentUser.name,
-        customerName: appt.customerName,
-        address: appt.address,
-        pest: appt.pestType||appt.pest||"",
-        status: "בוצע",
-        notes: logNote,
-        products: [],
-        createdAt: new Date().toISOString(),
-      }]);
-      setNote(n=>({...n,[appt.id]:""}));
-    }
   };
 
   const nextStatus = s => {
@@ -6508,7 +6502,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
     "נקבע":"#2563eb","ממתין":"#64748b","בדרך":"#f59e0b","הגעתי":"#ea580c","בוצע":"#16a34a","בוטל":"#dc2626"
   }[s]||"#64748b");
   const nextBtn = s => ({
-    "נקבע":"🚗 יצאתי","ממתין":"🚗 יצאתי","בדרך":"📍 הגעתי","הגעתי":"✔️ סיימתי"
+    "נקבע":"🚗 יצאתי","ממתין":"🚗 יצאתי","בדרך":"📍 הגעתי","הגעתי":"📋 סיימתי — מילוי יומן ביצוע"
   }[s]);
 
   // שם היום בעברית
@@ -6558,15 +6552,16 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         const addr  = appt.address||"";
         const isExpanded = expandedId===appt.id;
         const isDone = appt.status==="בוצע"||appt.status==="בוטל";
+        const jobClosed = appt.status==="בוטל"||(isDone&&jobProgress(appt,execLogs,finance).closed);
         const next = nextBtn(appt.status);
         const waPhone = phone.replace(/[^0-9]/g,"").replace(/^0/,"972");
         const waMsg  = encodeURIComponent(`שלום ${appt.customerName}, אני ${currentUser.name} מהדברה 360, בדרכי אליך לטיפול ב${addr}`);
 
         return (
-          <div key={appt.id} style={{background:isDone?"#f0fdf4":"#fff",borderRadius:16,marginBottom:14,boxShadow:isDone?"0 1px 6px rgba(22,163,74,0.12)":"0 4px 20px rgba(0,0,0,0.08)",border:isDone?"1.5px solid #bbf7d0":"1.5px solid #e2e8f0",overflow:"hidden",opacity:isDone?0.75:1,transition:"all 0.2s"}}>
+          <div key={appt.id} style={{background:jobClosed?"#f0fdf4":"#fff",borderRadius:16,marginBottom:14,boxShadow:jobClosed?"0 1px 6px rgba(22,163,74,0.12)":"0 4px 20px rgba(0,0,0,0.08)",border:jobClosed?"1.5px solid #bbf7d0":isDone?"1.5px solid #fcd34d":"1.5px solid #e2e8f0",overflow:"hidden",opacity:jobClosed?0.8:1,transition:"all 0.2s"}}>
 
             {/* כותרת הכרטיס */}
-            <div style={{padding:"14px 16px",cursor:"pointer"}} onClick={()=>setExpandedId(isExpanded?null:appt.id)}>
+            <div style={{padding:"14px 16px",cursor:"pointer"}} onClick={()=>onOpenAppt?onOpenAppt(appt):setExpandedId(isExpanded?null:appt.id)} title="לחץ לפתיחת התור">
               <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
                 {/* מספר סידורי */}
                 <div style={{width:32,height:32,borderRadius:"50%",background:isDone?"#16a34a":statusClr(appt.status),display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:800,flexShrink:0,marginTop:1}}>
@@ -6583,9 +6578,24 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
                   </div>
                   {addr&&<div style={{fontSize:12,color:"#475569",marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {addr}</div>}
                 </div>
-                <div style={{fontSize:12,color:"#94a3b8",flexShrink:0}}>{isExpanded?"▲":"▼"}</div>
+                <button type="button" onClick={e=>{e.stopPropagation();setExpandedId(isExpanded?null:appt.id);}} aria-label="פרטים" style={{fontSize:12,color:"#94a3b8",flexShrink:0,background:"none",border:"none",cursor:"pointer",padding:"4px 6px"}}>{isExpanded?"▲":"▼"}</button>
               </div>
             </div>
+
+            {/* שלבי המשימה — נסגרת רק כשהכול הושלם */}
+            {(()=>{ const prog=jobProgress(appt,execLogs,finance); return <div style={{padding:"0 16px 12px"}} onClick={()=>onOpenAppt&&onOpenAppt(appt)}>
+              <div style={{display:"flex",alignItems:"center",gap:2,cursor:"pointer"}}>
+                {prog.steps.map((st,i)=><React.Fragment key={i}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0,flex:"0 0 auto"}}>
+                    <span style={{width:18,height:18,borderRadius:"50%",background:st.done?"#16a34a":"#e5e7eb",color:st.done?"#fff":"#94a3b8",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}}>{st.done?"✓":i+1}</span>
+                    <span style={{fontSize:10,color:st.done?"#15803d":"#94a3b8",fontWeight:st.done?700:500,whiteSpace:"nowrap"}}>{st.name}</span>
+                  </div>
+                  {i<prog.steps.length-1&&<div style={{flex:1,height:2,background:st.done&&prog.steps[i+1].done?"#16a34a":"#e5e7eb",marginBottom:14,minWidth:6}}/>}
+                </React.Fragment>)}
+              </div>
+              {prog.closed?<div style={{marginTop:6,fontSize:12,fontWeight:800,color:"#15803d"}}>✓ המשימה נסגרה סופית</div>
+                :prog.next?<div style={{marginTop:6,fontSize:12,fontWeight:700,color:"#b45309"}}>⬅ הבא: {prog.next} <span style={{fontWeight:500,color:"#64748b"}}>(לחץ לפתיחה)</span></div>:null}
+            </div>; })()}
 
             {/* כפתורי פעולה מהירה — תמיד גלויים */}
             {!isDone&&<div style={{padding:"0 16px 12px",display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -6604,6 +6614,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
               <div style={{padding:"0 16px 14px"}}>
                 <button onClick={()=>{
                   const ns = nextStatus(appt.status);
+                  if(ns==="בוצע"&&onOpenAppt){ onOpenAppt(appt,"log"); return; }
                   if(ns==="בוצע"&&!window.confirm(`לסמן את הטיפול אצל ${appt.customerName} כ"בוצע"?`)) return;
                   updateStatus(appt, ns);
                 }}
@@ -6620,12 +6631,6 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
               {appt.pestType&&<div style={{fontSize:12,color:"#475569",marginBottom:6}}>🦟 <strong>מזיק:</strong> {appt.pestType}</div>}
               {appt.area&&<div style={{fontSize:12,color:"#475569",marginBottom:6}}>🏠 <strong>שטח:</strong> {appt.area} מ"ר</div>}
               {appt.price&&<div style={{fontSize:12,color:"#475569",marginBottom:6}}>💰 <strong>מחיר:</strong> ₪{appt.price}</div>}
-              {/* הערה לסיום */}
-              {appt.status==="הגעתי"&&<div style={{marginTop:10}}>
-                <div style={{fontSize:12,color:"#64748b",marginBottom:5,fontWeight:600}}>הערה לדוח (לאחר סיום):</div>
-                <textarea value={note[appt.id]||""} onChange={e=>setNote(n=>({...n,[appt.id]:e.target.value}))} placeholder="פרטי טיפול, ממצאים, הערות…" rows={2}
-                  style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #e2e8f0",fontSize:12,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",direction:"rtl"}}/>
-              </div>}
             </div>}
           </div>
         );
@@ -7716,6 +7721,7 @@ function App(){
   });
   // שמור tab בכל שינוי
   React.useEffect(()=>{try{localStorage.setItem("h360_last_tab",tab)}catch(e){}},[tab]);
+  const [openReq,setOpenReq]=useState(null); // פתיחת תור ישירות מ"המשימות שלי"
   const [showSearch,setShowSearch]=useState(false);
   const [isMobile,setIsMobile]=React.useState(()=>window.innerWidth<900);
   const [drawerOpen,setDrawerOpen]=React.useState(false);
@@ -7822,6 +7828,8 @@ function App(){
     {id:4,name:"תזכורת תשלום",emoji:"💳",text:"שלום *{שם}* 👋\n\nבהתאם לבדיקתנו, ישנו חוב פתוח עבור הטיפול שביצענו.\nנשמח להסדיר את התשלום בהקדם.\n\n"+COMPANY.name+" 🦟"},
   ]);
   const [execLogs,setExecLogs]=useLS("execLogs", []);
+  // סימון "יומן נשלח ללקוח" כששולחים בוואטסאפ / משתפים PDF
+  React.useEffect(()=>{ window.__h360MarkLogSent=log=>{ if(!log) return; setExecLogs(ls=>ls.map(l=>((log.id!=null&&String(l.id)===String(log.id))||(log.docNum&&String(l.docNum)===String(log.docNum)))&&!l.sentAt?{...l,sentAt:new Date().toISOString()}:l)); }; },[]);
   // One-time: give old logs (EL-xxxxxx) simple serial numbers starting at 1001, in creation order
   React.useEffect(()=>{
     if(!execLogs.some(l=>l&&l.docNum!==undefined&&String(parseInt(l.docNum,10))!==String(l.docNum))) return;
@@ -8033,14 +8041,14 @@ function App(){
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
               <ReminderBanner appointments={activeAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
-              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
+              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={activeAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
-            {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance}/>}
+            {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
             {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} appointments={activeAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
