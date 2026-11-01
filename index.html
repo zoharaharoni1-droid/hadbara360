@@ -3669,6 +3669,43 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
   </div>;
 }
 
+// ═══ גרירה במגע (נייד): לחיצה ארוכה → גרירה → שחרור על משבצת ═══
+function showToast(msg){
+  try{ const el=document.createElement("div"); el.textContent=msg;
+    el.style.cssText="position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.25);direction:rtl;max-width:90vw;text-align:center;transition:opacity .3s";
+    document.body.appendChild(el); setTimeout(()=>{el.style.opacity="0";},2200); setTimeout(()=>el.remove(),2600);
+  }catch(e){}
+}
+function useTouchDrag(onDrop){
+  const st=React.useRef(null);
+  const [drag,setDrag]=useState(null); // {id,label,x,y,key}
+  const cleanup=()=>{ const s0=st.current; if(!s0) return; clearTimeout(s0.timer); cancelAnimationFrame(s0.raf||0);
+    document.removeEventListener("touchmove",s0.mv,{passive:false}); document.removeEventListener("touchend",s0.en); document.removeEventListener("touchcancel",s0.en);
+    document.body.style.overflow=s0.bodyOv||""; st.current=s0.active?{suppress:Date.now()}:null; setDrag(null); };
+  const targetAt=(x,y)=>{ const el=document.elementFromPoint(x,y); const t=el&&el.closest&&el.closest("[data-drop-date]"); return t?{date:t.getAttribute("data-drop-date"),time:t.getAttribute("data-drop-time")||"",key:t.getAttribute("data-drop-date")+"|"+(t.getAttribute("data-drop-time")||"")}:null; };
+  const start=(e,a,label)=>{
+    if(!e.touches||e.touches.length!==1) return;
+    const t=e.touches[0];
+    const s0={id:a.id,label,x0:t.clientX,y0:t.clientY,x:t.clientX,y:t.clientY,active:false,target:null};
+    s0.mv=ev=>{ const q=ev.touches[0]; s0.x=q.clientX; s0.y=q.clientY;
+      if(!s0.active){ if(Math.abs(s0.x-s0.x0)>10||Math.abs(s0.y-s0.y0)>10) cleanup(); return; }
+      ev.preventDefault(); s0.target=targetAt(s0.x,s0.y); setDrag({id:s0.id,label:s0.label,x:s0.x,y:s0.y,key:s0.target&&s0.target.key}); };
+    s0.en=()=>{ const was=s0.active, tg=s0.target; cleanup(); if(was&&tg) onDrop(s0.id,tg.date,tg.time); };
+    s0.timer=setTimeout(()=>{ s0.active=true; try{navigator.vibrate&&navigator.vibrate(35);}catch(_){}
+      s0.bodyOv=document.body.style.overflow; s0.target=targetAt(s0.x,s0.y);
+      setDrag({id:s0.id,label:s0.label,x:s0.x,y:s0.y,key:s0.target&&s0.target.key});
+      const scroll=()=>{ if(!s0.active) return; const H=window.innerHeight; if(s0.y<90) window.scrollBy(0,-12); else if(s0.y>H-90) window.scrollBy(0,12); s0.raf=requestAnimationFrame(scroll); }; s0.raf=requestAnimationFrame(scroll);
+    },450);
+    document.addEventListener("touchmove",s0.mv,{passive:false}); document.addEventListener("touchend",s0.en); document.addEventListener("touchcancel",s0.en);
+    st.current=s0;
+  };
+  // אחרי גרירה — לא לפתוח את הכרטיס בלחיצה שמגיעה מיד אחריה
+  const justDragged=()=>!!(st.current&&st.current.suppress&&Date.now()-st.current.suppress<600);
+  const ghost=drag&&<div style={{position:"fixed",left:drag.x,top:drag.y,transform:"translate(-50%,-120%) rotate(-2deg)",background:"#fff",border:`2px solid ${CLR.primary}`,borderRadius:12,padding:"8px 14px",fontWeight:700,fontSize:14,boxShadow:"0 12px 30px rgba(0,0,0,.3)",zIndex:99998,pointerEvents:"none",whiteSpace:"nowrap",direction:"rtl"}}>
+    ✋ {drag.label}<div style={{fontSize:11,fontWeight:500,color:drag.key?CLR.primary:"#94a3b8"}}>{drag.key?("שחרר → "+(drag.key.split("|")[1]||fmtDate(drag.key.split("|")[0]))):"גרור למשבצת"}</div></div>;
+  const cardProps=(a,label)=>({onTouchStart:e=>start(e,a,label),onContextMenu:e=>e.preventDefault(),style:{WebkitTouchCallout:"none",WebkitUserSelect:"none",userSelect:"none"}});
+  return {drag,ghost,cardProps,justDragged,start};
+}
 function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[],openReq=null,onOpenDone}){
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
@@ -3705,14 +3742,29 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   };
 
   const moveAppt=(apptId,newDate,newTime,newWorkerId)=>{
+    let moved=null;
     setAppointments(as=>as.map(a=>{
       if(a.id!==apptId) return a;
       const w=newWorkerId?workers.find(x=>x.id===newWorkerId):null;
-      const nx={...a,date:newDate,time:newTime,timeWindow:"",...(isPersonal(a)?{allDay:false,blockDay:false,timeWindow:newTime+"–"+String(Math.min(parseInt(newTime)+1,23)).padStart(2,"0")+":00"}:{}),...(w?{workerId:w.id,workerName:w.name}:{})};
-      if(nx.date===a.date&&nx.time===a.time&&nx.workerId===a.workerId) return a;
+      const toM=t=>{const [h,m]=String(t||"").split(":").map(n=>parseInt(n));return isNaN(h)?null:h*60+(m||0);};
+      const fmM=m=>String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+      let time=a.time, tw=a.timeWindow||"", extra={};
+      if(newTime){
+        const tws=String(a.timeWindow||"").split(/[–-]/).map(x=>x.trim()); const st=toM(tws[0]), en=toM(tws[1]);
+        const dur=(st!=null&&en!=null&&en>st)?en-st:(isPersonal(a)?60:120);
+        const ns=toM(newTime); time=newTime;
+        tw=isAllDay(a)&&!isPersonal(a)?fmM(ns)+"–"+fmM(ns+120):fmM(ns)+"–"+fmM(ns+dur);
+        if(isPersonal(a)) extra={allDay:false,blockDay:false};
+      }
+      const nx={...a,date:newDate,time,timeWindow:tw,...extra,...(w?{workerId:w.id,workerName:w.name}:{})};
+      if(nx.date===a.date&&nx.time===a.time&&nx.timeWindow===a.timeWindow&&nx.workerId===a.workerId) return a;
+      moved=nx;
       return apptWithHistory(a,nx,currentUser,"הזזה ביומן (גרירה)");
     }));
+    setTimeout(()=>{ if(moved) showToast("✅ הועבר ל־"+fmtDate(moved.date)+(isAllDay(moved)?" · במהלך היום":" · \u2066"+moved.timeWindow+"\u2069")); },0);
   };
+  const tdrag=useTouchDrag((id,date,time)=>moveAppt(id,date,time||null,null));
+  const openItem=a=>{ if(tdrag.justDragged()) return; isPersonal(a)?setEditTask(a):setDetailAppt(a); };
 
   const workerObj = workers.find(w=>w.id===currentUser.id) || {name:currentUser.name,license:"—"};
   const apptHasLog=id=>execLogs.some(l=>l.apptId===id);
@@ -3799,24 +3851,27 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
           <span style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:4,padding:"1px 6px",fontSize:11}}>🔴 עמוס</span>
         </span>}
       </span>}
-      {calMode==="day"&&<span>📅 לחץ על שורה ריקה להוספת תור</span>}
+      {calMode==="day"&&<span>📅 לחץ על שורה להוספת תור · ✋ לחיצה ארוכה על תור וגרירה — להזזה</span>}
+      {calMode==="week"&&narrow&&<span>✋ לחיצה ארוכה על תור וגרירה ליום אחר — להזזה</span>}
       {calMode==="month"&&<span>📅 לחץ על יום לעבור לתצוגה יומית</span>}
     </div>
     {/* Slot load map — for color coding */}
     {(()=>{ window._slotLoad={}; days.forEach(d=>{const iso=toISO(d);filtered.filter(a=>a.date===iso).forEach(a=>{const key=iso+"_"+slotHour(a.time);window._slotLoad[key]=(window._slotLoad[key]||0)+1;});}); return null; })()}
-    {calMode==="day"&&<DayView date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={a=>isPersonal(a)?setEditTask(a):setDetailAppt(a)} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setNewKind("job");setShowNew(true);}}/>}
+    {tdrag.ghost}
+    {calMode==="day"&&<DayView tdrag={tdrag} date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={openItem} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setNewKind("job");setShowNew(true);}}/>}
     {calMode==="month"&&<MonthView year={monthYear.y} month={monthYear.m} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onDayClick={d=>{setDayDate(d);setCalMode("day");}}/>}
     {calMode==="week"&&narrow&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
       {days.map((d,i)=>{const iso=toISO(d);const isTdy=iso===todayStr();
         const list=filtered.filter(a=>a.date===iso).sort((a,b)=>(isAllDay(b)-isAllDay(a))||String(a.time||"").localeCompare(String(b.time||"")));
-        return <div key={i} style={{background:"#fff",border:`1px solid ${isTdy?CLR.primary:CLR.border}`,borderRadius:12,overflow:"hidden"}}>
+        const isDrop=tdrag.drag&&tdrag.drag.key===iso+"|";
+        return <div key={i} data-drop-date={iso} style={{background:isDrop?"#f0fdf4":"#fff",border:`${isDrop?2:1}px ${isDrop?"dashed":"solid"} ${isDrop||isTdy?CLR.primary:CLR.border}`,borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isTdy?CLR.primary:CLR.surface,color:isTdy?"#fff":"#0f172a"}}>
             <div style={{fontWeight:700,fontSize:15}}>יום {DAYS_HE[d.getDay()]} · {shortD(d)}{isTdy?" · היום":""}</div>
             <button onClick={()=>{setPrefill({date:iso});setNewKind("job");setShowNew(true);}} style={{background:isTdy?"rgba(255,255,255,0.2)":"#fff",color:isTdy?"#fff":CLR.primary,border:`1px solid ${isTdy?"rgba(255,255,255,0.4)":CLR.border}`,borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ תור</button>
           </div>
           {list.length===0
             ? <div style={{padding:"10px 14px",fontSize:13,color:CLR.muted}}>אין תורים</div>
-            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);return <div key={a.id} onClick={()=>isPersonal(a)?setEditTask(a):setDetailAppt(a)} style={{display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
+            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);const _cp=tdrag.cardProps(a,a.customerName);return <div key={a.id} {..._cp} onClick={()=>openItem(a)} style={{..._cp.style,opacity:tdrag.drag&&tdrag.drag.id===a.id?0.35:1,display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
                 <div style={{fontWeight:800,fontSize:isAllDay(a)?11:15,color:isAllDay(a)?"#92400e":"#0f172a",minWidth:48,textAlign:"center"}}>{isAllDay(a)?"☀️ במהלך היום":(a.time||"—")}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
@@ -3852,7 +3907,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
             return(
             <td key={i}
               style={{padding:2,verticalAlign:"top",background:(()=>{
-                if(isDropHere) return "#bbf7d0";
+                if(isDropHere||(tdrag.drag&&tdrag.drag.key===iso+"|"+slot)) return "#bbf7d0";
                 if(isTdy) return "#f0f9f4";
                 if(draggedId){
                   const load=(window._slotLoad&&window._slotLoad[iso+"_"+slotHour(slot)])||0;
@@ -3862,6 +3917,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 }
                 return "transparent";
               })(),borderLeft:"1px solid "+CLR.border,cursor:"pointer",minHeight:30,outline:isDropHere?"2px dashed "+CLR.primary:"none"}}
+              data-drop-date={iso} data-drop-time={slot}
               onClick={()=>{setPrefill({date:iso,time:slot});setNewKind("job");setShowNew(true);}}
               onDragOver={e=>{e.preventDefault();setDropTarget({iso,slot});}}
               onDragLeave={()=>setDropTarget(null)}
@@ -3872,8 +3928,9 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
                 draggable
                 onDragStart={e=>{setDraggedId(a.id);e.dataTransfer.effectAllowed="move";}}
                 onDragEnd={()=>{setDraggedId(null);setDropTarget(null);}}
-                onClick={e=>{e.stopPropagation();isPersonal(a)?setEditTask(a):setDetailAppt(a);}}
-                style={{background:prog.color+"1a",borderRadius:5,padding:"3px 5px",marginBottom:2,borderRight:`3px solid ${wColor(a.workerId)}`,fontSize:10,cursor:"grab",opacity:draggedId===a.id?0.4:1}}
+                onTouchStart={e=>tdrag.start(e,a,a.customerName)}
+                onClick={e=>{e.stopPropagation();openItem(a);}}
+                style={{WebkitTouchCallout:"none",userSelect:"none",background:prog.color+"1a",borderRadius:5,padding:"3px 5px",marginBottom:2,borderRight:`3px solid ${wColor(a.workerId)}`,fontSize:10,cursor:"grab",opacity:draggedId===a.id?0.4:1}}
                 title="גרור כדי לשבץ מחדש · לחץ לפרטים">
                 <div style={{fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>⠿ {a.customerName}</div>
                 <div style={{color:CLR.muted,fontSize:9}}>{a.pestType}</div>
@@ -4377,9 +4434,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     <FieldCard title="פרטי הנכס">
       <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>סוג הנכס</label>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-        {PROPERTY_TYPES.map(t=>{ const on=f.propertyType===t; return <button key={t} type="button" onClick={()=>set("propertyType",t)}
-          style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{t}</button>; })}
+        {[...PROPERTY_TYPES,"אחר"].map(t=>{ const isOther=t==="אחר"; const otherOn=!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)||!!f.propOther; const on=isOther?otherOn:(f.propertyType===t&&!f.propOther); return <button key={t} type="button" onClick={()=>{ if(isOther){ setF(x=>({...x,propOther:true,propertyType:PROPERTY_TYPES.includes(x.propertyType)?"":x.propertyType})); } else setF(x=>({...x,propOther:false,propertyType:t})); }}
+          style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{isOther?"✏️ אחר":t}</button>; })}
       </div>
+      {(f.propOther||(!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)))&&<Inp label="איזה נכס? (כתוב חופשי)" value={f.propertyType} onChange={v=>setF(x=>({...x,propOther:true,propertyType:v}))} placeholder="למשל: מבנה תעשייה, בית כנסת, חניון, מספרה..."/>}
       {isShared&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
         <Inp label="שם הלקוח במסמכים" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/>
         <div style={{fontSize:12,color:"#1e40af",marginTop:-6}}>ביומן הביצוע ובחשבונית יופיע "{docNameShown||"ועד הבית"}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} יירשם כאיש קשר.</div>
@@ -4514,6 +4572,15 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         </label>
         {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>}
         {!f.allDay&&<Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>}
+        {!f.allDay&&<div style={{gridColumn:"1 / -1",marginTop:-4}}>
+          <button type="button" onClick={()=>set("showRanges",!f.showRanges)} style={{background:f.showRanges?CLR.primary:"#fff",color:f.showRanges?"#fff":CLR.primary,border:`1px solid ${CLR.primary}`,borderRadius:20,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{f.showRanges?"✕ סגור":"+ טווחים מוכנים"}</button>
+          {f.showRanges&&<div style={{border:`1px solid ${CLR.border}`,borderRadius:10,padding:10,marginTop:8,background:"#f8fafc"}}>
+            {[[1,"שעה"],[2,"שעתיים"]].map(([len,lbl])=><div key={len} style={{marginBottom:6}}>
+              <div style={{fontSize:12,fontWeight:700,color:CLR.muted,marginBottom:4}}>טווח של {lbl}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>{Array.from({length:13-len},(_,i)=>i+7).map(h=>{const a=String(h).padStart(2,"0")+":00",b=String(h+len).padStart(2,"0")+":00";const on=f.timeFrom===a&&f.timeTo===b;return <button key={a} type="button" onClick={()=>setF(x=>({...x,timeFrom:a,timeTo:b,showRanges:false}))} style={{direction:"ltr",background:on?CLR.primary:"#fff",color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:8,padding:"5px 8px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:on?700:500}}>{a.slice(0,2).replace(/^0/,"")}–{b.slice(0,2).replace(/^0/,"")}</button>;})}</div>
+            </div>)}
+          </div>}
+        </div>}
       </div>
       {f.prefDate&&<div style={{fontSize:12,color:CLR.primary}}>🕐 {f.allDay?<>הגעה: {fmtDate(f.prefDate)} · במהלך היום</>:<>חלון הגעה: {fmtDate(f.prefDate)} בין {f.timeFrom} ל-{f.timeTo}</>}</div>}
       {f.prefDate&&!f.allDay&&<div style={{fontSize:11,color:CLR.muted,marginTop:4}}>💡 אפשר לשבץ כמה עבודות באותו חלון שעות — היומן לא חוסם חפיפות.</div>}
@@ -4881,11 +4948,11 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
   </div>;
 }
 
-function NewFinanceModal({customers,onClose,onSave}){
-  const [f,setF]=useState({type:"הכנסה",category:"חשבונית",customer:"",customerId:null,amount:"",date:todayStr(),status:"שולם",invoiceNum:""});
+function NewFinanceModal({customers,onClose,onSave,initialType="הכנסה"}){
+  const [f,setF]=useState({type:initialType,category:initialType==="הוצאה"?"חומרי הדברה":"חשבונית",customer:"",customerId:null,amount:"",date:todayStr(),status:"שולם",invoiceNum:""});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   return <Modal title="💰 רשומה כספית" onClose={onClose} width={480}>
-    <G2><Sel label="סוג" value={f.type} onChange={v=>set("type",v)} options={["הכנסה","הוצאה"]}/><Sel label="קטגוריה" value={f.category} onChange={v=>set("category",v)} options={f.type==="הכנסה"?["חשבונית","קבלה","הצעת מחיר"]:["חומרי הדברה","דלק","ציוד","שכר","אחר"]}/>{f.type==="הכנסה"&&<div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>לקוח</label><select value={f.customerId||""} onChange={e=>{const c=customers.find(x=>x.id===parseInt(e.target.value));set("customerId",c?.id||null);set("customer",c?.name||"");}} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:14,boxSizing:"border-box"}}><option value="">-- בחר --</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}<Inp label="סכום (₪)" type="number" value={f.amount} onChange={v=>set("amount",v)}/><Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/><Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["שולם","חוב","ממתין"]}/>{f.type==="הכנסה"&&<Inp label="מס׳ חשבונית" value={f.invoiceNum} onChange={v=>set("invoiceNum",v)} placeholder="INV-XXX"/>}</G2>
+    <G2><Sel label="סוג" value={f.type} onChange={v=>setF(x=>({...x,type:v,category:v==="הוצאה"?"חומרי הדברה":"חשבונית"}))} options={["הכנסה","הוצאה"]}/><Sel label="קטגוריה" value={f.category} onChange={v=>set("category",v)} options={f.type==="הכנסה"?["חשבונית","קבלה","הצעת מחיר"]:["חומרי הדברה","דלק","ציוד","שכר","אחר"]}/>{f.type==="הכנסה"&&<div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>לקוח</label><select value={f.customerId||""} onChange={e=>{const c=customers.find(x=>x.id===parseInt(e.target.value));set("customerId",c?.id||null);set("customer",c?.name||"");}} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:14,boxSizing:"border-box"}}><option value="">-- בחר --</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}<Inp label="סכום (₪)" type="number" value={f.amount} onChange={v=>set("amount",v)}/><Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/><Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["שולם","חוב","ממתין"]}/>{f.type==="הכנסה"&&<Inp label="מס׳ חשבונית" value={f.invoiceNum} onChange={v=>set("invoiceNum",v)} placeholder="INV-XXX"/>}</G2>
     <div style={{display:"flex",gap:10}}><Btn full onClick={()=>{if(!f.amount)return alert("סכום חובה");onSave({...f,amount:parseInt(f.amount)});onClose();}}>✅ שמור</Btn><Btn v="ghost" full onClick={onClose}>ביטול</Btn></div>
   </Modal>;
 }
@@ -5198,6 +5265,20 @@ const TEMPLATE_VARS = ["שם","תאריך","שעה","מזיק","כתובת","מ�
 // ════════════════════════════════════════════════════
 // SCHEDULED MESSAGES
 // ════════════════════════════════════════════════════
+function CustomerQuickPick({customers=[],onPick}){
+  const [q,setQ]=useState(""); const [open,setOpen]=useState(false);
+  const qq=q.trim(); const digits=qq.replace(/\D/g,"");
+  const res=qq.length<2?[]:customers.filter(c=>!c.deleted&&(String(c.name||"").includes(qq)||(digits.length>=3&&String(c.phone||"").replace(/\D/g,"").includes(digits))||String(c.address||"").includes(qq))).slice(0,6);
+  return <div style={{position:"relative",marginBottom:12}}>
+    <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500}}>🔎 בחר מלקוח קיים (או מלא ידנית למטה)</label>
+    <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} placeholder="הקלד שם, טלפון או כתובת..." style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${CLR.primary}`,fontSize:14,boxSizing:"border-box",background:"#fff",fontFamily:"inherit"}}/>
+    {open&&res.length>0&&<div style={{position:"absolute",top:"100%",insetInline:0,background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:20,marginTop:4,overflow:"hidden"}}>
+      {res.map(c=><div key={c.id} onClick={()=>{onPick(c);setQ(c.name);setOpen(false);}} style={{padding:"9px 12px",cursor:"pointer",borderBottom:`1px solid ${CLR.border}`,fontSize:14}}>
+        <b>{c.name}</b> <span style={{color:CLR.muted,fontSize:12}}>· {c.phone||"אין טלפון"}{c.address?" · "+c.address:""}</span></div>)}
+    </div>}
+    {open&&qq.length>=2&&res.length===0&&<div style={{fontSize:12,color:CLR.muted,marginTop:4}}>לא נמצא — אפשר למלא שם וטלפון ידנית.</div>}
+  </div>;
+}
 function ScheduledMsgs({scheduled,setScheduled,customers,appointments,templates}){
   const [showNew,setShowNew]=useState(false);
   const [newMsg,setNewMsg]=useState({name:"",phone:"",text:"",sendDate:"",sendTime:"09:00",apptId:"",templateId:""});
@@ -5266,6 +5347,7 @@ function ScheduledMsgs({scheduled,setScheduled,customers,appointments,templates}
     {/* New message form */}
     {showNew&&<div style={{background:CLR.white,border:"2px solid "+CLR.primary,borderRadius:14,padding:"20px 22px",marginBottom:16}}>
       <div style={{fontWeight:700,color:CLR.primary,fontSize:15,marginBottom:14}}>+ הודעה חדשה</div>
+      <CustomerQuickPick customers={customers} onPick={c=>setNewMsg(prev=>({...prev,name:c.name,phone:c.phone||"",customerId:c.id}))}/>
       <G2>
         <Inp label="שם הנמען" value={newMsg.name} onChange={v=>setN("name",v)} placeholder="שם הלקוח"/>
         <Inp label="טלפון" value={newMsg.phone} onChange={v=>setN("phone",v)} placeholder="05X-XXXXXXX"/>
@@ -6551,9 +6633,9 @@ function Projects({projects,setProjects,workers,appointments,setAppointments,cus
   </div>;
 }
 
-function Finance({finance,setFinance,customers,appointments=[],workers=[]}){
+function Finance({finance,setFinance,customers,appointments=[],workers=[],initialType=""}){
   const [showNew,setShowNew]=useState(false);
-  const [typeF,setTypeF]=useState("הכל");
+  const [typeF,setTypeF]=useState(initialType||"הכל");
   const income=finance.filter(f=>f.type==="הכנסה").reduce((s,f)=>s+f.amount,0);
   const expense=finance.filter(f=>f.type==="הוצאה").reduce((s,f)=>s+f.amount,0);
   const debt=finance.filter(f=>f.status==="חוב").reduce((s,f)=>s+f.amount,0);
@@ -6568,7 +6650,7 @@ function Finance({finance,setFinance,customers,appointments=[],workers=[]}){
       <div style={{flex:1}}/>
       <Btn sm v="secondary" onClick={()=>exportFinance(finance)}>📥 ייצא Excel</Btn>
       <Btn sm v="ghost" onClick={()=>{const n=new Date();exportMonthlyReport(n.getFullYear(),n.getMonth(),appointments,finance,workers);}}>📄 דוח חודשי</Btn>
-      <Btn sm onClick={()=>setShowNew(true)}>+ רשומה חדשה</Btn>
+      <Btn sm onClick={()=>setShowNew(true)}>{typeF==="הוצאה"?"+ הוצאה חדשה":"+ רשומה חדשה"}</Btn>
     </div>
     <div style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -6586,7 +6668,7 @@ function Finance({finance,setFinance,customers,appointments=[],workers=[]}){
         </tr>)}</tbody>
       </table>
     </div>
-    {showNew&&<NewFinanceModal customers={customers} onClose={()=>setShowNew(false)} onSave={r=>setFinance(fs=>[...fs,{...r,id:nextId(fs)}])}/>}
+    {showNew&&<NewFinanceModal customers={customers} initialType={typeF==="הוצאה"?"הוצאה":"הכנסה"} onClose={()=>setShowNew(false)} onSave={r=>setFinance(fs=>[...fs,{...r,id:nextId(fs)}])}/>}
   </div>;
 }
 
@@ -8018,7 +8100,9 @@ function GlobalSearch({customers, appointments, finance, execLogs, notes, worker
 // ═══════════════════════════════════════════════════════
 // DAY VIEW
 // ═══════════════════════════════════════════════════════
-function DayView({date, appointments, workers, finance, execLogs, currentUser, onApptClick, onNewAppt}){
+function DayView({date, appointments, workers, finance, execLogs, currentUser, onApptClick, onNewAppt, tdrag}){
+  const cp=(a)=>tdrag?tdrag.cardProps(a,a.customerName):{};
+  const dkey=tdrag&&tdrag.drag&&tdrag.drag.key;
   const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const iso = toISO(date);
   const HALF_SLOTS = ["07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30",
@@ -8045,7 +8129,7 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
     {allDayList.length>0&&<div style={{border:"1px solid #fcd34d",background:"#fffbeb",borderRadius:10,padding:"8px 10px",marginBottom:10}}>
       <div style={{fontWeight:800,fontSize:13,color:"#92400e",marginBottom:6}}>☀️ במהלך היום <span style={{fontWeight:400,color:"#a16207",fontSize:12}}>· בלי שעה קבועה, לא חוסם</span></div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {allDayList.map(a=>{const pr=jobProgress(a,execLogs,finance);const pers=isPersonal(a);return <div key={a.id} onClick={()=>onApptClick(a)} style={{cursor:"pointer",background:pers?"#f5f3ff":"#fff",border:`2px ${pers?"dashed":"solid"} ${pers?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"6px 10px",flex:"1 1 200px",maxWidth:380,textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
+        {allDayList.map(a=>{const pr=jobProgress(a,execLogs,finance);const pers=isPersonal(a);const _cp=cp(a);return <div key={a.id} {..._cp} onClick={()=>onApptClick(a)} style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,cursor:"pointer",background:pers?"#f5f3ff":"#fff",border:`2px ${pers?"dashed":"solid"} ${pers?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"6px 10px",flex:"1 1 200px",maxWidth:380,textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:6,alignItems:"center"}}><span style={{fontWeight:700,fontSize:13}}>{a.customerName}</span><span style={{fontSize:11,color:pr.color,fontWeight:600}}>{pr.label}</span></div>
           <div style={{fontSize:11,color:"#6b7280"}}>{pers?(a.notes||""):(a.pestType+" · 📍 "+(a.address||"").slice(0,40))}{a.workerName?" · 👷 "+a.workerName:""}</div>
         </div>;})}
@@ -8061,14 +8145,16 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
         const slotOf = t => { let h=slotHour(t), m=slotMin(t)>=30?30:0; if(isNaN(h)) h=9; if(h<7){h=7;m=0;} if(h>19||(h===19&&m>0)){h=19;m=0;} return String(h).padStart(2,"0")+":"+(m?"30":"00"); };
         const atSlot = dayAppts.filter(a=>slotOf(a.time)===slot);
         const isHour = slot.endsWith(":00");
-        return <div key={slot} style={{display:"flex",minHeight:atSlot.length?72:36,borderBottom:"1px solid #f3f4f6",background:atSlot.length?"#fafffe":"#fff"}}>
+        const isDrop=dkey===iso+"|"+slot;
+        return <div key={slot} data-drop-date={iso} data-drop-time={slot} style={{display:"flex",minHeight:atSlot.length?72:36,borderBottom:"1px solid #f3f4f6",background:isDrop?"#bbf7d0":atSlot.length?"#fafffe":"#fff",outline:isDrop?"2px dashed "+CLR.primary:"none",outlineOffset:-2}}>
           <div style={{width:54,flexShrink:0,padding:"6px 8px 0",fontSize:isHour?12:10,color:isHour?"#6b7280":"#d1d5db",fontWeight:isHour?600:400,borderLeft:"2px solid #e5e7eb",textAlign:"right"}}>{isHour?slot:""}</div>
           <div style={{flex:1,padding:"4px 8px",display:"flex",flexWrap:"wrap",gap:6,alignItems:"flex-start",cursor:"pointer"}}
             onClick={()=>onNewAppt(iso,slot)} title="לחץ להוספת תור/משימה בשעה הזו">
             {atSlot.map(a=>{
               const prog=jobProgress(a,execLogs,finance);
-              return <div key={a.id} onClick={e=>{e.stopPropagation();onApptClick(a);}}
-                style={{background:isPersonal(a)?"#f5f3ff":"#fff",border:`2px ${isPersonal(a)?"dashed":"solid"} ${isPersonal(a)?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+              const _cp=cp(a);
+              return <div key={a.id} {..._cp} onClick={e=>{e.stopPropagation();onApptClick(a);}}
+                style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,background:isPersonal(a)?"#f5f3ff":"#fff",border:`2px ${isPersonal(a)?"dashed":"solid"} ${isPersonal(a)?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                   <span style={{fontWeight:700,fontSize:13,color:"#111"}}>{a.time} · {a.customerName}</span>
                   <span style={{fontSize:11,color:prog.color,fontWeight:600,background:prog.color+"18",padding:"1px 7px",borderRadius:20}}>{prog.label}</span>
@@ -8449,7 +8535,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -8472,7 +8558,7 @@ function App(){
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
             {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
-            {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
+            {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
           ].map(group=>(
@@ -8571,7 +8657,7 @@ function App(){
               {[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
-                {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"finance",icon:"💰",name:"כספים"}]},
+                {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
               ].map(group=>(
@@ -8623,6 +8709,7 @@ function App(){
             {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={jobAppointments} templates={msgTemplates}/>}
             {tab==="regional"&&<RegionalStats appointments={jobAppointments} customers={customers} workers={activeWorkers} finance={activeFinance}/>}
             {tab==="finance"&&<Finance finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
+            {tab==="expenses"&&<Finance key="expenses" initialType="הוצאה" finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
             {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments}/>}
             {tab==="trash"&&<TrashBin items={deletedItems} currentUser={user}/>}
