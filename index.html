@@ -150,7 +150,7 @@ const { useState } = React;
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
-const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני — הדברה 360", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "הקשת 31, תל אביב-יפו", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני" };
+const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "הקשת 31, תל אביב-יפו", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני" };
 // כתובת לניווט (Waze) — בלי דירה/קומה/כניסה, שמבלבלים את הניווט
 function navAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>x&&!/^(דירה|קומה|כניסה|דירת)\s/.test(x)).join(", "); }
 // "קומה 3 · דירה 1 · כניסה א׳"
@@ -5403,16 +5403,25 @@ const DOC_TYPES = {
   "קבלה":            {short:"קבלה", accounting:true, invoice:false, receipt:true,  color:"#0891b2", help:"אישור על תשלום שהתקבל (למשל אחרי חשבונית מס)."},
   "חשבונית זיכוי":   {short:"זיכוי", accounting:true, invoice:true,  receipt:false, color:"#dc2626", help:"ביטול או הקטנה של חשבונית מס. חשבונית לא מוחקים — מזכים."},
 };
-const PAY_METHODS_DOC = ["מזומן","העברה בנקאית","ביט","פייבוקס","צ׳ק","כרטיס אשראי","אחר"];
+const PAY_METHODS_DOC = ["מזומן","ביט","פייבוקס","העברה בנקאית","צ׳ק","כרטיס אשראי","ניכוי במקור","אחר"];
+const PAY_ICON = {"מזומן":"💵","ביט":"🅑","פייבוקס":"🅿️","העברה בנקאית":"🏦","צ׳ק":"🧾","כרטיס אשראי":"💳","ניכוי במקור":"📉","אחר":"…"};
+const DOC_ITEM_DEFAULTS = ["הדברת תיקן אמריקאי (ג׳וקים) – ריסוס פנלים וניקוזים","הדברת תיקן גרמני – ג׳לים ומלכודות","הדברת נמלים","הדברת פרעושים","לכידת מכרסמים","הסרת קן צרעות","הדברת פשפש מיטה","הדברת בניין – חדר מדרגות, חצר וביובים","אחזקה חודשית – הדברה משולבת","ביקור חוזר / טיפול המשך"];
 const PAY_TERMS = ["מיידי","שוטף","שוטף + 30","שוטף + 45","שוטף + 60","שוטף + 90"];
 const docTypeOf = f => f.docType || (f.category==="חשבונית" ? "חשבונית מס/קבלה" : "");
 const isDocRec = f => f && !f.deleted && f.category==="חשבונית";
 const money = n => "₪"+(Math.round((Number(n)||0)*100)/100).toLocaleString("he-IL",{minimumFractionDigits:0,maximumFractionDigits:2});
 const r2 = n => Math.round((Number(n)||0)*100)/100;
-function docTotals(lines, inclVat){
-  let before=0;
-  (lines||[]).forEach(l=>{ const q=parseFloat(l.qty)||0, p=parseFloat(l.price)||0; before+= inclVat? q*p/(1+VAT_RATE/100) : q*p; });
-  before=r2(before); const vat=r2(before*VAT_RATE/100); return {before,vat,total:r2(before+vat)};
+function docTotals(lines, inclVat, discount, roundTotal){
+  let gross=0; // סכום השורות כפי שהוקלד
+  (lines||[]).forEach(l=>{ gross+=(parseFloat(l.qty)||0)*(parseFloat(l.price)||0); });
+  const d=discount||{}; const dv=parseFloat(d.value)||0;
+  const disc=r2(d.type==="%"?gross*dv/100:dv);
+  const net=Math.max(0,gross-disc);
+  let before=inclVat?net/(1+VAT_RATE/100):net;
+  let total=before*(1+VAT_RATE/100);
+  if(roundTotal){ total=Math.round(total); before=total/(1+VAT_RATE/100); }
+  before=r2(before); total=r2(total);
+  return {gross:r2(gross),disc,before,vat:r2(total-before),total};
 }
 function nextDocNum(finance, type){
   const nums=(finance||[]).filter(f=>isDocRec(f)&&docTypeOf(f)===type).map(f=>parseInt(f.docSeq)||0);
@@ -5469,6 +5478,7 @@ function docHtml(doc){
       <thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:8px 10px;text-align:right;">תיאור</th><th style="padding:8px 10px;">כמות</th><th style="padding:8px 10px;">יחידה</th><th style="padding:8px 10px;text-align:left;">מחיר ליח׳ (לפני מע״מ)</th><th style="padding:8px 10px;text-align:left;">סה״כ</th></tr></thead>
       <tbody>${lines}</tbody></table>
     <table style="width:280px;margin-right:auto;border-collapse:collapse;font-size:14px;margin-bottom:14px;">
+      ${doc.disc?`<tr><td style="padding:5px 10px;">הנחה${doc.discount&&doc.discount.type==="%"?" ("+doc.discount.value+"%)":""}</td><td style="padding:5px 10px;text-align:left;color:#b91c1c;">-${money(doc.inclVat?doc.disc/(1+VAT_RATE/100):doc.disc)}</td></tr>`:""}
       <tr><td style="padding:5px 10px;">סה״כ לפני מע״מ</td><td style="padding:5px 10px;text-align:left;">${money(doc.before)}</td></tr>
       <tr><td style="padding:5px 10px;">מע״מ ${VAT_RATE}%</td><td style="padding:5px 10px;text-align:left;">${money(doc.vat)}</td></tr>
       <tr style="background:#e8f5ee;font-weight:800;"><td style="padding:8px 10px;color:#1a5c3a;">${doc.docType==="חשבונית זיכוי"?"סה״כ לזיכוי":"סה״כ לתשלום"}</td><td style="padding:8px 10px;text-align:left;color:#1a5c3a;font-size:17px;">${money(doc.total)}</td></tr>
@@ -5479,6 +5489,8 @@ function docHtml(doc){
       <tbody>${pays.map((p,i)=>`<tr style="background:${i%2?"#fff":"#f0fdfa"}"><td style="padding:7px 10px;">${p.method}</td><td style="padding:7px 10px;">${payDetailsText(p)||"—"}</td><td style="padding:7px 10px;text-align:center;">${fmtDate(p.date||doc.date)}</td><td style="padding:7px 10px;text-align:left;font-weight:600;">${money(p.amount)}</td></tr>`).join("")}
       <tr style="background:#ccfbf1;font-weight:800;"><td colspan="3" style="padding:8px 10px;">סה״כ התקבל</td><td style="padding:8px 10px;text-align:left;">${money(pays.reduce((s,p)=>s+(parseFloat(p.amount)||0),0))}</td></tr></tbody></table>`:""}
     ${doc.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;white-space:pre-wrap;"><b>הערות:</b> ${doc.notes}</div>`:""}
+    ${!T.receipt&&doc.docType!=="חשבונית זיכוי"?`<div style="font-size:12px;color:#444;margin-bottom:10px;">צ׳קים והעברות לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`:""}
+    ${doc.footer?`<div style="font-size:12px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
       <div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>
       <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.draft?"טיוטה — הופקה במערכת הדברה 360 לבדיקה בלבד. המסמך הרשמי יופק בתוכנה רשומה.":"הופק במערכת "+COMPANY.name}</div>
@@ -5494,40 +5506,56 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const T=DOC_TYPES[type];
   const [custId,setCustId]=useState(P.custId!=null?String(P.custId):"");
   const cust=customers.find(c=>String(c.id)===String(custId))||null;
-  const [custName,setCustName]=useState(P.custName||"");
-  const [taxId,setTaxId]=useState(P.taxId||"");
+  const [custQ,setCustQ]=useState(P.custName||"");
+  const [showCustList,setShowCustList]=useState(false);
+  const [cx,setCx]=useState({name:P.custName||"",taxId:P.taxId||"",address:"",phone:"",email:"",contactName:""});
+  const [showCustMore,setShowCustMore]=useState(false);
   const [date,setDate]=useState(P.date||todayStr());
   const [inclVat,setInclVat]=useState(P.inclVat!=null?P.inclVat:true);
   const [lines,setLines]=useState(P.lines&&P.lines.length?P.lines:[{desc:"",qty:"1",unit:"יח׳",price:""}]);
-  const [payments,setPayments]=useState(P.payments&&P.payments.length?P.payments:[{method:"מזומן",amount:"",date:todayStr(),details:{}}]);
+  const [discount,setDiscount]=useState(P.discount||{type:"₪",value:""});
+  const [showDisc,setShowDisc]=useState(!!(P.discount&&P.discount.value));
+  const [roundTotal,setRoundTotal]=useState(!!P.roundTotal);
+  const [payments,setPayments]=useState(P.payments&&P.payments.length?P.payments:[]);
   const [payTerms,setPayTerms]=useState(P.payTerms||"מיידי");
   const [dueDate,setDueDate]=useState(P.dueDate||"");
   const [notes,setNotes]=useState(P.notes||"");
+  const [footer,setFooter]=useState(P.footer||"");
+  const [privateNote,setPrivateNote]=useState(P.privateNote||"");
   const [allocationNum,setAllocationNum]=useState(P.allocationNum||"");
   const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
-  React.useEffect(()=>{ if(cust){ setCustName(cust.name||""); if(!P.taxId) setTaxId(cust.taxId||""); } },[custId]);
-  const tot=docTotals(lines,inclVat);
+  const [itemPick,setItemPick]=useState(null); // אינדקס שורה שפתוח בה בורר פריטים
+  React.useEffect(()=>{ if(cust){ setCustQ(cust.name||""); setCx(x=>({...x,name:cust.name||"",taxId:P.taxId||cust.taxId||"",address:cust.address||"",phone:cust.phone||"",email:cust.email||"",contactName:cust.contactName||""})); } },[custId]);
+  const tot=docTotals(lines,inclVat,showDisc?discount:null,roundTotal);
+  const receiptOnly=type==="קבלה";
+  const payTarget=receiptOnly?null:tot.total;
   const paidSum=r2(payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0));
-  const alloc=needsAllocation(type,tot.before,taxId);
+  const remaining=payTarget!=null?r2(payTarget-paidSum):null;
+  const alloc=needsAllocation(type,tot.before,cx.taxId);
+  // תאריך: לא לפני המסמך האחרון מאותו סוג (מספור רציף)
+  const lastDate=(finance||[]).filter(f=>isDocRec(f)&&docTypeOf(f)===type&&f.date).map(f=>f.date).sort().pop()||"";
   const setLine=(i,k,v)=>setLines(ls=>ls.map((l,j)=>j===i?{...l,[k]:v}:l));
   const setPay=(i,k,v)=>setPayments(ps=>ps.map((p,j)=>j===i?{...p,[k]:v}:p));
   const setPayD=(i,k,v)=>setPayments(ps=>ps.map((p,j)=>j===i?{...p,details:{...(p.details||{}),[k]:v}}:p));
+  const addPay=m=>setPayments(ps=>[...ps,{method:m,amount:String(remaining!=null&&remaining>0?remaining:""),date,details:{}}]);
   const custAppts=appointments.filter(a=>String(a.customerId)===String(custId)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  // קבלה לבד — הסכום נקבע מהתקבולים
-  const receiptOnly=type==="קבלה";
-  React.useEffect(()=>{ if(T.receipt&&!receiptOnly&&payments.length===1&&!payments[0].amount&&tot.total) setPay(0,"amount",String(tot.total)); },[tot.total,type]);
+  const custMatches=custQ.trim().length>=1?customers.filter(c=>!c.deleted&&(String(c.name||"").includes(custQ.trim())||String(c.phone||"").replace(/\D/g,"").includes(custQ.replace(/\D/g,"")||"~"))).slice(0,8):[];
+  // פריטים: ברירת מחדל + שורות ממסמכים קודמים (עם המחיר האחרון)
+  const pastItems=React.useMemo(()=>{ const m={}; (finance||[]).filter(isDocRec).sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(f=>(f.lines||[]).forEach(l=>{ if(l.desc) m[l.desc]={desc:l.desc,price:l.price,unit:l.unit,incl:f.inclVat}; })); return Object.values(m).reverse(); },[finance]);
+  const items=[...pastItems,...DOC_ITEM_DEFAULTS.filter(d=>!pastItems.some(p=>p.desc===d)).map(d=>({desc:d}))];
   const build=()=>{
-    const c=cust||{};
     const before=receiptOnly?r2(paidSum/(1+VAT_RATE/100)):tot.before;
     const vat=receiptOnly?r2(paidSum-before):tot.vat;
     const total=receiptOnly?paidSum:tot.total;
     const a=appointments.find(x=>String(x.id)===String(apptId));
+    const seq=P.docSeq||nextDocNum(finance,type);
     return {
       category:"חשבונית", type:(type==="חשבונית מס"||type==="חשבונית מס/קבלה"||type==="חשבונית זיכוי")?"הכנסה":type==="קבלה"?"קבלה":"דרישת תשלום", docType:type, draft:true,
-      docSeq:P.docSeq||nextDocNum(finance,type), invoiceNum:(T.short)+"-"+String(P.docSeq||nextDocNum(finance,type)).padStart(4,"0"),
-      date, customer:custName||c.name||"", customerId:c.id??null,
-      cust:{name:custName||c.name||"",taxId:taxId||"",contactName:c.contactName||"",address:c.address||"",phone:c.phone||"",email:c.email||""},
+      docSeq:seq, invoiceNum:(T.short)+"-"+String(seq).padStart(4,"0"),
+      date, customer:cx.name||"", customerId:cust?cust.id:null,
+      cust:{...cx},
       lines:receiptOnly?[]:lines.filter(l=>l.desc||parseFloat(l.price)), inclVat,
+      discount:showDisc&&parseFloat(discount.value)?discount:null, disc:showDisc?tot.disc:0, roundTotal,
       before, vat, total, amount:type==="חשבונית זיכוי"?-before:before,
       payments:T.receipt?payments.filter(p=>parseFloat(p.amount)):[],
       payMethod:T.receipt?(payments.find(p=>parseFloat(p.amount))||{}).method||"":"",
@@ -5536,95 +5564,135 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"",
       refDocId:P.refDocId||null, refText:P.refText||"",
-      phone:c.phone||"", address:(a&&a.address)||c.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
-      notes, createdAt:new Date().toISOString(),
+      phone:cx.phone||"", address:(a&&a.address)||cx.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
+      notes, footer, privateNote, createdAt:new Date().toISOString(),
     };
   };
   const save=()=>{
-    if(!custName.trim()&&!cust) return alert("בחר לקוח או כתוב שם לקוח");
+    if(!cx.name.trim()) return alert("בחר לקוח או כתוב שם לקוח");
+    if(lastDate&&date<lastDate) return alert("תאריך המסמך לא יכול להיות לפני המסמך האחרון מאותו סוג ("+fmtDate(lastDate)+") — כדי שהמספור יישאר רציף.");
+    if(date>todayStr()&&DOC_TYPES[type].accounting) return alert("אי אפשר להפיק מסמך חשבונאי בתאריך עתידי.");
     if(!receiptOnly&&!tot.total) return alert("הוסף שורת שירות עם מחיר");
-    if(T.receipt&&!paidSum) return alert("הזן את סכום התשלום שהתקבל");
-    if(T.receipt&&!receiptOnly&&Math.abs(paidSum-tot.total)>1&&!confirm(`סכום התשלומים (${money(paidSum)}) שונה מסכום החשבונית (${money(tot.total)}). להמשיך?`)) return;
+    if(T.receipt&&!paidSum) return alert("הוסף את התשלום שהתקבל (לחץ על אמצעי התשלום)");
+    if(T.receipt&&!receiptOnly&&Math.abs(paidSum-tot.total)>1&&!confirm(`סכום התשלומים (${money(paidSum)}) שונה מסכום המסמך (${money(tot.total)}). להמשיך?`)) return;
     if(alloc&&!allocationNum.trim()&&!confirm("העסקה מעל "+ALLOCATION_THRESHOLD.toLocaleString()+" ₪ ללקוח עסקי ודורשת מספר הקצאה.\nלשמור בלי מספר הקצאה בינתיים?")) return;
-    if(cust&&setCustomers&&taxId!==(cust.taxId||"")) setCustomers(cs=>cs.map(x=>x.id===cust.id?{...x,taxId}:x));
+    if(cust&&setCustomers&&(cx.taxId!==(cust.taxId||"")||(!cust.email&&cx.email))) setCustomers(cs=>cs.map(x=>x.id===cust.id?{...x,taxId:cx.taxId,email:x.email||cx.email}:x));
     const rec=build(); onSave&&onSave(rec); return rec;
   };
   const lbl={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
-  const inp={width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,boxSizing:"border-box",background:"#f9fafb",fontFamily:"inherit"};
+  const inp={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,boxSizing:"border-box",background:"#f9fafb",fontFamily:"inherit"};
+  const card={border:"1px solid #e2e8f0",borderRadius:12,padding:"12px",marginBottom:12,background:"#fff"};
+  const h={fontWeight:800,color:"#0f172a",fontSize:15,marginBottom:8};
   return <Modal title={"🧾 "+type+" (טיוטה)"} onClose={onClose} width={720}>
     {!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
     </div>}
-    <div style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:12}}>💡 {T.help}</div>
-    <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:8,padding:"6px 12px",fontSize:12,marginBottom:12}}>מצב טיוטה — המסמך נשמר ומודפס לבדיקה בלבד, עד שנחבר תוכנה רשומה.</div>
+    <div style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:8}}>💡 {T.help}</div>
+    <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:8,padding:"6px 12px",fontSize:12,marginBottom:12}}>מצב טיוטה — לבדיקה בלבד, עד שנחבר תוכנה רשומה.</div>
 
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <div style={{marginBottom:12}}><label style={lbl}>לקוח *</label>
-        <select value={custId} onChange={e=>setCustId(e.target.value)} style={inp}><option value="">— בחר לקוח קיים —</option>{customers.filter(c=>!c.deleted).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-      <Inp label="שם הלקוח במסמך" value={custName} onChange={setCustName}/>
-      <Inp label="ע.מ. / ח.פ. של הלקוח (לקוח עסקי)" value={taxId} onChange={v=>setTaxId(v.replace(/[^\d-]/g,""))} placeholder="ריק = לקוח פרטי"/>
-      <Inp label="תאריך המסמך" type="date" value={date} onChange={setDate}/>
-    </div>
-    {custAppts.length>0&&<div style={{marginBottom:12}}><label style={lbl}>קשר לתור (לא חובה)</label>
-      <select value={apptId} onChange={e=>{setApptId(e.target.value);const a=appointments.find(x=>String(x.id)===e.target.value);if(a&&!lines[0].desc) setLines([{desc:"הדברת "+(a.pestType||"")+(a.address?" – "+a.address:""),qty:"1",unit:"יח׳",price:String(a.price||"")}]);}} style={inp}>
-        <option value="">—</option>{custAppts.map(a=><option key={a.id} value={a.id}>{fmtDate(a.date)} · {a.pestType} · ₪{a.price}</option>)}</select></div>}
-
-    {!receiptOnly&&<div style={{border:"1px solid #e2e8f0",borderRadius:12,padding:"12px",marginBottom:12}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
-        <b style={{color:CLR.primary}}>שורות שירות</b>
-        <label style={{fontSize:13,display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="checkbox" checked={inclVat} onChange={e=>setInclVat(e.target.checked)}/> המחירים כוללים מע״מ</label>
+    {/* ── לקוח ── */}
+    <div style={card}>
+      <div style={h}>👤 לקוח</div>
+      <div style={{position:"relative",marginBottom:8}}>
+        <input value={custQ} onChange={e=>{setCustQ(e.target.value);setShowCustList(true);setCx(x=>({...x,name:e.target.value}));if(custId) setCustId("");}} onFocus={()=>setShowCustList(true)} onBlur={()=>setTimeout(()=>setShowCustList(false),180)} placeholder="🔍 הקלד שם או טלפון של לקוח" style={inp}/>
+        {showCustList&&custMatches.length>0&&<div style={{position:"absolute",top:"100%",right:0,left:0,background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.12)",zIndex:5,maxHeight:240,overflowY:"auto"}}>
+          {custMatches.map(c=><div key={c.id} onMouseDown={()=>{setCustId(String(c.id));setShowCustList(false);}} style={{padding:"9px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer"}}><div style={{fontWeight:700,fontSize:14}}>{c.name}</div><div style={{fontSize:12,color:CLR.muted}}>{[c.phone,c.address].filter(Boolean).join(" · ")}</div></div>)}
+        </div>}
       </div>
-      {lines.map((l,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) minmax(0,1.4fr) 28px",gap:6,marginBottom:10,alignItems:"center",paddingBottom:8,borderBottom:i<lines.length-1?"1px dashed #e2e8f0":"none"}}>
-        <input value={l.desc} onChange={e=>setLine(i,"desc",e.target.value)} placeholder="תיאור השירות" style={{...inp,gridColumn:"1 / -1"}}/>
-        <input value={l.qty} onChange={e=>setLine(i,"qty",e.target.value)} type="number" placeholder="כמות" style={inp}/>
-        <select value={l.unit||"יח׳"} onChange={e=>setLine(i,"unit",e.target.value)} style={inp}>{["יח׳","ביקור","דירה","שעה","מ״ר","חודש"].map(u=><option key={u}>{u}</option>)}</select>
-        <input value={l.price} onChange={e=>setLine(i,"price",e.target.value)} type="number" placeholder={inclVat?"מחיר כולל מע״מ":"מחיר לפני מע״מ"} style={inp}/>
-        <button type="button" onClick={()=>setLines(ls=>ls.length>1?ls.filter((_,j)=>j!==i):ls)} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer",fontSize:16}}>✕</button>
+      {!cust&&custQ.trim()&&<div style={{fontSize:12,color:"#92400e",marginBottom:6}}>לקוח מזדמן — לא שמור ברשימת הלקוחות. אפשר להשלים פרטים למטה.</div>}
+      <Inp label="ע.מ. / ח.פ. של הלקוח (רק ללקוח עסקי)" value={cx.taxId} onChange={v=>setCx(x=>({...x,taxId:v.replace(/[^\d-]/g,"")}))} placeholder="ריק = לקוח פרטי"/>
+      <button type="button" onClick={()=>setShowCustMore(v=>!v)} style={{background:"none",border:"none",color:CLR.primary,fontWeight:700,cursor:"pointer",fontSize:13,padding:0}}>{showCustMore?"▲":"▼"} פרטי לקוח מורחבים</button>
+      {showCustMore&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px",marginTop:8}}>
+        <Inp label="שם על המסמך" value={cx.name} onChange={v=>setCx(x=>({...x,name:v}))}/>
+        <Inp label="איש קשר" value={cx.contactName} onChange={v=>setCx(x=>({...x,contactName:v}))}/>
+        <Inp label="כתובת" value={cx.address} onChange={v=>setCx(x=>({...x,address:v}))}/>
+        <Inp label="טלפון" value={cx.phone} onChange={v=>setCx(x=>({...x,phone:v}))}/>
+        <Inp label="אימייל" value={cx.email} onChange={v=>setCx(x=>({...x,email:v}))}/>
+      </div>}
+      {custAppts.length>0&&<div style={{marginTop:6}}><label style={lbl}>קשר לתור (לא חובה)</label>
+        <select value={apptId} onChange={e=>{setApptId(e.target.value);const a=appointments.find(x=>String(x.id)===e.target.value);if(a&&!lines[0].desc) setLines([{desc:"הדברת "+(a.pestType||"")+(a.address?" – "+a.address:""),qty:"1",unit:"יח׳",price:String(a.price||"")}]);}} style={inp}>
+          <option value="">—</option>{custAppts.map(a=><option key={a.id} value={a.id}>{fmtDate(a.date)} · {a.pestType} · ₪{a.price}</option>)}</select></div>}
+    </div>
+
+    {/* ── תאריך ── */}
+    <div style={{...card,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"end"}}>
+      <div><Inp label="תאריך המסמך" type="date" value={date} onChange={setDate}/>{lastDate&&<div style={{fontSize:11,color:CLR.muted,marginTop:-8}}>אפשר מ-{fmtDate(lastDate)} עד היום (מספור רציף)</div>}</div>
+      {!T.receipt&&<Sel label="תנאי תשלום" value={payTerms} onChange={setPayTerms} options={PAY_TERMS}/>}
+      {!T.receipt&&<Inp label="לתשלום עד (לא חובה)" type="date" value={dueDate} onChange={setDueDate}/>}
+    </div>
+
+    {/* ── פירוט שירותים ── */}
+    {!receiptOnly&&<div style={card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+        <div style={{...h,marginBottom:0}}>🧾 פירוט שירותים</div>
+        <div style={{display:"flex",background:"#f1f5f9",borderRadius:20,padding:3}}>
+          {[[true,"כולל מע״מ"],[false,"לפני מע״מ"]].map(([v,l])=><button key={l} type="button" onClick={()=>setInclVat(v)} style={{border:"none",borderRadius:16,padding:"5px 12px",fontSize:12,fontWeight:700,cursor:"pointer",background:inclVat===v?"#fff":"transparent",color:inclVat===v?CLR.primary:CLR.muted,boxShadow:inclVat===v?"0 1px 3px rgba(0,0,0,.1)":"none",fontFamily:"inherit"}}>{l}</button>)}
+        </div>
+      </div>
+      {lines.map((l,i)=><div key={i} style={{border:"1px solid #eef2f7",borderRadius:10,padding:"10px",marginBottom:8,background:"#fcfdfd"}}>
+        <div style={{display:"flex",gap:6,marginBottom:6}}>
+          <input value={l.desc} onChange={e=>setLine(i,"desc",e.target.value)} placeholder="תיאור השירות" style={{...inp,flex:1}}/>
+          <button type="button" title="בחר מהרשימה" onClick={()=>setItemPick(itemPick===i?null:i)} style={{border:"1px solid #d1d5db",background:"#fff",borderRadius:8,padding:"0 10px",cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}}>📋 פריטים</button>
+        </div>
+        {itemPick===i&&<div style={{border:"1px solid #e2e8f0",borderRadius:10,maxHeight:200,overflowY:"auto",marginBottom:6,background:"#fff"}}>
+          {items.map((it,k)=><div key={k} onClick={()=>{setLines(ls=>ls.map((x,j)=>j===i?{...x,desc:it.desc,unit:it.unit||x.unit,price:it.price&&it.incl===inclVat?String(it.price):x.price}:x));setItemPick(null);}} style={{padding:"8px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",gap:8}}><span>{it.desc}</span>{it.price?<span style={{color:CLR.muted,whiteSpace:"nowrap"}}>₪{it.price}</span>:null}</div>)}
+        </div>}
+        <div style={{display:"grid",gridTemplateColumns:"auto minmax(0,1fr) minmax(0,1.3fr) auto",gap:6,alignItems:"center"}}>
+          <div style={{display:"flex",alignItems:"center",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden"}}>
+            <button type="button" onClick={()=>setLine(i,"qty",String(Math.max(1,(parseFloat(l.qty)||1)-1)))} style={{border:"none",background:"#f1f5f9",width:30,height:36,cursor:"pointer",fontSize:16}}>−</button>
+            <input value={l.qty} onChange={e=>setLine(i,"qty",e.target.value)} type="number" style={{width:38,border:"none",textAlign:"center",fontSize:14,height:36,background:"#fff"}}/>
+            <button type="button" onClick={()=>setLine(i,"qty",String((parseFloat(l.qty)||0)+1))} style={{border:"none",background:"#f1f5f9",width:30,height:36,cursor:"pointer",fontSize:16}}>+</button>
+          </div>
+          <select value={l.unit||"יח׳"} onChange={e=>setLine(i,"unit",e.target.value)} style={inp}>{["יח׳","ביקור","דירה","שעה","מ״ר","חודש"].map(u=><option key={u}>{u}</option>)}</select>
+          <input value={l.price} onChange={e=>setLine(i,"price",e.target.value)} type="number" placeholder={inclVat?"מחיר כולל מע״מ":"מחיר לפני מע״מ"} style={inp}/>
+          <button type="button" onClick={()=>setLines(ls=>ls.length>1?ls.filter((_,j)=>j!==i):[{desc:"",qty:"1",unit:"יח׳",price:""}])} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer",fontSize:18}} title="מחק שורה">🗑</button>
+        </div>
       </div>)}
-      <button type="button" onClick={()=>setLines(ls=>[...ls,{desc:"",qty:"1",unit:"יח׳",price:""}])} style={{border:"1px dashed "+CLR.primary,background:"#fff",color:CLR.primary,borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>+ שורה</button>
-      <div style={{marginTop:10,background:CLR.primaryLight,borderRadius:8,padding:"8px 12px",fontSize:13}}>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button type="button" onClick={()=>setLines(ls=>[...ls,{desc:"",qty:"1",unit:"יח׳",price:""}])} style={{border:"none",background:CLR.primary,color:"#fff",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ הוספת שורה</button>
+        {!showDisc&&<button type="button" onClick={()=>setShowDisc(true)} style={{border:"1px solid "+CLR.border,background:"#fff",color:"#334155",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:600}}>+ הנחה</button>}
+      </div>
+      {showDisc&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}>
+        <span style={{fontSize:13,fontWeight:700}}>הנחה:</span>
+        <input type="number" value={discount.value} onChange={e=>setDiscount(d=>({...d,value:e.target.value}))} style={{...inp,width:100}}/>
+        {["₪","%"].map(t=><button key={t} type="button" onClick={()=>setDiscount(d=>({...d,type:t}))} style={{border:"1px solid "+(discount.type===t?CLR.primary:CLR.border),background:discount.type===t?CLR.primaryLight:"#fff",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontWeight:700}}>{t}</button>)}
+        <button type="button" onClick={()=>{setShowDisc(false);setDiscount({type:"₪",value:""});}} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer"}}>✕</button>
+      </div>}
+      <div style={{marginTop:10,background:CLR.primaryLight,borderRadius:10,padding:"10px 12px",fontSize:13}}>
+        {tot.disc?<div style={{display:"flex",justifyContent:"space-between",color:"#b91c1c"}}><span>הנחה</span><span>-{money(tot.disc)}</span></div>:null}
         <div style={{display:"flex",justifyContent:"space-between"}}><span>לפני מע״מ</span><span>{money(tot.before)}</span></div>
         <div style={{display:"flex",justifyContent:"space-between",color:CLR.muted}}><span>מע״מ {VAT_RATE}%</span><span>{money(tot.vat)}</span></div>
-        <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:16,color:CLR.primary,borderTop:"1px solid "+CLR.border,marginTop:4,paddingTop:4}}><span>סה״כ</span><span>{money(tot.total)}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:17,color:CLR.primary,borderTop:"1px solid "+CLR.border,marginTop:4,paddingTop:4}}><span>סה״כ{type==="חשבונית זיכוי"?" לזיכוי":" לתשלום"}</span><span>{money(tot.total)}</span></div>
+        <label style={{display:"flex",alignItems:"center",gap:6,marginTop:6,cursor:"pointer",fontSize:12,color:CLR.muted}}><input type="checkbox" checked={roundTotal} onChange={e=>setRoundTotal(e.target.checked)}/> עיגול הסכום (ביטול אגורות)</label>
       </div>
     </div>}
 
-    {T.receipt&&<div style={{border:"1px solid #99f6e4",background:"#f0fdfa",borderRadius:12,padding:"12px",marginBottom:12}}>
-      <b style={{color:"#0f766e"}}>תשלום שהתקבל</b>
-      {payments.map((p,i)=>{const d=p.details||{};return <div key={i} style={{borderTop:i?"1px solid #ccfbf1":"none",paddingTop:i?8:4,marginTop:i?8:4}}>
-        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) 28px",gap:6,alignItems:"center"}}>
-          <select value={p.method} onChange={e=>setPay(i,"method",e.target.value)} style={inp}>{PAY_METHODS_DOC.map(m=><option key={m}>{m}</option>)}</select>
+    {/* ── איך שילמו ── */}
+    {T.receipt&&<div style={{...card,border:"1px solid #99f6e4",background:"#f0fdfa"}}>
+      <div style={{...h,color:"#0f766e"}}>💰 איך שילמו לך?</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:6,marginBottom:10}}>
+        {PAY_METHODS_DOC.map(m=><button key={m} type="button" onClick={()=>addPay(m)} style={{border:"1px solid #99f6e4",background:"#fff",borderRadius:10,padding:"8px 4px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#0f766e",fontFamily:"inherit"}}><div style={{fontSize:16}}>{PAY_ICON[m]}</div>{m}</button>)}
+      </div>
+      {payments.map((p,i)=>{const d=p.details||{};return <div key={i} style={{background:"#fff",border:"1px solid #ccfbf1",borderRadius:10,padding:"10px",marginBottom:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <b style={{fontSize:14}}>{PAY_ICON[p.method]} {p.method}</b>
+          <button type="button" onClick={()=>setPayments(ps=>ps.filter((_,j)=>j!==i))} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer",fontSize:16}}>🗑</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
           <input type="number" value={p.amount} onChange={e=>setPay(i,"amount",e.target.value)} placeholder="סכום ₪" style={inp}/>
           <input type="date" value={p.date||date} onChange={e=>setPay(i,"date",e.target.value)} style={inp}/>
-          <button type="button" onClick={()=>setPayments(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps)} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer",fontSize:16}}>✕</button>
+          {p.method==="צ׳ק"&&<><input value={d.checkNum||""} onChange={e=>setPayD(i,"checkNum",e.target.value)} placeholder="מס׳ צ׳ק" style={inp}/><input value={d.bank||""} onChange={e=>setPayD(i,"bank",e.target.value)} placeholder="בנק" style={inp}/><input value={d.branch||""} onChange={e=>setPayD(i,"branch",e.target.value)} placeholder="סניף" style={inp}/><input value={d.account||""} onChange={e=>setPayD(i,"account",e.target.value)} placeholder="מס׳ חשבון" style={inp}/><input type="date" value={d.dueDate||""} onChange={e=>setPayD(i,"dueDate",e.target.value)} title="תאריך פירעון" style={inp}/></>}
+          {p.method==="כרטיס אשראי"&&<><input value={d.card4||""} onChange={e=>setPayD(i,"card4",e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="4 ספרות אחרונות" style={inp}/><input type="number" value={d.payments||""} onChange={e=>setPayD(i,"payments",e.target.value)} placeholder="מס׳ תשלומים" style={inp}/><input value={d.approval||""} onChange={e=>setPayD(i,"approval",e.target.value)} placeholder="מס׳ אישור" style={inp}/></>}
+          {p.method==="העברה בנקאית"&&<><input value={d.bank||""} onChange={e=>setPayD(i,"bank",e.target.value)} placeholder="מבנק" style={inp}/><input value={d.ref||""} onChange={e=>setPayD(i,"ref",e.target.value)} placeholder="אסמכתא" style={inp}/></>}
+          {(p.method==="ביט"||p.method==="פייבוקס")&&<input value={d.ref||""} onChange={e=>setPayD(i,"ref",e.target.value)} placeholder="אסמכתא (לא חובה)" style={inp}/>}
+          {(p.method==="ניכוי במקור"||p.method==="אחר")&&<input value={d.note||""} onChange={e=>setPayD(i,"note",e.target.value)} placeholder={p.method==="ניכוי במקור"?"אסמכתא / אחוז ניכוי":"פירוט"} style={inp}/>}
         </div>
-        {p.method==="צ׳ק"&&<div style={{display:"grid",gridTemplateColumns:"repeat(5,minmax(0,1fr))",gap:6,marginTop:6}}>
-          <input value={d.checkNum||""} onChange={e=>setPayD(i,"checkNum",e.target.value)} placeholder="מס׳ צ׳ק" style={inp}/>
-          <input value={d.bank||""} onChange={e=>setPayD(i,"bank",e.target.value)} placeholder="בנק" style={inp}/>
-          <input value={d.branch||""} onChange={e=>setPayD(i,"branch",e.target.value)} placeholder="סניף" style={inp}/>
-          <input value={d.account||""} onChange={e=>setPayD(i,"account",e.target.value)} placeholder="חשבון" style={inp}/>
-          <input type="date" value={d.dueDate||""} onChange={e=>setPayD(i,"dueDate",e.target.value)} title="תאריך פירעון" style={inp}/>
-        </div>}
-        {p.method==="כרטיס אשראי"&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6,marginTop:6}}>
-          <input value={d.card4||""} onChange={e=>setPayD(i,"card4",e.target.value.replace(/\D/g,"").slice(0,4))} placeholder="4 ספרות אחרונות" style={inp}/>
-          <input type="number" value={d.payments||""} onChange={e=>setPayD(i,"payments",e.target.value)} placeholder="מס׳ תשלומים" style={inp}/>
-          <input value={d.approval||""} onChange={e=>setPayD(i,"approval",e.target.value)} placeholder="מס׳ אישור" style={inp}/>
-        </div>}
-        {(p.method==="העברה בנקאית"||p.method==="ביט"||p.method==="פייבוקס")&&<div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:6,marginTop:6}}>
-          <input value={d.ref||""} onChange={e=>setPayD(i,"ref",e.target.value)} placeholder="אסמכתא" style={inp}/>
-          {p.method==="העברה בנקאית"?<input value={d.bank||""} onChange={e=>setPayD(i,"bank",e.target.value)} placeholder="מבנק" style={inp}/>:<div/>}
-        </div>}
-        {p.method==="אחר"&&<input value={d.note||""} onChange={e=>setPayD(i,"note",e.target.value)} placeholder="פירוט" style={{...inp,marginTop:6}}/>}
       </div>;})}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
-        <button type="button" onClick={()=>setPayments(ps=>[...ps,{method:"מזומן",amount:"",date,details:{}}])} style={{border:"1px dashed #0f766e",background:"#fff",color:"#0f766e",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:13,fontWeight:600}}>+ אמצעי תשלום נוסף</button>
-        <b style={{color:"#0f766e"}}>סה״כ התקבל: {money(paidSum)}</b>
+      {payments.length===0&&<div style={{fontSize:13,color:CLR.muted,textAlign:"center",padding:"6px 0"}}>לחץ על אמצעי התשלום שהתקבל</div>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#ccfbf1",borderRadius:8,padding:"8px 12px",fontWeight:800,color:"#0f766e"}}>
+        <span>סה״כ שולם: {money(paidSum)}</span>
+        {remaining!=null&&(Math.abs(remaining)<=0.5?<span>✓ שולם במלואו</span>:remaining>0?<span style={{color:"#b45309"}}>נשאר: {money(remaining)}</span>:<span style={{color:"#b91c1c"}}>יותר מהסכום ב-{money(-remaining)}</span>)}
       </div>
-    </div>}
-
-    {!T.receipt&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <Sel label="תנאי תשלום" value={payTerms} onChange={setPayTerms} options={PAY_TERMS}/>
-      <Inp label="לתשלום עד (לא חובה)" type="date" value={dueDate} onChange={setDueDate}/>
     </div>}
 
     {(alloc||allocationNum)&&<div style={{border:"2px solid "+(allocationNum?"#16a34a":"#f59e0b"),background:allocationNum?"#f0fdf4":"#fffbeb",borderRadius:12,padding:"12px",marginBottom:12}}>
@@ -5633,15 +5701,19 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       <Inp label="מספר הקצאה" value={allocationNum} onChange={setAllocationNum} placeholder="9 ספרות"/>
     </div>}
 
-    <Txt label="הערות במסמך" value={notes} onChange={setNotes} rows={2}/>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <div style={card}>
+      <div style={h}>📝 הערות</div>
+      <Txt label="הערות (יופיעו במסמך)" value={notes} onChange={setNotes} rows={2}/>
+      <Txt label="טקסט בתחתית המסמך" value={footer} onChange={setFooter} rows={2} placeholder="לדוגמה: תודה שבחרתם בהדברה 360! אחריות לפי יומן הביצוע."/>
+      <Txt label="🔒 הערה פנימית (רק לך, לא מופיעה במסמך)" value={privateNote} onChange={setPrivateNote} rows={2}/>
+    </div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",position:"sticky",bottom:-20,background:"#fff",padding:"10px 0",borderTop:"1px solid #eef2f7"}}>
       <Btn onClick={()=>{const r=save(); if(r) onClose();}} style={{flex:1}}>✅ שמור טיוטה</Btn>
-      <Btn v="secondary" onClick={()=>{ if(!custName&&!cust) return alert("בחר לקוח"); printDoc(build()); }}>📄 תצוגה / PDF</Btn>
+      <Btn v="secondary" onClick={()=>{ if(!cx.name.trim()) return alert("בחר לקוח"); printDoc(build()); }}>👁 תצוגה מקדימה</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
   </Modal>;
 }
-
 function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs}){
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
