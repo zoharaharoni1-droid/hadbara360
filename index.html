@@ -673,8 +673,10 @@ function scopeFromProperty(p){
     if(p.hasYard||p.floor==="קרקע") out.push("חצר / גינה");
   } else if(t==="בניין משותף"){
     out.push("בניין משותף"+(p.floors?" · "+p.floors+" קומות":""));
-    (p.buildingAreas||[]).forEach(a=>out.push(a));
-    if(p.sewers) out.push("בורות ביוב / פירים: "+p.sewers);
+    out.push("חצר / גינה");
+    out.push("בורות ביוב"+(p.sewers?" / פירים: "+p.sewers:""));
+    if(undergroundLabel(p.underground)) out.push(undergroundLabel(p.underground));
+    (p.buildingAreas||[]).forEach(a=>{ if(a!=="חצר"&&a!=="ביובים") out.push(a); });
   } else if(t){ out.push(t); if(p.hasYard) out.push("חצר / גינה"); }
   return out;
 }
@@ -1134,7 +1136,7 @@ function execLogHtml({company,docNum,log,chemicals}){
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(log.date)}</div></div>
     </div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:8px;font-size:13px;">
-      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
+      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
       <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
@@ -1188,7 +1190,7 @@ function printInvoice(inv){
 function execLogWAText(log){
   const pests=pestsWithLevels(log);
   const mats=(log.materials||[]).filter(m=>m&&m.name).map(m=>"\n  • "+m.name+(m.active?" ("+m.active+")":"")+(m.method?" — "+m.method:"")+(m.stations?" · "+m.stations+" תחנות":"")+((m.areas||[]).length?" · "+m.areas.join(", "):"")).join("");
-  return ["שלום "+(log.clientName||"")+" 👋","",
+  return ["שלום "+(log.contactName||log.clientName||"")+" 👋","",
     "מצורף סיכום הטיפול שבוצע אצלכם — "+COMPANY.name,
     "📅 תאריך: "+fmtDate(log.date),
     log.address?"📍 כתובת: "+log.address+(log.unit?" ("+log.unit+")":""):"",
@@ -1294,7 +1296,7 @@ async function sendExecLogWA(log,phone){
   try{ if(w) w.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;font-size:20px;text-align:center">⏳ מכין את יומן הביצוע כ-PDF...</body></html>'); }catch(e){}
   try{
     const {url}=await uploadExecLogPdf(log);
-    const text=["שלום "+(log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
+    const text=["שלום "+(log.contactName||log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
   }catch(e){
@@ -1861,10 +1863,12 @@ function PestPickerDk({selected,onChange}){
 // ── המקום המטופל: שדות נפרדים שהמדביר יכול לשנות (סוג, חדרים, מפלסים, קומה, אזורים נוספים)
 const PLACE_TYPES=["דירה","בית פרטי","בניין משותף","עסק","מחסן","משרד","מסעדה","גן ילדים"];
 const PLACE_EXTRAS=["חצר / גינה","מרפסת","בורות ביוב","חדר מדרגות","מקלט","גג","מחסן","חניון","חדר אשפה"];
+function undergroundLabel(n){ n=parseInt(n)||0; return n>0?("חניון תת-קרקעי"+(n>1?" ("+n+" מפלסים, עד ‎-"+n+")":" (‎-1)")):""; }
 function placeFromProperty(p){ p=p||{}; const extras=[];
   if(p.hasYard) extras.push("חצר / גינה");
-  (p.buildingAreas||[]).forEach(a=>{ if(!extras.includes(a)) extras.push(a); });
-  if(p.sewers&&p.propertyType==="בניין משותף") extras.push("בורות ביוב");
+  if(p.propertyType==="בניין משותף"){ extras.push("חצר / גינה"); extras.push("בורות ביוב"); }
+  (p.buildingAreas||[]).forEach(a=>{ if(a==="חצר"||a==="ביובים") return; if(!extras.includes(a)) extras.push(a); });
+  if(p.propertyType==="בניין משותף"&&undergroundLabel(p.underground)) extras.push(undergroundLabel(p.underground));
   return {type:p.propertyType||"",rooms:p.rooms?String(p.rooms):"",levels:p.levels?String(p.levels):"1",floor:p.floor||"",floors:p.floors||"",extras}; }
 function placeToScope(pl){ if(!pl) return []; const out=[]; const t=pl.type||"";
   const unit=t==="דירה"||t==="בית פרטי";
@@ -1929,6 +1933,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
 
   const [f,setF]=useState({
     clientName:    initialData?.clientName    || prefillAppt?.customerName || "",
+    contactName:   initialData?.contactName   || prefillAppt?.contactName || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).contactName || "",
     customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
     phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || ""),
     address:       initialData?.address!=null&&initialData?.unit!=null ? initialData.address : navAddr(initialData?.address || prefillAppt?.address || ""),
@@ -1960,8 +1965,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
     workerLicenseType: initialData?.workerLicenseType || defaultWorker.licenseType || defaultWorker.license || "",
     extraWorkers:  initialData?.extraWorkers  || [],
-    place:         initialData?.place || (initialData?.scope&&!initialData?.place ? {type:"",rooms:"",levels:"1",floor:"",extras:initialData.scope} : placeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","levels","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))})),
-    scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas"].includes(k)&&v!==undefined&&v!==""))}),
+    place:         initialData?.place || (initialData?.scope&&!initialData?.place ? {type:"",rooms:"",levels:"1",floor:"",extras:initialData.scope} : placeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","levels","floor","floors","hasYard","sewers","buildingAreas","underground"].includes(k)&&v!==undefined&&v!==""))})),
+    scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas","underground"].includes(k)&&v!==undefined&&v!==""))}),
   });
   const [scopeAdd,setScopeAdd]=useState("");
   // סוג היומן — נשמר לכל מדביר: "steps" לפי שלבים / "flat" רציף
@@ -2042,7 +2047,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <CustomerSearchSelect customers={customers.filter(c=>!c.deleted)} value={f.customerId||""} onChange={(id,c)=>{
         if(!c){ set("customerId",null); return; }
         const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
-        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
+        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,contactName:c.contactName||"",address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
           structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
       }}/>
     </div>}
@@ -2053,6 +2058,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     <Inp label="כתובת (רחוב, מספר, עיר) *" value={f.address} onChange={v=>set("address",v)} placeholder="טייבר 21, גבעתיים"/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><Inp label="קומה / דירה" value={f.unit} onChange={v=>set("unit",v)} placeholder="קומה 3 · דירה 1"/><Inp label="טלפון לקוח" value={f.phone} onChange={v=>set("phone",v)} placeholder="050-000-0000"/></div>
+    <Inp label="איש קשר (לוועד בית / עסק)" value={f.contactName||""} onChange={v=>set("contactName",v)} placeholder="השם של מי שדיברת איתו"/>
 
     </>)}
     {sec("service","🧾","סוג השירות",serviceLabel(f)||"לא נבחר",f.exterminate||f.services.length?"ok":"req",<div>
@@ -2282,7 +2288,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
       {(()=>{const row={background:"#f0f9f4",borderRadius:8,padding:"8px 14px",marginBottom:8,display:"flex",flexWrap:"wrap",alignItems:"baseline",columnGap:16,rowGap:2,fontSize:13};
         const ttl={fontWeight:700,color:"#1a5c3a"};
         return <div style={{marginBottom:14}}>
-          <div style={row}><span style={ttl}>👤 לקוח:</span><span>{data.clientName}</span>{data.address&&<span>📍 {data.address}{data.unit?" ("+data.unit+")":""}</span>}{data.structureType&&<span>🏠 {data.structureType}</span>}</div>
+          <div style={row}><span style={ttl}>👤 לקוח:</span><span>{data.clientName}</span>{data.contactName&&<span>איש קשר: {data.contactName}</span>}{data.address&&<span>📍 {data.address}{data.unit?" ("+data.unit+")":""}</span>}{data.structureType&&<span>🏠 {data.structureType}</span>}</div>
           <div style={row}><span style={ttl}>🧑‍🔧 מדביר:</span><span>{data.worker.name}</span>{data.worker.license&&<span>רישיון {data.worker.license}</span>}</div>
         </div>;})()}
       <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
@@ -2364,7 +2370,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -3332,7 +3338,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     </div>}
     <G2 gap={8}>
       {[
-        ["👤 לקוח", appt.customerName, null],
+        ["👤 לקוח", appt.customerName+(appt.contactName||cust.contactName?" · איש קשר: "+(appt.contactName||cust.contactName):""), null],
         ["📞 טלפון", cust.phone||"—", cust.phone?`tel:${cust.phone}`:null],
         ["📍 כתובת", appt.address, appt.address?`https://waze.com/ul?q=${encodeURIComponent(navAddr(appt.address))}&navigate=yes`:null],
         ["🏠 סוג נכס", cust.propertyType?`${cust.propertyType}${cust.rooms?" | "+cust.rooms+" חד'":""}${cust.floors?" | "+cust.floors+" קומות":""}`:"—", null],
@@ -3355,6 +3361,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     </G2>
     {appt.buildingAreas&&appt.buildingAreas.length>0&&<div style={{background:CLR.primaryLight,borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>🏢 <b>אזורים לטיפול:</b> {appt.buildingAreas.join(", ")}</div>}
     {cust.notes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>⚠️ <b>הערות לקוח:</b> {cust.notes}</div>}
+    {appt.contactName&&<div style={{background:"#eff6ff",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>👤 <b>איש קשר:</b> {appt.contactName}</div>}
+    {appt.propertyNotes&&<div style={{background:CLR.surface,borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>🏠 <b>הערות על הנכס:</b> {appt.propertyNotes}</div>}
     {appt.notes&&<div style={{background:CLR.surface,borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>📝 <b>הערות לתור:</b> {appt.notes}</div>}
     {invoice&&<div style={{background:CLR.primaryLight,borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <span>🧾 <b>חשבונית {invoice.invoiceNum}</b> · ₪{invoice.amount}</span>
@@ -3555,7 +3563,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    const newLog={id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     return newLog;
@@ -4077,7 +4085,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     name:"",phone:"",email:"",
     city:"",street:"",buildingNum:"",aptNum:"",entrance:"",
     propertyType:"דירה",rooms:"3",levels:"1",floors:"",sewers:"",hasYard:false,floor:"קרקע",
-    parking:null, elevator:null,
+    parking:null, elevator:null, underground:"0", bizName:"", docName:"", docNameEdited:false, propertyNotes:"",
     status:"פעיל",notes:"",
     pests:[],customPest:"",price:"",source:"",
     buildingAreas:[],
@@ -4115,6 +4123,12 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     }
   };
   const isUnit=f.propertyType==="דירה"||f.propertyType==="בית פרטי";
+  const isApt=f.propertyType==="דירה";
+  const isBiz=["עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"].includes(f.propertyType);
+  const autoDocName=()=>("ועד הבית "+[f.street,f.buildingNum].filter(Boolean).join(" ")).trim();
+  const docNameShown=f.docNameEdited?f.docName:autoDocName();
+  const clientNameForDocs=()=>isShared?(docNameShown||"ועד הבית"):(isBiz&&f.bizName.trim()?f.bizName.trim():f.name);
+  const contactForDocs=()=>(isShared||(isBiz&&f.bizName.trim()))?f.name:"";
 
   const toggleArea=a=>set("buildingAreas",f.buildingAreas.includes(a)?f.buildingAreas.filter(x=>x!==a):[...f.buildingAreas,a]);
   const ilCities=useIlCities();
@@ -4139,11 +4153,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(doSchedule&&!f.prefDate) return alert("לשיגור ליומן צריך לבחור תאריך");
     const addr=fullAddress();
     const customer={
-      name:f.name,phone:f.phone,email:f.email,
+      name:clientNameForDocs(),contactName:contactForDocs(),phone:f.phone,email:f.email,
       address:addr||f.city||"—",
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,entrance:f.entrance||"",
       propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
-      floor:f.floor,hasYard:f.hasYard,buildingAreas:f.buildingAreas,
+      floor:isApt||isBiz?f.floor:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
       status:f.status,notes:f.notes,
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
       totalPaid:0,lastTreatment:"",
@@ -4154,13 +4168,13 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       const w=workers.find(x=>x.id===parseInt(schedWorker));
       const timeWindow=`${f.timeFrom}–${f.timeTo}`;
       onSchedule({
-        customerId:saved.id,customerName:saved.name,
+        customerId:saved.id,customerName:saved.name,contactName:contactForDocs(),propertyNotes:f.propertyNotes||"",underground:isShared?f.underground:"0",
         workerId:parseInt(schedWorker),workerName:w?.name||"",
         date:f.prefDate,time:f.timeFrom,timeWindow,
         pestType:pestLabel(),pests:allPests(),
-        price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:unitLine({floor:f.propertyType==="דירה"||isShared?f.floor:"",aptNum:f.aptNum,entrance:f.entrance}),
+        price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),
         buildingAreas:f.buildingAreas,
-        propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floor:f.floor,floors:f.floors,hasYard:f.hasYard,sewers:f.sewers,
+        propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floor:isApt||isBiz?f.floor:"",floors:f.floors,hasYard:isShared?true:f.hasYard,sewers:f.sewers,
         status:"ממתין",executionLog:null,
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
@@ -4176,10 +4190,57 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           👤 לקוח חוזר? חפש לקוח קיים
         </button>
       </div>
-      <G2><Inp label="שם הלקוח *" value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
+      <G2><Inp label={isShared||isBiz?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
       <Sel label="כיצד הגיע הלקוח?" value={f.source||""} onChange={v=>set("source",v)}
         options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/>
+    </FieldCard>
+
+    <FieldCard title="פרטי הנכס">
+      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>סוג הנכס</label>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+        {PROPERTY_TYPES.map(t=>{ const on=f.propertyType===t; return <button key={t} type="button" onClick={()=>set("propertyType",t)}
+          style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{t}</button>; })}
+      </div>
+      {isShared&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+        <Inp label="שם הלקוח במסמכים" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/>
+        <div style={{fontSize:12,color:"#1e40af",marginTop:-6}}>ביומן הביצוע ובחשבונית יופיע "{docNameShown||"ועד הבית"}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} יירשם כאיש קשר.</div>
+      </div>}
+      {isBiz&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+        <Inp label="שם העסק / המוסד (למסמכים)" value={f.bizName} onChange={v=>set("bizName",v)} placeholder="לא חובה — אם ריק יופיע שם איש הקשר"/>
+      </div>}
+      {isUnit&&<G2>
+        <Sel label="מספר חדרים" value={f.rooms} onChange={v=>set("rooms",v)} options={ROOMS_OPTIONS}/>
+        <Sel label="מפלסים" value={f.levels||"1"} onChange={v=>set("levels",v)} options={["1","2","3","4"]}/>
+      </G2>}
+      {isShared&&<>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <Sel label="מספר קומות" value={f.floors} onChange={v=>set("floors",v)} options={["","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"]}/>
+          <Inp label="מספר ביובים / פירים" type="number" value={f.sewers} onChange={v=>set("sewers",v)}/>
+        </div>
+        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>חניון תת-קרקעי</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+          {[["0","אין"],["1","‎-1"],["2","עד ‎-2"],["3","עד ‎-3"],["4","עד ‎-4"]].map(([v,l])=>{ const on=String(f.underground||"0")===v; return <button key={v} type="button" onClick={()=>set("underground",v)}
+            style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"6px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{l}</button>; })}
+        </div>
+        <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>✓ חצר ובורות ביוב נכללים אוטומטית בבניין משותף</div>
+        <div style={{marginBottom:4}}>
+          <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>אזורים משותפים נוספים</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {BUILDING_AREAS.filter(a=>a!=="חצר"&&a!=="ביובים"&&a!=="חניון").map(a=>{
+              const on=f.buildingAreas.includes(a);
+              return <button key={a} type="button" onClick={()=>toggleArea(a)}
+                style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":CLR.muted,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:on?600:400}}>
+                {on?"✓ ":""}{a}
+              </button>;
+            })}
+          </div>
+        </div>
+      </>}
+      {!isShared&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:CLR.surface,padding:"8px 12px",borderRadius:8,marginBottom:10}}>
+        <input type="checkbox" checked={f.hasYard} onChange={e=>set("hasYard",e.target.checked)}/> יש חצר / גינה
+      </label>}
+      <Txt label="הערות על הנכס" value={f.propertyNotes} onChange={v=>set("propertyNotes",v)} rows={2} placeholder="לדוגמה: כלב בחצר, פיר אשפה בכניסה ב׳, מפתח אצל השכן"/>
     </FieldCard>
 
     <FieldCard title="כתובת">
@@ -4191,14 +4252,18 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           <input list="h360-streets" value={f.street||""} onChange={e=>handleAddressChange("street",e.target.value)} placeholder="לדוגמה: הרצל 12" autoComplete="off" style={ADDR_INPUT}/>
           <datalist id="h360-streets">{ilStreets.map(st=><option key={st} value={st+" "}/>)}</datalist></div>
       </G2>
-      <G2>
+      {isApt&&<G2>
         <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
-        <Sel label={isShared?"מס׳ כניסה/דירה":"מס׳ דירה"} value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
-      </G2>
-      <G2>
+        <Sel label="מס׳ דירה" value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
+      </G2>}
+      {isBiz&&<G2>
+        <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
+        <div/>
+      </G2>}
+      {(isApt||isShared)&&<G2>
         <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
         <div/>
-      </G2>
+      </G2>}
       {/* Parking & elevator toggles + building code */}
       <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
         {[["parking","🅿️ חניה"],["elevator","🛗 מעלית"]].map(([key,label])=>(
@@ -4218,35 +4283,6 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
             style={{width:80,padding:"5px 8px",borderRadius:8,border:`1px solid #d1d5db`,fontSize:13,background:"#f9fafb",boxSizing:"border-box"}}/>
         </div>
       </div>
-    </FieldCard>
-
-    <FieldCard title="מאפייני הנכס">
-      <Sel label="סוג נכס" value={f.propertyType} onChange={v=>set("propertyType",v)} options={PROPERTY_TYPES}/>
-      {isUnit&&<G2>
-        <Sel label="מספר חדרים" value={f.rooms} onChange={v=>set("rooms",v)} options={ROOMS_OPTIONS}/>
-        <Sel label="מפלסים" value={f.levels||"1"} onChange={v=>set("levels",v)} options={["1","2","3","4"]}/>
-      </G2>}
-      {isShared&&<>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Sel label="מספר קומות" value={f.floors} onChange={v=>set("floors",v)} options={["","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"]}/>
-          <Inp label="מספר ביובים / פירים" type="number" value={f.sewers} onChange={v=>set("sewers",v)}/>
-        </div>
-        <div style={{marginBottom:4}}>
-          <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>אזורים משותפים לטיפול</label>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {BUILDING_AREAS.map(a=>{
-              const on=f.buildingAreas.includes(a);
-              return <button key={a} type="button" onClick={()=>toggleArea(a)}
-                style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":CLR.muted,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:on?600:400}}>
-                {on?"✓ ":""}{a}
-              </button>;
-            })}
-          </div>
-        </div>
-      </>}
-      {!isShared&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:CLR.surface,padding:"8px 12px",borderRadius:8}}>
-        <input type="checkbox" checked={f.hasYard} onChange={e=>set("hasYard",e.target.checked)}/> יש חצר / גינה
-      </label>}
     </FieldCard>
 
     <FieldCard title="פרטי ההדברה המבוקשת" extra="(ניתן להשלים אחר כך)">
