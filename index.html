@@ -1232,13 +1232,14 @@ function loadJsPdf(){
 }
 function execLogFileName(log){ return execLogNiceName(log); }
 // מצייר את המסמך בעזרת הדפדפן עצמו (עברית מדויקת), ומחלק לעמודי A4 בגבולות של שורות/בלוקים
-async function execLogPdfBlob(log){
+async function execLogPdfBlob(log){ return htmlPdfBlob(execLogHtml({company:COMPANY,docNum:log.docNum||"",log,chemicals:CHEMICALS})); }
+async function htmlPdfBlob(innerHtml){
   const JsPDF=await loadJsPdf();
   const W=794, PAGE_H=Math.floor(W*297/210), PAD=34;
   const css=`*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,'Segoe UI',sans-serif;} table{width:100%;border-collapse:collapse;}`;
   const host=document.createElement('div');
   host.style.cssText=`position:fixed;left:0;top:0;width:${W}px;background:#fff;z-index:-1;opacity:0;pointer-events:none;`;
-  host.innerHTML=`<div dir="rtl" style="width:${W}px;padding:${PAD}px;background:#fff;color:#111;direction:rtl;font-family:Arial,'Segoe UI',sans-serif;"><style>${css}</style>${execLogHtml({company:COMPANY,docNum:log.docNum||"",log,chemicals:CHEMICALS})}</div>`;
+  host.innerHTML=`<div dir="rtl" style="width:${W}px;padding:${PAD}px;background:#fff;color:#111;direction:rtl;font-family:Arial,'Segoe UI',sans-serif;"><style>${css}</style>${innerHtml}</div>`;
   document.body.appendChild(host);
   try{
     const root=host.firstChild;
@@ -1276,16 +1277,19 @@ function execLogNiceName(log){ const d=String(log.date||"").split("-"); const ds
 // מעלה את ה-PDF ומחזיר קישור קצר באתר (hadbara360.co.il/d/?1006-301026-xxxx); אם אי אפשר — קישור מאובטח לשנה
 async function uploadExecLogPdf(log){
   const blob=await execLogPdfBlob(log);
+  return uploadPdfBlob(blob,String(log.docNum||log.id||"x"),log.date,execLogNiceName(log));
+}
+async function uploadPdfBlob(blob,numStr,date,niceName){
   if(!sb) throw new Error('אין חיבור לשרת');
-  const d=String(log.date||"").split("-"); const ds=d.length===3?d[2]+d[1]+d[0].slice(2):"";
+  const d=String(date||"").split("-"); const ds=d.length===3?d[2]+d[1]+d[0].slice(2):"";
   const rnd=Array.from(crypto.getRandomValues(new Uint8Array(8))).map(x=>"abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x%56]).join("");
-  const id=[String(log.docNum||log.id||"x").replace(/[^0-9A-Za-z]/g,""),ds,rnd].filter(Boolean).join("-");
+  const id=[String(numStr||"x").replace(/[^0-9A-Za-z]/g,""),ds,rnd].filter(Boolean).join("-");
   const pub=await sb.storage.from('docs').upload(id+".pdf",blob,{contentType:'application/pdf',upsert:false});
   if(!pub.error) return {url:"hadbara360.co.il/d/?"+id,blob};
   const path=`execlogs/${id}.pdf`;
   const up=await sb.storage.from('contracts').upload(path,blob,{contentType:'application/pdf',upsert:false});
   if(up.error) throw up.error;
-  const su=await sb.storage.from('contracts').createSignedUrl(path,60*60*24*365,{download:execLogNiceName(log)});
+  const su=await sb.storage.from('contracts').createSignedUrl(path,60*60*24*365,{download:niceName});
   if(su.error) throw su.error;
   return {url:su.data.signedUrl,blob};
 }
@@ -1305,6 +1309,48 @@ async function sendExecLogWA(log,phone){
     try{ if(w) w.close(); }catch(_){}
     if(confirm("יצירת ה-PDF נכשלה ("+(e.message||e)+").\nלשלוח במקום סיכום בהודעת טקסט?")) window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(execLogWAText(log)),"_blank");
   }
+}
+// ── מסמך חשבונאי כ-PDF + שליחה יחד עם יומן הביצוע ──
+function docNiceName(doc){ const d=String(doc.date||"").split("-"); const ds=d.length===3?d[2]+"."+d[1]+"."+d[0]:""; return doc.docType.replace("/"," ")+" "+String(doc.docSeq||"").padStart(4,"0")+" - "+(COMPANY.legalName||COMPANY.name)+(ds?" - "+ds:"")+".pdf"; }
+async function docPdfBlob(doc){ return htmlPdfBlob(docHtml(doc)); }
+async function sendLogAndDocWA(log,doc,phone){
+  const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
+  if(!ph) return alert("אין טלפון ללקוח");
+  const w=window.open("","_blank");
+  try{ if(w) w.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;font-size:20px;text-align:center">⏳ מכין את המסמכים כ-PDF...</body></html>'); }catch(e){}
+  try{
+    const parts=[];
+    if(log){ const {url}=await uploadExecLogPdf(log); parts.push("📋 יומן ביצוע מס׳ "+(log.docNum||"")+":\n"+url); }
+    if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,"D"+String(doc.invoiceNum||doc.docSeq||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
+    const name=(log&&(log.contactName||log.clientName))||(doc&&((doc.cust&&doc.cust.contactName)||doc.customer))||"";
+    const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
+    const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
+    if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
+    try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
+  }catch(e){ try{ if(w) w.close(); }catch(_){} alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
+}
+async function shareLogAndDocPdf(log,doc){
+  try{
+    const files=[];
+    if(log) files.push(new File([await execLogPdfBlob(log)],execLogNiceName(log),{type:'application/pdf'}));
+    if(doc) files.push(new File([await docPdfBlob(doc)],docNiceName(doc),{type:'application/pdf'}));
+    if(navigator.canShare&&navigator.canShare({files})){ await navigator.share({files,title:COMPANY.name}); try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} return; }
+    files.forEach((f,i)=>setTimeout(()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500); },i*600));
+  }catch(e){ if(e&&e.name==="AbortError") return; alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
+}
+// מילוי חשבונית מתוך יומן ביצוע — שורה קצרה אחת (בלי פירוט היומן)
+const LOG_PAY_TO_DOC={"מזומן":"מזומן","ביט":"ביט","PayBox":"פייבוקס","פייבוקס":"פייבוקס","העברה בנקאית":"העברה בנקאית","העברה":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"};
+function docPrefillFromLog(log,customers){
+  const c=(customers||[]).find(x=>String(x.id)===String(log.customerId))||(customers||[]).find(x=>x.name===log.clientName)||null;
+  const t=(log.place&&log.place.type)||log.structureType||"";
+  const what={"דירה":"הדברת דירה","בית פרטי":"הדברת בית פרטי","בניין משותף":"הדברת בניין משותף","משרד":"הדברת משרד","עסק":"הדברת עסק","מחסן":"הדברת מחסן","מסעדה":"הדברת מסעדה","גן ילדים":"הדברת גן ילדים"}[t]||(t?"הדברת "+t:"שירותי הדברה");
+  const desc=log.exterminate===false&&(log.services||[]).length?serviceLabel(log):what;
+  const price=String(log.agreedPrice||log.paymentAmount||"");
+  const paid=log.paymentDone===true||log.paymentStatus==="paid";
+  const type=paid?"חשבונית מס/קבלה":log.paymentStatus==="office"?"חשבונית מס":"חשבון עסקה";
+  return {type,prefill:{custId:c?c.id:null,custName:(c&&c.name)||log.clientName||"",taxId:(c&&c.taxId)||"",apptId:log.apptId||"",execLogId:log.id,execDocNum:log.docNum||"",date:log.date&&log.date<=todayStr()?log.date:todayStr(),
+    inclVat:true,lines:[{desc,qty:"1",unit:"יח׳",price}],
+    payments:paid?[{method:LOG_PAY_TO_DOC[log.paymentMethod]||"אחר",amount:String(log.paymentAmount||price),date:log.date||todayStr(),details:LOG_PAY_TO_DOC[log.paymentMethod]?{}:{note:log.paymentMethod||""}}]:[]}};
 }
 // שיתוף כקובץ (בטלפון נפתח תפריט השיתוף — וואטסאפ, מייל...) או הורדה במחשב
 async function shareExecLogPdf(log){
@@ -1414,7 +1460,7 @@ function clientQuoteHtml({company,customerName,date,timeWindow,address,quote,pri
 function jobProgress(appt, execLogs, finance){
   const log = execLogs?.find(l=>l.apptId===appt.id&&!l.deleted) || appt.executionLog || null;
   const workDone = !!log || appt.status==="בוצע";
-  const docs = (finance||[]).filter(f=>!f.deleted&&f.category==="חשבונית"&&(String(f.apptId)===String(appt.id)||(log&&f.execLogId!=null&&String(f.execLogId)===String(log.id))));
+  const docs = (finance||[]).filter(f=>!f.deleted&&f.category==="חשבונית"&&(String(f.apptId)===String(appt.id)||(log&&f.execLogId!=null&&String(f.execLogId)===String(log.id))||(log&&(f.execLogIds||[]).map(String).includes(String(log.id)))));
   const invoice = docs.find(f=>{const t=f.docType||"חשבונית מס/קבלה"; return t==="חשבונית מס"||t==="חשבונית מס/קבלה";}) || null;
   const invoiced = !!invoice || !!(log&&log.invoiceNum);
   const paid = (log?.paymentDone===true) || (invoice && invoice.status==="שולם") || docs.some(f=>f.docType==="קבלה"||f.docType==="חשבונית מס/קבלה");
@@ -2244,10 +2290,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
-    {(()=>{ const go=send=>{ if(!valid) return alert(f.exterminate?"שם לקוח, כתובת ומזיקים – חובה, ולפחות חומר הדברה או מוצר הדברה אחד":"שם לקוח, כתובת ובחירת השירות שבוצע – חובה"); if(f.exterminate&&missingLevel.length) return alert("בחר רמת נגיעות ל: "+missingLevel.join(", ")); if(missingBatch.length) return alert("חסר מספר אצווה ל: "+missingBatch.map(m=>m.name).join(", ")); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send}); };
+    {(()=>{ const go=(send,inv)=>{ if(!valid) return alert(f.exterminate?"שם לקוח, כתובת ומזיקים – חובה, ולפחות חומר הדברה או מוצר הדברה אחד":"שם לקוח, כתובת ובחירת השירות שבוצע – חובה"); if(f.exterminate&&missingLevel.length) return alert("בחר רמת נגיעות ל: "+missingLevel.join(", ")); if(missingBatch.length) return alert("חסר מספר אצווה ל: "+missingBatch.map(m=>m.name).join(", ")); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send,invoice:!!inv}); };
       return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Btn full onClick={()=>go(true)} style={{flex:"2 1 200px",background:"#25D366",border:"none"}}>📤 שמור ושלח ללקוח</Btn>
-        <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 120px"}}>💾 שמור</Btn>
+        <Btn full onClick={()=>go(false,true)} style={{flex:"2 1 220px",background:"#0f766e",border:"none"}}>🧾 שמור והמשך לחשבונית</Btn>
+        <Btn full onClick={()=>go(true)} style={{flex:"1 1 150px",background:"#25D366",border:"none"}}>📤 שמור ושלח</Btn>
+        <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 100px"}}>💾 שמור</Btn>
       </div>; })()}
     {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* חובה: שם לקוח, כתובת, מזיקים + רמת נגיעות, חומר או מוצר הדברה, אצווה לכל חומר</div>}
     </div>
@@ -2268,7 +2315,7 @@ class ErrorBoundary extends React.Component{
       <div style={{fontSize:11,color:"#94a3b8",marginTop:14,direction:"ltr"}}>{String(this.state.err&&this.state.err.message||"")}</div>
     </div>; }
 }
-function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}){
+function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,finance=[],customers=[],setCustomers,appointments=[],onSaveDoc,autoInvoice=false}){
   // Form data and saved logs use different field names — normalize so the preview never crashes
   const src={...(saved||{}),...(rawData||{})};
   const data={...src,
@@ -2276,16 +2323,33 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel}
     materials:src.materials||[], pest:src.pest||[], scope:src.scope||[]};
   const docNum=data.docNum||saved?.docNum||"(יוקצה בשמירה)";
   const log=saved||data;
+  // חשבונית שמקושרת ליומן הזה
+  const [localDoc,setLocalDoc]=useState(null);
+  const [docReq,setDocReq]=useState(null);
+  const linkedDoc=localDoc||(saved?(finance||[]).filter(f=>isDocRec(f)&&String(f.execLogId)===String(saved.id)&&docTypeOf(f)!=="קבלה"&&docTypeOf(f)!=="חשבונית זיכוי").slice(-1)[0]:null)||null;
+  const openInvoice=()=>{ if(!saved) return; setDocReq(docPrefillFromLog({...saved,...(rawData||{}),id:saved.id,docNum:saved.docNum},customers)); };
+  React.useEffect(()=>{ if(autoInvoice&&saved&&!linkedDoc) openInvoice(); },[autoInvoice,saved&&saved.id]);
+  const logForSend={...log,docNum};
   return <div>
     {saved&&<div style={{background:"#dcfce7",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"10px 14px",marginBottom:12,fontWeight:700,fontSize:14}}>✅ יומן הביצוע נשמר במערכת אוטומטית ({docNum})</div>}
+    {saved&&onSaveDoc&&<div style={{background:linkedDoc?"#f0fdfa":"#fff",border:"1.5px solid "+(linkedDoc?"#5eead4":"#e2e8f0"),borderRadius:12,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      {linkedDoc?<>
+        <span style={{fontWeight:800,color:"#0f766e",flex:1}}>🧾 {docTypeOf(linkedDoc)} {linkedDoc.invoiceNum} · {money(linkedDoc.total!=null?linkedDoc.total:linkedDoc.amount)} ✓</span>
+        <Btn sm v="secondary" onClick={()=>printDoc(linkedDoc)}>👁 הצג</Btn>
+      </>:<>
+        <span style={{flex:1,fontSize:14,color:"#334155"}}>עוד לא הופקה חשבונית ליומן הזה</span>
+        <Btn sm onClick={openInvoice} style={{background:"#0f766e",border:"none"}}>🧾 הפק חשבונית</Btn>
+      </>}
+    </div>}
     <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
       <Btn v="ghost" sm onClick={onBack}>← {saved?"תיקון":"חזרה לעריכה"}</Btn>
-      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); sendExecLogWA({...log,docNum},phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 שלח ללקוח</Btn>
-      <Btn sm v="secondary" onClick={()=>shareExecLogPdf({...log,docNum})}>📎 קובץ PDF</Btn>
+      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); if(linkedDoc) sendLogAndDocWA(logForSend,linkedDoc,phone); else sendExecLogWA(logForSend,phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 {linkedDoc?"שלח ללקוח (יומן + חשבונית)":"שלח ללקוח"}</Btn>
+      <Btn sm v="secondary" onClick={()=>linkedDoc?shareLogAndDocPdf(logForSend,linkedDoc):shareExecLogPdf(logForSend)}>📎 {linkedDoc?"2 קבצי PDF":"קובץ PDF"}</Btn>
       <Btn sm v="secondary" onClick={()=>printExecLog({...log,docNum})}>🖨️ הדפסה</Btn>
       {saved&&<Btn sm v="secondary" onClick={()=>sendReviewRequest(log.clientName,phone)} style={{background:"#fef9c3",color:"#854d0e",border:"1px solid #fde047"}}>⭐ בקשת ביקורת</Btn>}
       {onApprove&&<Btn onClick={onApprove} style={{flex:1}}>{approveLabel||"✓ סיום"}</Btn>}
     </div>
+    {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={rec=>{ const sv=onSaveDoc(rec); setLocalDoc(sv||rec); }}/>}
     <div style={{background:"#fff",color:"#111",borderRadius:12,padding:"28px 32px",fontFamily:"Arial,sans-serif",direction:"rtl",lineHeight:1.7}}>
       <div style={{display:"flex",justifyContent:"space-between",borderBottom:"2px solid #1a5c3a",paddingBottom:14,marginBottom:18}}>
         <div><img src="logo.png" alt={COMPANY.name} style={{height:52,width:"auto",display:"block"}}/>{COMPANY.licensePrefix&&<div style={{fontSize:11,color:"#555"}}>{COMPANY.licensePrefix}</div>}</div>
@@ -2385,20 +2449,22 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   const finish=()=>{ setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
 
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setSavedLog(null);setFormKey(k=>k+1);setMode("new");};
-  const handlePreview=(data,opt={})=>{const log=handleSave(data);setPreviewData(data);setExtracted(data);setMode("preview");if(opt.send&&data.phone) sendExecLogWA(log,data.phone);};
+  const [autoInv,setAutoInv]=useState(false);
+  const saveDocTab=rec=>{ const saved={...rec,id:nextId(finance||[])}; setFinance&&setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x)); return saved; };
+  const handlePreview=(data,opt={})=>{const log=handleSave(data);setPreviewData(data);setExtracted(data);setAutoInv(!!opt.invoice);setMode("preview");if(opt.send&&data.phone) sendExecLogWA(log,data.phone);};
 
   if(viewLog) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
       <div style={{display:"flex",gap:10,marginBottom:16}}>
         <Btn v="ghost" sm onClick={()=>setViewLog(null)}>← חזרה</Btn>
       </div>
-      <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} saved={viewLog} phone={viewLog.phone||(customers.find(c=>String(c.id)===String(viewLog.customerId))||customers.find(c=>c.name===viewLog.clientName)||{}).phone} onBack={()=>setViewLog(null)}/>
+      <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} saved={viewLog} phone={viewLog.phone||(customers.find(c=>String(c.id)===String(viewLog.customerId))||customers.find(c=>c.name===viewLog.clientName)||{}).phone} onBack={()=>setViewLog(null)} finance={finance} customers={customers} appointments={appointments} onSaveDoc={saveDocTab}/>
     </div>
   );
 
   if(mode==="preview"&&previewData) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a"}}>
-      <ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone} onBack={()=>{setFormKey(k=>k+1);setMode("new");}} onApprove={finish}/>
+      <ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone} onBack={()=>{setAutoInv(false);setFormKey(k=>k+1);setMode("new");}} onApprove={finish} finance={finance} customers={customers} appointments={appointments} onSaveDoc={saveDocTab} autoInvoice={autoInv}/>
     </div>
   );
 
@@ -3179,7 +3245,8 @@ function InvoiceModal({appt,customers,onClose,onSave}){
 }
 
 // Execution-log modal launched from the calendar — dark themed, prefilled from the appointment
-function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[]}){
+function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[],finance=[],appointments=[]}){
+  const [autoInv,setAutoInv]=useState(false);
   const [step,setStep]=useState("form"); // form | preview | done
   const [previewData,setPreviewData]=useState(null);
   const [savedLog,setSavedLog]=useState(null);
@@ -3190,7 +3257,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
   const [savedInvoice,setSavedInvoice]=useState(null);
 
   const handleApprove=()=>{ setStep("done"); };
-  const autoSave=(d,opt={})=>{ const log=onSave(d,savedLog); setSavedLog(log); setPreviewData(d); setStep("preview"); if(opt.send&&d.phone) sendExecLogWA(log,d.phone); };
+  const autoSave=(d,opt={})=>{ const log=onSave(d,savedLog); setSavedLog(log); setPreviewData(d); setAutoInv(!!opt.invoice); setStep("preview"); if(opt.send&&d.phone) sendExecLogWA(log,d.phone); };
 
   const handleCreateInvoice=()=>{
     const vat=Math.round(appt.price*0.18);
@@ -3214,7 +3281,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
 
       {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={previewData} onPreview={autoSave} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}/>}
 
-      {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={()=>setStep("form")} onApprove={handleApprove} approveLabel="המשך לחשבונית →"/>}
+      {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={()=>{setAutoInv(false);setStep("form");}} onApprove={onClose} approveLabel="✓ סיום — למשימה הבאה" finance={finance} customers={customers} appointments={appointments} onSaveDoc={rec=>onSaveInvoice(rec)} autoInvoice={autoInv}/>}
 
       {step==="done"&&<div>
         <div style={{textAlign:"center",padding:"10px 0 20px"}}>
@@ -3789,7 +3856,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onClose={()=>setDupAppt(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
-      currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}
+      currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance} finance={finance} appointments={appointments}
       onClose={()=>{setLogAppt(null);setDetailAppt(null);backIfReq();}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
   </div>;
 }
@@ -5447,7 +5514,7 @@ function docHtml(doc){
   const c=doc.cust||{};
   return `
   <div style="max-width:740px;margin:0 auto;position:relative;">
-    ${doc.draft?`<div style="position:fixed;top:40%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
+    ${doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:16px;">
       <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:60px;width:auto;display:block;"/>
         <div style="font-size:12px;color:#333;margin-top:4px;"><b>${COMPANY.legalName||COMPANY.name}</b> · עוסק מורשה ${COMPANY.taxId}</div>
@@ -5563,7 +5630,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       status:T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"",
-      refDocId:P.refDocId||null, refText:P.refText||"",
+      refDocId:P.refDocId||null, refText:P.refText||"", execLogIds:P.execLogIds||null,
       phone:cx.phone||"", address:(a&&a.address)||cx.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
       notes, footer, privateNote, createdAt:new Date().toISOString(),
     };
@@ -5754,6 +5821,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       return out;
     });
     if(rec.execLogId&&setExecLogs) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x));
+    if(rec.execLogIds&&setExecLogs){ const ids=rec.execLogIds.map(String); setExecLogs(ls=>ls.map(x=>ids.includes(String(x.id))?{...x,invoiceNum:rec.invoiceNum}:x)); }
   };
   const follow=(f,type)=>{
     const base={custId:f.customerId,custName:f.customer,taxId:(f.cust||{}).taxId||"",apptId:f.apptId||"",execLogId:f.execLogId||null,execDocNum:f.execDocNum||"",refDocId:f.id,refText:docTypeOf(f)+" "+(f.invoiceNum||""),lockType:true,
@@ -5762,6 +5830,16 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     setDocReq({type,prefill:base});
   };
   const act={background:"none",border:`1px solid ${CLR.border}`,borderRadius:6,padding:"3px 8px",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"};
+  // חשבונית מרכזת: כמה ביקורים של אותו לקוח בחשבונית אחת
+  const [consol,setConsol]=useState(null); // {custKey, picked:Set}
+  const isInvoicedLog=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&((f.execLogId&&String(f.execLogId)===String(l.id))||(f.execLogIds||[]).map(String).includes(String(l.id))));
+  const openLogsByCust=React.useMemo(()=>{ const m={}; (execLogs||[]).filter(l=>!l.deleted&&!isInvoicedLog(l)).forEach(l=>{ const c=custOf(l); const k=c?"c"+c.id:"n"+(l.clientName||""); (m[k]=m[k]||{cust:c,name:c?c.name:l.clientName,logs:[]}).logs.push(l); }); return m; },[execLogs,finance,customers]);
+  const startConsol=()=>{ const k=consol.custKey; const g=openLogsByCust[k]; const logs=g.logs.filter(l=>consol.picked.has(String(l.id))).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(!logs.length) return alert("סמן לפחות ביקור אחד");
+    setConsol(null);
+    setDocReq({type:"חשבונית מס",prefill:{custId:g.cust?g.cust.id:null,custName:g.name,taxId:(g.cust&&g.cust.taxId)||"",execLogIds:logs.map(l=>l.id),refText:"חשבונית מרכזת — "+logs.length+" ביקורים",inclVat:true,
+      lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
+  };
   return <div>
     <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן הם תבניות לבדיקת הזרימה. המסמכים הרשמיים ימשיכו לצאת ב"יש חשבונית" עד שנחבר את המערכת לתוכנה רשומה.</div>
     <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
@@ -5772,6 +5850,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       {["חשבונית מס/קבלה","חשבונית מס","חשבון עסקה","קבלה"].map(t=><Btn key={t} sm onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{background:DOC_TYPES[t].color,color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ {t}</Btn>)}
+      <Btn sm onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{background:"#7c3aed",color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ חשבונית מרכזת</Btn>
     </div>
     {pendingInv.length>0&&<div style={{background:"#fff7ed",border:"1.5px solid #fdba74",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
       <div style={{fontWeight:800,fontSize:15,color:"#9a3412",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית מס/קבלה ({pendingInv.length})</div>
@@ -5827,6 +5906,19 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     </div>
     <div style={{fontSize:12,color:CLR.muted,marginTop:8}}>מסמך חשבונאי לא מוחקים — מבטלים אותו בחשבונית זיכוי. חשבון עסקה אפשר להעביר לארכיון.</div>
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
+    {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
+      <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
+      <Sel label="לקוח" value={consol.custKey} onChange={v=>setConsol({custKey:v,picked:new Set((openLogsByCust[v]||{logs:[]}).logs.map(l=>String(l.id)))})} options={[{v:"",l:"— בחר לקוח —"},...Object.entries(openLogsByCust).map(([k,g])=>({v:k,l:g.name+" ("+g.logs.length+" ביקורים פתוחים)"}))]}/>
+      {consol.custKey&&openLogsByCust[consol.custKey]&&<div style={{border:"1px solid #e2e8f0",borderRadius:10,marginBottom:12}}>
+        {openLogsByCust[consol.custKey].logs.sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{const on=consol.picked.has(String(l.id));return <label key={l.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer"}}>
+          <input type="checkbox" checked={on} onChange={()=>{const n=new Set(consol.picked); on?n.delete(String(l.id)):n.add(String(l.id)); setConsol({...consol,picked:n});}}/>
+          <span style={{flex:1,fontSize:14}}>{fmtDate(l.date)} · יומן {l.docNum} · {(l.pest||[]).join(", ")||serviceLabel(l)}</span>
+          <b>{l.agreedPrice?"₪"+l.agreedPrice:"—"}</b>
+        </label>;})}
+      </div>}
+      {Object.keys(openLogsByCust).length===0&&<div style={{textAlign:"center",color:CLR.muted,padding:16}}>אין ביקורים פתוחים לחיוב</div>}
+      <div style={{display:"flex",gap:8}}><Btn full onClick={startConsol} disabled={!consol.custKey}>המשך לחשבונית →</Btn><Btn v="ghost" onClick={()=>setConsol(null)}>ביטול</Btn></div>
+    </Modal>}
   </div>;
 }
 
