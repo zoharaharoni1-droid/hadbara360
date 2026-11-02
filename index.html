@@ -2076,7 +2076,7 @@ function MicButton({onText,label="🎤 דבר"}){
   const refresh=()=>{ setLive(joined()); setBusy(segs.current.filter(s=>s.status==="pending").length); };
   const cleanup=()=>{ const x=R.current; clearInterval(x.tick); try{x.proc&&(x.proc.onaudioprocess=null,x.proc.disconnect());}catch(e){} try{x.src&&x.src.disconnect();}catch(e){} try{x.stream&&x.stream.getTracks().forEach(t=>t.stop());}catch(e){} try{x.ac&&x.ac.close();}catch(e){} R.current={}; };
   React.useEffect(()=>{ const vis=()=>setHidden(document.visibilityState!=="visible"); document.addEventListener("visibilitychange",vis); return()=>{ document.removeEventListener("visibilitychange",vis); R.current.dead=true; cleanup(); }; },[]);
-  const sendSeg=seg=>{ seg.status="pending"; seg.p=transcribeAudio(seg.wav).then(t=>{ seg.status="ok"; seg.text=t; },e=>{ seg.status="err"; seg.err=e.message||"התמלול נכשל"; }).finally(refresh); refresh(); return seg.p; };
+  const sendSeg=seg=>{ seg.status="pending"; seg.p=transcribeAudio(seg.wav).then(t=>{ seg.status="ok"; seg.text=(t||"").replace(/[\s.,]+/g," ").trim().length<=1?"":t; },e=>{ seg.status="err"; seg.err=e.message||"התמלול נכשל"; }).finally(refresh); refresh(); return seg.p; };
   const flush=(force)=>{ const x=R.current; if(!x.buf||!x.bufLen) return;
     const had=x.hadSpeech; const chunks=x.buf; x.buf=[]; x.bufLen=0; x.hadSpeech=false; x.silent=0;
     if(!had&&!force) return; if(!had) return;
