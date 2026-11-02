@@ -5159,6 +5159,7 @@ function waParse(raw, cityNames){
         const clean=t=>t.replace(/(?<![א-ת])(?:טלפון|טל['׳]|נייד|פלאפון|מספר|מס['׳])(?![א-ת])\s*(?:של)?/g," ").replace(/[:\-–,.()|/]+/g," ").replace(/\s+/g," ").trim();
         const bp=before.split(/[,.!;]/).pop(), ap=after.split(/[,.!;]/)[0]; const full=clean(bp)||clean(ap); let lab=clean(bp)?clean(bp).split(" ").slice(-3).join(" "):clean(ap).split(" ").slice(0,3).join(" "); const rm=full.match(ROLE); if(rm&&!ROLE.test(lab)) lab=rm[0]; lab=lab.replace(/(?:^|\s)(?:חצי|שעה|לפני|לחייג|יחייג|להתקשר|תתקשר|אליו|אליה)(?=\s|$)/g," ").replace(/\s+/g," ").trim(); if(/לחייג|יחייג|חייג|להתקשר|תתקשר|אליו|אליה|לפני|דקות|שעה|הנחיות|קליטה/.test(lab)&&!ROLE.test(lab)) lab=""; if(/\d/.test(lab)||lab.split(" ").length>5) lab=(clean(after).split(" ").length<=5&&!/\d/.test(clean(after)))?clean(after):"";
         const ik2=lab.match(/^(.*?(?:איש|אשת)\s*(?:ה)?קשר)\s+([א-ת'׳"]{2,}(?:\s[א-ת'׳"]{2,})?)$/); if(ik2){ cts.push({phone:ph,role:ik2[1],name:ik2[2]}); return; }
+        lab=lab.replace(/\s+/g," "); if(out.city) [out.city,...cities.filter(c=>(WA_CITY_NORM[c]||c)===out.city)].forEach(c=>{ if(lab.includes(c)) lab=lab.replace(c," "); }); lab=lab.replace(/(?:^|\s)(?:רחוב|רח['׳]|מחיר|שח|ש"ח)(?=\s|$)/g," ").replace(/\s+/g," ").trim();
         const isRole=ROLE.test(lab); cts.push({phone:ph,role:isRole?lab:"",name:!isRole&&/^[א-ת'׳"]{2,}(?:\s[א-ת'׳"]{2,}){0,2}$/.test(lab)&&!WA_PEST_WORD.test(lab)?lab:""}); WA_PEST_WORD.lastIndex=0; }); });
     if(cts.length>1||(cts.length===1&&(cts[0].role||cts[0].name))){ out.contacts=cts; if(cts.length>1) out.found.push(cts.length+" אנשי קשר"); }
     if(cts.length&&cts[0].phone) out.phone=cts[0].phone;
@@ -10149,17 +10150,23 @@ if('serviceWorker' in navigator){
       }
     };
 
-    // Worker כבר ממתין?
-    if(reg.waiting) showUpdateBanner();
-
+    // עדכון אוטומטי: בפתיחת האפליקציה (לפני שהתחלת לעבוד) הגרסה החדשה נכנסת לבד
+    const t0=Date.now(); const fresh=()=>Date.now()-t0<20000;
+    const apply=w=>{ try{ w.postMessage({type:'SKIP_WAITING'}); }catch(e){} };
+    if(reg.waiting) apply(reg.waiting);
     reg.addEventListener('updatefound', () => {
       const newWorker = reg.installing;
       newWorker.addEventListener('statechange', () => {
         if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
-          showUpdateBanner();
+          if(fresh()) apply(newWorker); else showUpdateBanner();
         }
       });
     });
+    try{ reg.update(); }catch(e){}
+    // חזרה לאפליקציה מהרקע — בודקים אם יש גרסה חדשה
+    let hiddenAt=0;
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'){ hiddenAt=Date.now(); return; }
+      if(hiddenAt&&Date.now()-hiddenAt>60000){ reg.update().then(()=>{ if(reg.waiting){ const busy=!!document.querySelector('textarea:focus,input:focus'); if(!busy) apply(reg.waiting); else showUpdateBanner(); } }).catch(()=>{}); } });
 
     // כשהעדכון ב-SKIP_WAITING → reload
     navigator.serviceWorker.addEventListener('controllerchange', () => {
