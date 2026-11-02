@@ -609,22 +609,25 @@ const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["ד�
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
 // ── מוצרי הדברה (לא כימיים): מלכודות, תחנות ניטור ואמצעי מניעה
 const DEVICE_TYPES = [
-  {g:"מכרסמים",items:["מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
+  {g:"מכרסמים",items:["תיבת הכלה כולל רעלים","מילוי רעל בתיבה קיימת","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
   {g:"חרקים",items:["תחנת ניטור לתיקנים","מלכודת פרומונים לעש מזון","מלכודת פרומונים לעש בגדים","מלכודת אור UV לזבובים","החלפת משטח דבק במלכודת אור","מלכודת זבובים (פיתיון)","מלכודת יתושים","מלכודת דבק לנחשים / עקרבים"]},
   {g:"מניעה",items:["אטימת פתחים (צמר פלדה / קצף)","דוקרנים נגד יונים","רשת נגד יונים"]},
 ];
-const DEVICE_SPOTS = ["מטבח","מתחת לכיור","ארונות","חדר שירות","מחסן","חצר","מרפסת","חדר אשפה","מקלט"];
+const DEVICE_SPOTS = ["היקף המבנה","חצר","חדר אשפה","חניה","מטבח","מתחת לכיור","ארונות","חדר שירות","מחסן","מרפסת","מקלט"];
 // ── זמני שהייה מחוץ למקום המטופל
 const REENTRY_GROUPS = [{k:"adults",l:"מבוגרים"},{k:"babies",l:"תינוקות עד גיל 2 ונשים בהריון"},{k:"animals",l:"בעלי חיים (כלבים, חתולים, ציפורים וכו')"}];
 // קבוצות ישנות (יומנים שנשמרו לפני הפישוט) — לתצוגה בלבד
 const REENTRY_LEGACY = [{k:"kids",l:"ילדים ותינוקות"},{k:"pregnant",l:"נשים בהריון"},{k:"pets",l:"כלבים וחתולים"},{k:"birds",l:"ציפורים ודגים"}];
-const REENTRY_OPTS = ["0.5","1","2","3","4","6","8","12","24","48"];
+const REENTRY_OPTS = ["0","0.5","1","2","3","4","6","8","12","24","48"];
 const normReentry = r => { r=r||{}; const mx=(...v)=>{const n=v.map(parseFloat).filter(x=>!isNaN(x)); return n.length?String(Math.max(...n)):"";};
   return {adults:r.adults||"", babies:r.babies||mx(r.kids,r.pregnant), animals:r.animals||mx(r.pets,r.birds)}; };
-const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
+const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(n===0) return "אין צורך לצאת"; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
 const REENTRY_LABEL_ADULTS = {"דלתא סופר":"1","טמפריד":"1","דינופליי":"1"};
 const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g.k]);
-const reentryLines = r => reentryShown(r).map(g=>g.l+": "+hrsLabel(r[g.k]));
+const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.every(g=>parseFloat(r[g.k])===0); };
+const reentryLines = r => { const sh=reentryShown(r); if(sh.length&&sh.every(g=>parseFloat(r[g.k])===0)) return ["אין צורך לצאת מהמקום"]; return sh.map(g=>g.l+": "+hrsLabel(r[g.k])); };
+// תחנות/תיבות האכלה: חדשות שהובאו + מילוי של קיימות
+const stationsText = m => { const n=parseInt(m&&m.stationsNew)||0, r=parseInt(m&&m.stationsRefill)||0; if(n||r) return [n?n+" תיבות הכלה חדשות":"",r?"מילוי "+r+" תיבות קיימות":""].filter(Boolean).join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
 // ── הנחיות ללקוח — כפתורים מוכנים
 const INSTR_BASE = [
   "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
@@ -641,11 +644,16 @@ const INSTR_BY_PEST = [
   {m:["פשפש"],t:["לכבס מצעים ובגדים ב־60 מעלות לפחות","לא לישון על המיטה המטופלת 24 שעות"]},
   {m:["תיקן","ג'וק","ג׳וק"],t:["לא לנקות את נקודות הג'ל","לא להשאיר מזון ומים זמינים בלילה"]},
   {m:["נמל"],t:["לא לרסס חומרים אחרים על שבילי הנמלים"]},
-  {m:["עכבר","חולד","מכרסם"],t:["לדווח לנו על פגרים או ריח","לא להשאיר מזון פתוח"]},
+  {m:["עכבר","חולד","מכרסם"],t:["לדווח לנו על פגרים או ריח","לא להשאיר מזון פתוח","לסגור פתחים וחורים שדרכם המכרסמים נכנסים"]},
   {m:["יתוש"],t:["לרוקן מים עומדים בחצר, בעציצים ובמרזבים"]},
   {m:["זבוב"],t:["לסגור פחי אשפה ולפנות אשפה באופן קבוע"]},
   {m:["צרע","דבור"],t:["לא להתקרב לאזור הקן 24 שעות"]},
 ];
+const INSTR_SPRAY = INSTR_BASE.slice(0,5);
+const INSTR_TRAPS = ["לא להזיז ולא לגעת במלכודות ובתחנות","להרחיק ילדים וחיות מחמד מהמלכודות והתחנות"];
+const INSTR_RODENT_BAIT = ["אין צורך לצאת מהבית ואין הגבלה על שטיפת רצפה ומשטחים — הפיתיון נמצא בתיבות סגורות","לא לפתוח את התיבות ולא להוציא מהן את הפיתיון","פעילות המכרסמים אמורה לרדת בהדרגה תוך 7–14 ימים"];
+const isRodent = pests => /עכבר|חולד|מכרסם/.test((pests||[]).join(" "));
+const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרסם|נחש|יונ/.test(p));
 const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
 // שירותים שאינם הדברה (ניטור, לכידה, יונים...) — נרשמים ביומן ביצוע ונשלחים ללקוח
 const OTHER_SERVICES = ["ניטור עקיצות / בדיקה","ניטור ואבחון מזיקים","פינוי קן יונים","הרחקת יונים (רשתות / דוקרנים)","לכידת נחשים","לכידת לטאות","פינוי פגר","בדיקת / מילוי תיבות האכלה","התקנת מלכודות / תחנות ניטור","אטימת פתחים ומניעה","ביקורת חוזרת (אחריות)","סקר מזיקים / ייעוץ לעסק"];
@@ -1122,7 +1130,7 @@ function execLogHtml({company,docNum,log,chemicals}){
       <td style="padding:7px 10px;font-weight:600;">${m.name}</td>
       <td style="padding:7px 10px;">${m.maker||ch.mfr||"—"}${m.reg?`<br><span style="font-size:10px;color:#666">רישום ${m.reg}</span>`:""}</td>
       <td style="padding:7px 10px;font-size:11px;">${m.active||ch.active||"—"}</td>
-      <td style="padding:7px 10px;">${m.method||ch.method||"—"}${m.stations?" · "+m.stations+" תחנות":""}${m.dose?`<br><span style="font-size:11px;color:#555">${m.dose}</span>`:""}</td>
+      <td style="padding:7px 10px;">${m.method||ch.method||"—"}${stationsText(m)?" · "+stationsText(m):""}${m.dose?`<br><span style="font-size:11px;color:#555">${m.dose}</span>`:""}</td>
       <td style="padding:7px 10px;font-size:11px;">${(m.areas||[]).join(", ")||"—"}</td>
       <td style="padding:7px 10px;color:#555;">${m.batch||"—"}</td>
     </tr>`;}).join("");
@@ -1163,7 +1171,7 @@ function execLogHtml({company,docNum,log,chemicals}){
     <tbody>${log.devices.map((d,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${d.type}</td><td style="padding:6px 10px;">${d.qty||1}</td><td style="padding:6px 10px;">${d.location||"—"}</td></tr>`).join("")}</tbody></table>`:""}
     ${reentryLines(log.reentry).length?`<div style="border:1.5px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#eff6ff;">
       <div style="font-weight:700;color:#1e40af;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${reentryShown(log.reentry).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
+      <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${reentryNone(log.reentry)?"<span><b>אין צורך לצאת מהמקום</b> — לכל הנוכחים</span>":reentryShown(log.reentry).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
     ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
       <ul style="margin:0;padding-right:18px;font-size:13px;line-height:1.8;">${log.instructions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
@@ -1190,7 +1198,7 @@ function printInvoice(inv){
 // שליחת סיכום יומן ביצוע ללקוח בוואטסאפ
 function execLogWAText(log){
   const pests=pestsWithLevels(log);
-  const mats=(log.materials||[]).filter(m=>m&&m.name).map(m=>"\n  • "+m.name+(m.active?" ("+m.active+")":"")+(m.method?" — "+m.method:"")+(m.stations?" · "+m.stations+" תחנות":"")+((m.areas||[]).length?" · "+m.areas.join(", "):"")).join("");
+  const mats=(log.materials||[]).filter(m=>m&&m.name).map(m=>"\n  • "+m.name+(m.active?" ("+m.active+")":"")+(m.method?" — "+m.method:"")+(stationsText(m)?" · "+stationsText(m):"")+((m.areas||[]).length?" · "+m.areas.join(", "):"")).join("");
   return ["שלום "+(log.contactName||log.clientName||"")+" 👋","",
     "מצורף סיכום הטיפול שבוצע אצלכם — "+COMPANY.name,
     "📅 תאריך: "+fmtDate(log.date),
@@ -1767,7 +1775,8 @@ function GridChoice({items,isOn,onToggle,onOther,otherLabel="אחר",min=128,sma
 function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]}){
   const reg=useRegProducts();
   const [q,setQ]=useState("");
-  const [cat,setCat]=useState(mine.length?"mine":"spray");
+  const [cat,setCat]=useState(isRodent(pests)?"rodent":mine.length?"mine":"spray");
+  const rodentP=isRodent(pests); React.useEffect(()=>{ if(rodentP) setCat("rodent"); },[rodentP]);
   const [customChem,setCustomChem]=useState("");
   const [customCat,setCustomCat]=useState("spray");
   const [showCustom,setShowCustom]=useState(false);
@@ -1839,7 +1848,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
         const needDose=m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim(); const needBatch=!String(m.batch||"").trim();
         if(!isOpen) return <div key={m.name+i} style={{display:"flex",alignItems:"center",gap:10,background:"#f8fafc",borderRadius:12,padding:"10px 12px",border:"1px solid "+(needDose||needBatch?"#fca5a5":CLR.border)}}>
           <button type="button" onClick={()=>setOpenMat(m.name)} style={{flex:1,minWidth:0,background:"none",border:"none",textAlign:"right",cursor:"pointer",fontFamily:"inherit",padding:0}}>
-            <span style={{display:"block",fontWeight:800,fontSize:14,color:"#0f172a"}}>🧪 {m.name} <span style={{fontWeight:500,fontSize:12,color:CLR.muted}}>· {m.method||"ריסוס"}{m.stations?" · "+m.stations+" תחנות":""}</span></span>
+            <span style={{display:"block",fontWeight:800,fontSize:14,color:"#0f172a"}}>🧪 {m.name} <span style={{fontWeight:500,fontSize:12,color:CLR.muted}}>· {m.method||"ריסוס"}{stationsText(m)?" · "+stationsText(m):""}</span></span>
             <span style={{display:"block",fontSize:12,color:needDose||needBatch?"#b91c1c":"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{needDose?"חסר מינון — לחץ למילוי":needBatch?"חסר מספר אצווה — לחץ למילוי":(m.dose||"")}{(m.areas||[]).length?" · "+m.areas.join(", "):""}</span>
           </button>
           <button type="button" onClick={()=>setOpenMat(m.name)} style={{border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",borderRadius:8,padding:"6px 10px",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0}}>ערוך</button>
@@ -1873,12 +1882,20 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               </select>
             </div>
           </div>
-          {m.method==="תחנת האכלה"&&<div style={{display:"flex",alignItems:"center",gap:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>🪤 מספר תחנות האכלה:</span>
-            <button type="button" onClick={()=>updateField(m.name,"stations",String(Math.max(0,(parseInt(m.stations)||0)-1)))} style={{width:34,height:34,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
-            <input type="number" inputMode="numeric" value={m.stations||""} onChange={e=>updateField(m.name,"stations",e.target.value)} style={{width:60,padding:"7px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:15,textAlign:"center"}}/>
-            <button type="button" onClick={()=>updateField(m.name,"stations",String((parseInt(m.stations)||0)+1))} style={{width:34,height:34,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button>
-          </div>}
+          {m.method==="תחנת האכלה"&&(()=>{ const cnt=(field,label,hint)=>{ const v=parseInt(m[field])||0; const upd=nv=>{ const o={...m,[field]:String(Math.max(0,nv))}; o.stations=String((parseInt(o.stationsNew)||0)+(parseInt(o.stationsRefill)||0)||""); onChange(selected.map(x=>x.name===m.name?o:x)); };
+              return <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0"}}>
+                <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:700,color:"#1e40af"}}>{label}<span style={{display:"block",fontSize:11,fontWeight:400,color:"#64748b"}}>{hint}</span></span>
+                <span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}><button type="button" onClick={()=>upd(v-1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
+                <input type="number" inputMode="numeric" value={m[field]||""} placeholder="0" onChange={e=>upd(parseInt(e.target.value)||0)} style={{width:54,padding:"7px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:16,textAlign:"center",fontWeight:700}}/>
+                <button type="button" onClick={()=>upd(v+1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button></span>
+              </div>; };
+            const legacyOnly=!m.stationsNew&&!m.stationsRefill&&m.stations;
+            return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 תיבות הכלה (אפשר גם וגם)</div>
+              {cnt("stationsNew","🆕 תיבות חדשות שהבאתי","נכנס אוטומטית ל\"מוצרי הדברה\" כתיבת הכלה כולל רעלים")}
+              {cnt("stationsRefill","🔄 מילוי תיבות קיימות","תיבות שכבר היו במקום — רק מילוי רעל")}
+              {legacyOnly&&<div style={{fontSize:12,color:"#64748b"}}>ביומן הישן נרשמו {m.stations} תחנות</div>}
+            </div>; })()}
           <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
           <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small limit={6}/>
           <button type="button" onClick={()=>setOpenMat(null)} style={{width:"100%",marginTop:10,padding:"9px",borderRadius:10,border:"1px solid #bfdbfe",background:"#fff",color:"#2563eb",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ סגור חומר</button>
@@ -1899,7 +1916,7 @@ function PestPickerDk({selected,onChange}){
   const btn=on=>({background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",border:`1.5px solid ${on?"#2563eb":"#e2e8f0"}`,borderRadius:8,padding:"7px 12px",fontSize:14,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
   return <div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))",gap:6}}>
-      {PEST_TYPES_LOG.filter(p=>!compact||morePests||MAIN_PESTS.includes(p)||selected.includes(p)||(p==="חרקי מזון"&&foodOn)).map(p=>{ const on=p==="חרקי מזון"?foodOn:selected.includes(p);
+      {[...PEST_TYPES_LOG].sort((a,b)=>(selected.includes(b)||(b==="חרקי מזון"&&foodOn))-(selected.includes(a)||(a==="חרקי מזון"&&foodOn))).filter(p=>!compact||morePests||MAIN_PESTS.includes(p)||selected.includes(p)||(p==="חרקי מזון"&&foodOn)).map(p=>{ const on=p==="חרקי מזון"?foodOn:selected.includes(p);
         return <button key={p} type="button" onClick={()=>toggle(p)} style={btn(on)}>{on?"✓ ":""}{p}{p==="חרקי מזון"?(foodOn?" ▲":" ▼"):""}</button>; })}
       {selected.filter(p=>!PEST_TYPES_LOG.includes(p)&&!FOOD_PESTS.includes(p)).map(p=><button key={p} type="button" onClick={()=>toggle(p)} style={btn(true)}>✓ {p}</button>)}
       {compact&&<button type="button" onClick={()=>setMorePests(m=>!m)} style={{...btn(false),border:"1.5px dashed #cbd5e1",color:"#475569"}}>{morePests?"פחות ▲":"+ עוד מזיקים"}</button>}
@@ -1939,7 +1956,7 @@ function PlaceEditor({place,onChange}){
   return <div>
     {!React.useContext(CompactCtx)&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מולא מההזמנה — אפשר לשנות לפי מה שבוצע בפועל. הנקודות עצמן (פנלים, ניקוזים...) נרשמות בכל חומר ב"אזורי יישום".</div>}
     <label style={lbl}>סוג המקום</label>
-    <GridChoice items={[...PLACE_TYPES,...(p.type&&!PLACE_TYPES.includes(p.type)?[p.type]:[])]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small limit={4}/>
+    <GridChoice items={[...(p.type?[p.type]:[]),...PLACE_TYPES.filter(t=>t!==p.type)]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small limit={4}/>
     {unit&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:10}}>
       <label><span style={lbl}>חדרים</span><select value={p.rooms||""} onChange={e=>set("rooms",e.target.value)} style={sel}><option value="">—</option>{["1","1.5","2","2.5","3","3.5","4","4.5","5","5.5","6","7","8","9","10"].map(o=><option key={o}>{o}</option>)}</select></label>
       <label><span style={lbl}>מפלסים</span><select value={p.levels||"1"} onChange={e=>set("levels",e.target.value)} style={sel}>{["1","2","3","4"].map(o=><option key={o}>{o}</option>)}</select></label>
@@ -1977,6 +1994,24 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
       <button type="button" onClick={onNext} style={{width:"100%",marginTop:12,padding:"11px",borderRadius:10,border:"none",background:"#2563eb",color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ סיום — לשלב הבא</button>
     </div>}
   </div>;
+}
+// ── הקלטה קולית: מדברים במקום להקליד (זיהוי דיבור של הדפדפן, בעברית, בחינם)
+function MicButton({onText,label="🎤 דבר"}){
+  const [on,setOn]=useState(false); const rec=React.useRef(null);
+  const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
+  React.useEffect(()=>()=>{try{rec.current&&rec.current.stop();}catch(e){}},[]);
+  const start=()=>{
+    if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
+    if(on){ try{rec.current.stop();}catch(e){} return; }
+    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=false;
+    r.onresult=e=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) t+=e.results[i][0].transcript; } t=t.trim(); if(t) onText(t); };
+    r.onerror=e=>{ setOn(false); if(e.error==="not-allowed"||e.error==="service-not-allowed") alert("צריך לאשר גישה למיקרופון בדפדפן."); };
+    r.onend=()=>setOn(false);
+    rec.current=r; try{ r.start(); setOn(true); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} }catch(e){ setOn(false); }
+  };
+  return <button type="button" onClick={start} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on?"h360pulse 1.2s infinite":"none"}}>
+    <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
+    {on?"⏺ מקליט… לחץ לעצירה":label}</button>;
 }
 function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[],maintenance=[]}){
   const chemMem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
@@ -2037,21 +2072,39 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   // מילוי אוטומטי של זמני שהייה והנחיות — לפי יומנים קודמים עם אותם חומרים, או לפי ברירת מחדל
   const touched=React.useRef({reentry:!!initialData?.reentry,instr:!!(initialData?.instructions||[]).length});
-  const matNames=f.materials.map(m=>m.name); const matKey=[...matNames].sort().join("|"); const pestKey=[...f.pest].sort().join("|");
+  const matNames=f.materials.map(m=>m.name); const matKey=[...matNames].sort().join("|")+"#"+f.materials.map(m=>m.method||"").join(",")+"#"+f.devices.map(d=>d.type).sort().join(","); const pestKey=[...f.pest].sort().join("|");
+  const hasSpray=f.materials.some(m=>!m.method||["ריסוס","ערפול","אבקה","פיזור גרגירים"].includes(m.method));
+  const hasBait=f.materials.some(m=>m.method==="תחנת האכלה")||f.devices.length>0;
+  const rodentNow=isRodent([...f.pest,f.customPest]);
   React.useEffect(()=>{
-    if(!matNames.length) return;
-    const prev=suggestFromHistory(execLogs,f.workerName,matNames,f.pest);
-    const hasSpray=f.materials.some(m=>!m.method||m.method==="ריסוס");
+    if(!matNames.length&&!f.devices.length) return;
+    const prev=matNames.length?suggestFromHistory(execLogs,f.workerName,matNames,f.pest):null;
     if(!touched.current.reentry){
       let r=prev&&prev.reentry?normReentry(prev.reentry):{};
-      if(!prev||!prev.reentry){ const lab=matNames.map(n=>REENTRY_LABEL_ADULTS[n]).filter(Boolean).map(Number); if(lab.length) r.adults=String(Math.max(...lab)); }
+      if(!prev||!prev.reentry){
+        if(!hasSpray&&(hasBait||f.materials.length)) r={adults:"0",babies:"0",animals:"0"};
+        else { const lab=matNames.map(n=>REENTRY_LABEL_ADULTS[n]).filter(Boolean).map(Number); if(lab.length) r.adults=String(Math.max(...lab)); }
+      }
       setF(x=>({...x,reentry:r}));
     }
     if(!touched.current.instr){
-      const ins=prev&&(prev.instructions||[]).length?prev.instructions:(hasSpray?INSTR_BASE.slice(0,2):[]);
+      let ins=prev&&(prev.instructions||[]).length?prev.instructions:null;
+      if(!ins){ ins=[...(hasSpray?INSTR_SPRAY.slice(0,2):[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&!hasSpray&&hasBait?[INSTR_RODENT_BAIT[0],"לדווח לנו על פגרים או ריח"]:[])]; }
       setF(x=>({...x,instructions:ins}));
     }
   },[matKey,pestKey]);
+  // תיבות הכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
+  const newBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsNew)||0),0);
+  const refillBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsRefill)||0),0);
+  React.useEffect(()=>{
+    const BOX="תיבת הכלה כולל רעלים", REF="מילוי רעל בתיבה קיימת";
+    setF(x=>{ let dv=[...x.devices];
+      const sync=(type,n)=>{ const i=dv.findIndex(d=>d.type===type);
+        if(n>0){ if(i<0) dv.push({type,qty:n,location:"",auto:true}); else if(dv[i].auto) dv[i]={...dv[i],qty:n}; }
+        else if(i>=0&&dv[i].auto) dv.splice(i,1); };
+      sync(BOX,newBoxes); sync(REF,refillBoxes);
+      return JSON.stringify(dv)===JSON.stringify(x.devices)?x:{...x,devices:dv}; });
+  },[newBoxes,refillBoxes]);
   const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:v}}));};
   const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
   const [instrAdd,setInstrAdd]=useState("");
@@ -2059,7 +2112,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [payMore,setPayMore]=useState(false);
   const [svcOpen,setSvcOpen]=useState(false);
   const addDevice=type=>setF(x=>({...x,devices:x.devices.some(d=>d.type===type)?x.devices:[...x.devices,{type,qty:1,location:""}]}));
-  const setDevice=(i,patch)=>setF(x=>({...x,devices:x.devices.map((d,j)=>j===i?{...d,...patch}:d)}));
+  const setDevice=(i,patch)=>setF(x=>({...x,devices:x.devices.map((d,j)=>j===i?{...d,...patch,...("qty" in patch?{auto:false}:{})}:d)}));
   const [devOpen,setDevOpen]=useState(false);
 
   const addExtraWorker=()=>set("extraWorkers",[...f.extraWorkers,{name:"",license:"",licenseType:""}]);
@@ -2149,6 +2202,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:8}}>
         {FINDINGS_QUICK.map(t=>{const on=f.findings.split("\n").includes(t);return <button key={t} type="button" onClick={()=>set("findings",on?f.findings.split("\n").filter(x=>x!==t).join("\n"):[...f.findings.split("\n").filter(Boolean),t].join("\n"))} style={{display:"flex",gap:8,alignItems:"center",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#2563eb":"#e2e8f0"),background:on?"#eff6ff":"#fff",color:"#0f172a",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}><span style={{flexShrink:0,width:18,height:18,borderRadius:5,border:"1.5px solid "+(on?"#2563eb":"#cbd5e1"),background:on?"#2563eb":"#fff",color:"#fff",fontSize:12,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span>{t}</button>;})}
       </div>
+      <div style={{marginBottom:6}}><MicButton onText={t=>setF(x=>({...x,findings:(x.findings?x.findings.replace(/\s+$/,"")+" ":"")+t}))}/></div>
       <textarea value={f.findings} onChange={e=>set("findings",e.target.value)} rows={4} placeholder="מה נבדק, מה נמצא, מה הומלץ ללקוח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical"}}/>
     </div>)}
     {(f.exterminate||f.materials.length>0)&&sec("chem","🧪","חומרי הדברה",f.materials.map(m=>m.name).join(", ")||(f.devices.length?"ללא חומר — מוצרי הדברה בלבד":""),missingBatch.length?"req":(f.materials.length?"ok":(f.devices.length||!f.exterminate?"opt":"req")),<>
@@ -2197,6 +2251,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     {f.exterminate&&sec("reentry","⏱️","זמן מחוץ למקום",reSum,reSum?"ok":"opt",<>
     <div>
+      {(()=>{const all0=REENTRY_GROUPS.every(g=>f.reentry[g.k]==="0");return <button type="button" onClick={()=>{touched.current.reentry=true;setF(x=>({...x,reentry:all0?{}:{adults:"0",babies:"0",animals:"0"}}));}} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,border:"1.5px solid "+(all0?"#16a34a":"#e2e8f0"),background:all0?"#dcfce7":"#fff",color:all0?"#14532d":"#334155",fontSize:15,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
+        <span style={{width:20,height:20,borderRadius:5,border:"1.5px solid "+(all0?"#16a34a":"#cbd5e1"),background:all0?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{all0?"✓":""}</span>✅ אין צורך לצאת מהמקום{!hasSpray&&hasBait?<span style={{fontWeight:400,fontSize:12,color:"#64748b"}}> (תיבות / מלכודות — בלי ריסוס)</span>:null}</button>;})()}
       {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"4px 0"}}>
         <span style={{fontSize:13,color:"#334155",fontWeight:600}}>{g.l}</span>
         <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{flexShrink:0,width:112,padding:"5px 8px",borderRadius:8,border:"1.5px solid "+(f.reentry[g.k]?"#2563eb":"#e2e8f0"),background:"#fff",fontSize:13,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
@@ -2209,9 +2265,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     {sec("instr","📋","הנחיות ללקוח",f.instructions.length?f.instructions.length+" הנחיות":"",f.instructions.length?"ok":"opt",<>
     <div>
+      <div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>מוצגות ההנחיות שמתאימות ל{allPests.length?allPests.join(", "):"טיפול"}{hasSpray?" · ריסוס":""}{hasBait?" · תיבות/מלכודות":""}. השאר — ב"עוד הנחיות".</div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
-        {(()=>{const all=[...new Set([...instrForPests(allPests),...INSTR_BASE,...f.instructions])]; if(logMode!=="flat"||instrMore) return all; const rest=all.filter(t=>!f.instructions.includes(t)).slice(0,3); return all.filter(t=>f.instructions.includes(t)||rest.includes(t));})().map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
-        {logMode==="flat"&&<button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות"}</button>}
+        {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[])])];
+          const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t));
+          return instrMore?[...rel,...rest]:rel;})().map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
+        <button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות (כלליות)"}</button>
       </div>
       <div style={{display:"flex",gap:6,marginTop:8}}>
         <input value={instrAdd} onChange={e=>setInstrAdd(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&instrAdd.trim()){toggleInstr(instrAdd.trim());setInstrAdd("");}}} placeholder="הנחיה נוספת..." style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:10,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit"}}/>
@@ -2223,7 +2282,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     {sec("notes","📝","הערות ואחריות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):"",f.warranty?"אחריות "+f.warranty+" חו׳":""].filter(Boolean).join(" · "),f.notes||f.warranty?"ok":"opt",<>
     <div style={{marginBottom:14}}>
       {prefillAppt?.notes&&<div style={{background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:8,padding:"7px 10px",marginBottom:8,fontSize:13,color:"#475569"}}>📌 <b>הערות מההזמנה (פנימי — לא נשלח ללקוח):</b> {prefillAppt.notes}</div>}
-      <label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:6,fontWeight:600}}>📝 הערות / תיאור הטיפול <span style={{fontWeight:400}}>(מופיע במסמך ללקוח)</span></label>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+        <label style={{fontSize:12,color:CLR.muted,fontWeight:600}}>📝 הערות / תיאור הטיפול <span style={{fontWeight:400}}>(מופיע במסמך ללקוח)</span></label>
+        <MicButton onText={t=>setF(x=>({...x,notes:(x.notes?x.notes.replace(/\s+$/,"")+" ":"")+t}))}/>
+      </div>
       <textarea value={f.notes} onChange={e=>set("notes",e.target.value)} rows={5} placeholder="למשל: ביצעתי ריסוס בפנלים כנגד תיקנים ונמלים, הונח ג'ל במטבח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical",minHeight:120}}/>
       {f.extermination_notes&&<div style={{fontSize:12,color:CLR.muted,marginTop:4}}>תיאור קודם: {f.extermination_notes}</div>}
     </div>
@@ -2378,7 +2440,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
           return <div key={i} style={{border:"1px solid #d1e7dc",borderRadius:8,padding:"8px 12px",marginBottom:8,background:i%2===0?"#f9fafb":"#fff",fontSize:13,lineHeight:1.6}}>
             <div style={{fontWeight:700,fontSize:14}}>{m.name}{(m.maker||m.reg)&&<span style={{fontWeight:400,fontSize:12,color:"#555"}}> · {m.maker}{m.reg?" · רישום "+m.reg:""}</span>}</div>
             <div><span style={lbl}>חומר פעיל: </span>{m.active||ch.active||"—"}</div>
-            <div><span style={lbl}>יישום: </span>{m.method||ch.method||"—"}{m.stations?" · "+m.stations+" תחנות":""}</div>
+            <div><span style={lbl}>יישום: </span>{m.method||ch.method||"—"}{stationsText(m)?" · "+stationsText(m):""}</div>
             {m.dose&&<div><span style={lbl}>מינון: </span>{m.dose}</div>}
             {(m.areas||[]).length>0&&<div><span style={lbl}>אזורים: </span>{m.areas.join(", ")}</div>}
             {m.batch&&<div><span style={lbl}>אצווה: </span>{m.batch}</div>}
@@ -2391,7 +2453,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
       </div>}
       {reentryLines(data.reentry).length>0&&<div style={{border:"1.5px solid #93c5fd",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#eff6ff"}}>
         <div style={{fontWeight:700,color:"#1e40af",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{reentryShown(data.reentry).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{reentryNone(data.reentry)?<span><b>אין צורך לצאת מהמקום</b> — לכל הנוכחים</span>:reentryShown(data.reentry).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
       </div>}
       {(data.instructions||[]).length>0&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
         <div style={{fontWeight:700,color:"#166534",fontSize:14,marginBottom:6}}>📋 הנחיות ללקוח</div>
@@ -6155,7 +6217,7 @@ function maintReportHtml(m, logs, ym){
   const list=logs.filter(l=>String(l.date||"").startsWith(ym)).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const esc=x=>String(x??"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
   const rows=list.map(l=>{
-    const mats=(l.materials||[]).map(x=>`<div><b>${esc(x.name)}</b>${x.active?` (${esc(x.active)})`:""}${x.method?" · "+esc(x.method):""}${x.batch?" · אצווה "+esc(x.batch):""}${x.stations?" · "+esc(x.stations)+" תחנות":""}${(x.areas||[]).length?"<br><span style='color:#555'>"+esc(x.areas.join(", "))+"</span>":""}</div>`).join("");
+    const mats=(l.materials||[]).map(x=>`<div><b>${esc(x.name)}</b>${x.active?` (${esc(x.active)})`:""}${x.method?" · "+esc(x.method):""}${x.batch?" · אצווה "+esc(x.batch):""}${stationsText(x)?" · "+esc(stationsText(x)):""}${(x.areas||[]).length?"<br><span style='color:#555'>"+esc(x.areas.join(", "))+"</span>":""}</div>`).join("");
     return `<tr><td style="padding:7px;border:1px solid #e5e7eb;white-space:nowrap">${fmtDate(l.date)}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc(l.workerName||"")}${l.workerLicense?"<br><span style='color:#555;font-size:11px'>רישיון "+esc(l.workerLicense)+"</span>":""}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc((l.pest||[]).join(", "))}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${mats||"—"}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${esc(l.extermination_notes||l.notes||"")}</td></tr>`;}).join("");
   const stations=m.stations||[];
   const checks=list.filter(l=>(l.stationChecks||[]).length);
