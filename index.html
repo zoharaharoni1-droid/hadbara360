@@ -5415,8 +5415,12 @@ function WAPasteBox({onApply,cityNames}){
   </div>;
 }
 
-function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed}){
-  const [f,setF]=useState({
+function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey}){
+  // 📝 טיוטה: מה שמילאת נשמר לבד — אפשר לעבור ללשונית אחרת ולחזור להמשיך
+  const DK=draftKey?"h360_draft_"+draftKey:null;
+  const draft0=React.useMemo(()=>{ if(!DK||initialParsed) return null; try{ const d=JSON.parse(localStorage.getItem(DK)||"null"); return d&&d.f?d:null; }catch(e){ return null; } },[]);
+  const [restored,setRestored]=useState(!!draft0);
+  const blankF=()=>({
     name:"",phone:"",email:"",
     city:"",street:"",buildingNum:"",aptNum:"",entrance:"",
     propertyType:"דירה",rooms:"3",levels:"1",floors:"",sewers:"",hasYard:false,floor:"קרקע",
@@ -5426,10 +5430,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     buildingAreas:[],
     prefDate:initialDate,timeFrom:initialTime||"08:00",timeTo:"10:00",
   });
+  const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const [showExistingSearch,setShowExistingSearch]=useState(false);
-  const [doSchedule,setDoSchedule]=useState(!!initialDate);
-  const [schedWorker,setSchedWorker]=useState(initialWorker||"");
+  const [doSchedule,setDoSchedule]=useState(draft0?!!draft0.doSchedule:!!initialDate);
+  const [schedWorker,setSchedWorker]=useState(draft0&&draft0.schedWorker!=null?draft0.schedWorker:(initialWorker||""));
   // סנכרון עם לוח הזמינות של המדבירים
   React.useEffect(()=>{ onSlotChange&&onSlotChange({date:f.prefDate,timeFrom:f.timeFrom,timeTo:f.timeTo,workerId:doSchedule?schedWorker:""}); },[f.prefDate,f.timeFrom,f.timeTo,schedWorker,doSchedule]);
   React.useEffect(()=>{
@@ -5440,8 +5445,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(pick.workerId!=null&&pick.workerId!==""){ setSchedWorker(String(pick.workerId)); setDoSchedule(true); }
   },[pick&&pick.n]);
   const [showCalc,setShowCalc]=useState(false);
-  const [calcState,setCalcState]=useState(null); // persists calculator selections across opens
-  const [quote,setQuote]=useState(null); // {properties:[...], total} for client proposal
+  const [calcState,setCalcState]=useState(draft0?draft0.calcState||null:null); // persists calculator selections across opens
+  const [quote,setQuote]=useState(draft0?draft0.quote||null:null); // {properties:[...], total} for client proposal
+  const draftEmpty=!((f.name&&f.name!=="לא צוין")||f.phone||f.street||f.city||(f.pests||[]).length||f.notes||f.price||f.email);
+  const saveDone=React.useRef(false); const draftRef=React.useRef(false); draftRef.current=!draftEmpty;
+  React.useEffect(()=>{ if(!DK||saveDone.current) return; const t=setTimeout(()=>{ try{ if(draftEmpty) localStorage.removeItem(DK); else localStorage.setItem(DK,JSON.stringify({f,doSchedule,schedWorker,quote,calcState,at:Date.now()})); }catch(e){} },300); return()=>clearTimeout(t); },[f,doSchedule,schedWorker,quote,calcState]);
+  React.useEffect(()=>()=>{ if(DK&&!saveDone.current&&draftRef.current){ try{ localStorage.setItem(DK,JSON.stringify({...(JSON.parse(localStorage.getItem(DK)||"{}")),at:Date.now()})); }catch(e){} showToast("📝 ההזמנה נשמרה כטיוטה — כשתחזור תמשיך מאיפה שעצרת"); } },[]);
+  const clearDraft=()=>{ try{ DK&&localStorage.removeItem(DK); }catch(e){} };
+  const startFresh=()=>{ if(!confirm("למחוק את הטיוטה ולהתחיל הזמנה חדשה?")) return; clearDraft(); setF(blankF()); setDoSchedule(!!initialDate); setSchedWorker(initialWorker||""); setQuote(null); setCalcState(null); setRestored(false); };
   const [showSend,setShowSend]=useState(false);
   const [showWAConfirm,setShowWAConfirm]=useState(false);
 
@@ -5514,6 +5525,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
     }
+    saveDone.current=true; clearDraft();
     onDone(saved,schedInfo);
   };
 
@@ -5537,6 +5549,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   };
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
+    {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
+      <span style={{flex:1,minWidth:180,fontSize:14,color:"#92400e"}}>📝 <b>המשך מטיוטה</b> — זה מה שמילאת קודם ולא נשמר עדיין.</span>
+      <button type="button" onClick={()=>setRestored(false)} style={{border:"1px solid #fcd34d",background:"#fff",color:"#92400e",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ המשך</button>
+      <button type="button" onClick={startFresh} style={{border:"1px solid #fecaca",background:"#fff",color:"#b91c1c",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️ התחל חדש</button>
+    </div>}
     <WAPasteBox onApply={applyWA} cityNames={ilCities.map(c=>c.name)}/>
     <FieldCard title="פרטי לקוח">
       <div style={{marginBottom:12}}>
@@ -6044,7 +6061,7 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
         </div>
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
-      <OrderForm workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
+      <OrderForm draftKey="neworder" workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
         onSave={c=>{const saved={...c,id:nextId(customers)};setCustomers(cs=>[...cs,saved]);return saved;}}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
@@ -9758,6 +9775,7 @@ function App(){
       return prev.map(l=>map[l.id]?{...l,docNum:map[l.id],oldDocNum:l.docNum}:l); });
   },[execLogs]);
 
+  let hasOrderDraft=false; try{ hasOrderDraft=!!localStorage.getItem("h360_draft_neworder"); }catch(e){}
   const TABS=[
     {id:"dashboard",label:"📊 דשבורד",short:"📊",hideFor:"מדביר"},
     {id:"fieldview",label:"📋 המשימות שלי",short:"📋",workerOnly:true},
@@ -9825,7 +9843,7 @@ function App(){
         {/* Nav */}
         <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
-            {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
+            {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
             {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
@@ -9924,7 +9942,7 @@ function App(){
             {/* Nav items */}
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {[
-                {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
+                {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
