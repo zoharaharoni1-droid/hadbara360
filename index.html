@@ -2033,6 +2033,16 @@ async function transcribeAudio(blob){
     throw new Error("התמלול נכשל: "+msg.slice(0,120)); }
   return String(j.text||"").trim();
 }
+// 📇 בחירת איש קשר מהטלפון (Chrome באנדרואיד) — בלי לצאת מהאפליקציה ובלי להפסיק הקלטה
+const canPickContact=()=>{ try{ return !!(navigator.contacts&&navigator.contacts.select&&window.isSecureContext); }catch(e){ return false; } };
+function ContactPickBtn({onPick}){
+  if(!canPickContact()) return null;
+  const pick=async()=>{ try{ const res=await navigator.contacts.select(["name","tel"],{multiple:false}); const c=res&&res[0]; if(!c) return;
+      const name=((c.name||[])[0]||"").trim(); let tel=((c.tel||[])[0]||"").replace(/[^\d+]/g,""); if(tel.startsWith("+972")) tel="0"+tel.slice(4); else if(tel.startsWith("972")) tel="0"+tel.slice(3);
+      onPick({name,tel}); }catch(e){ if(e&&e.name!=="AbortError") alert("לא הצלחתי לפתוח את אנשי הקשר"); } };
+  return <button type="button" onClick={pick} style={{border:"1.5px solid #93c5fd",background:"#fff",color:"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📇 מאנשי הקשר</button>;
+}
+const contactLine=({name,tel})=>[name?"איש קשר "+name:"",tel?"טלפון "+tel:""].filter(Boolean).join(" ");
 function MicButton({onText,label="🎤 דבר"}){
   const [st,setSt]=useState("idle"); // idle | rec | work
   const [sec,setSec]=useState(0); const [lvl,setLvl]=useState(0); const [err,setErr]=useState(""); const [hidden,setHidden]=useState(false);
@@ -4135,10 +4145,10 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       const PK=r.pests||[]; const known=PK.filter(p=>PEST_TYPES_CRM.includes(p));
       const street=[r.street,r.buildingNum].filter(Boolean).join(" "); const addr=[street,r.city].filter(Boolean).join(", ");
       const pt=r.propertyType||"דירה";
-      const cust={name:r.name||"לא צוין",contactName:"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
+      const shared=r.propertyType==="בניין משותף"; const cust={name:shared?("ועד הבית"+(street?" "+street:"")+(r.city&&!street?" "+r.city:"")):(r.name||"לא צוין"),contactName:shared?(r.name||""):"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
         propertyType:pt,rooms:pt==="בניין משותף"?"":(r.rooms||""),levels:"1",floors:"",sewers:"",floor:r.floor||"",hasYard:!!r.hasYard,buildingAreas:[],underground:"0",propertyNotes:"",
-        status:"פעיל",notes:"📋 מההודעה: "+clean.replace(/\s*\n\s*/g," | "),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
-      const appt={contactName:"",propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
+        status:"פעיל",notes:[r.boxesNote,r.sewerNote,"📋 מההודעה: "+clean.replace(/\s*\n\s*/g," | ")].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
+      const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
         pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
         buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||""};
       const saved=onSaveJob(cust,appt); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
@@ -4166,6 +4176,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
     <textarea value={txt} onChange={e=>{voice.current=false;setTxt(e.target.value);}} rows={5} placeholder={"למשל:\nפרעושים, נחמני 54 תל אביב קומת קרקע, 500 שח, 0528285665, מחר בין 10 ל12\n— או —\nמחר ב-9 לקחת צ'ק מוועד הבית בהרצל"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,margin:"8px 0 12px",flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={t=>{voice.current=true;setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t);}}/>
+      <ContactPickBtn onPick={c=>setTxt(x=>(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":", "):"")+contactLine(c))}/>
       <button type="button" onClick={paste} style={{border:"1.5px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>
       {txt&&<button type="button" onClick={()=>{setTxt("");setKind(null);fired.current=false;}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>נקה</button>}
     </div>
@@ -4833,6 +4844,7 @@ function waParse(raw, cityNames){
   const out={found:[]}; let t=String(raw||"").replace(/‏|‎/g,"").replace(/\r/g,"");
   // ניקוי כותרות וואטסאפ: "[2/11, 13:05] שם: " / "2.11.2026, 13:05 - שם:"
   t=t.replace(/^\s*\[[^\]]{4,30}\]\s*[^:\n]{1,30}:\s*/gm,"").replace(/^\s*\d{1,2}[./]\d{1,2}[./]\d{2,4},?\s*\d{1,2}:\d{2}\s*-\s*[^:\n]{1,30}:\s*/gm,"");
+  t=t.replace(/^\s*(?:הזמנת|הזמנה ל|פתיחת)\s*עבודה(?:\s*חדשה)?\s*[:,.\-–]?\s*/,"");
   const text=t.trim(); const lines=text.split(/\n+/).map(x=>x.trim()).filter(Boolean);
   const label=(re)=>{ for(const l of lines){ const m=l.match(re); if(m&&m[1]&&m[1].trim()) return m[1].trim(); } return ""; };
   let rest=text;
@@ -4885,6 +4897,25 @@ function waParse(raw, cityNames){
   const cities=[...new Set([...(cityNames||[]),...WA_CITIES])].filter(c=>c&&c.length>1).sort((a,b)=>b.length-a.length);
   let addrLine=label(/^(?:כתובת|כתובות|מיקום|רחוב|address)\s*[:\-]\s*(.+)$/i);
   if(!addrLine){
+    // טקסט מוכתב (שורה אחת ארוכה): מחפשים "<רחוב> <מספר>, <עיר>" בכל מקום ולוקחים רק את המילים שלפני המספר שהן שם הרחוב
+    const ADDR_STOP=new Set(["של","הוא","היא","הם","ועד","בית","הבית","ועד-בית","רחוב","ברחוב","רח'","רח׳","ברח'","ברח׳","כתובת","הכתובת","בכתובת","לקוח","הלקוח","שם","זה","זו","נמצא","נמצאת","גר","גרה","גרים","ממוקם","באזור","ליד","את","עם","אנחנו","יש","בניין","בבניין","הבניין","דירה","בדירה","משותף","פרטי","ב","מ","ו","וזה","שזה","זאת","אצל","כלומר","יעני","בעצם","אז","גם","נגיד","ברחוב:","סניף","במסעדה","מסעדה","משרד","במשרד","העבודה","עבודה"]);
+    const cityAlt=cities.map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
+    if(cityAlt){
+      const re=new RegExp("((?:[א-ת\"'׳\-]{1,}\\s+){0,5}[א-ת\"'׳\-]{2,})\\s+(\\d{1,4}[א-ת]?)(?:\\s*(?:דירה|דירת)\\s*\\d{1,3})?\\s*[,،]?\\s*(?:ב|ב-)?("+cityAlt+")(?=$|[\\s,.\\-])");
+      const segs=text.split(/[\n.;!?]+/);
+      for(const seg of segs){ const m=seg.replace(out.phone&&ph?ph[0]:"@@"," ").match(re); if(!m) continue;
+        const parts=m[1].split(/,/).pop().trim().split(/\s+/); const keep=[];
+        for(let i=parts.length-1;i>=0;i--){ const w=parts[i]; if(ADDR_STOP.has(w)||WA_PEST_WORD.test(w)||/^(?:ב|ל|מ|ו|ש)?(?:הדברה|ריסוס|הדברת)$/.test(w)){ WA_PEST_WORD.lastIndex=0; break; } WA_PEST_WORD.lastIndex=0; keep.unshift(w); if(keep.length>=3) break; }
+        if(keep.length){ addrLine=keep.join(" ")+" "+m[2]+", "+m[3]; break; } }
+    }
+  }
+  if(!addrLine){
+    // "...רחוב בלפור 5..." / "בשדרות רוטשילד 20" בתוך משפט
+    const sm2=text.match(/(?:^|[\s,.])ב?(רחוב|רח['׳]|שדרות|שד['׳]|דרך|סמטת)\s+((?:[א-ת"'׳\-]{2,}\s+){0,2}?[א-ת"'׳\-]{2,})\s+(\d{1,4}[א-ת]?)(?![\d:])/);
+    if(sm2&&!WA_PEST_WORD.test(sm2[2])) addrLine=(/^(?:שדרות|שד|דרך|סמטת)/.test(sm2[1])?sm2[1]+" ":"")+sm2[2]+" "+sm2[3];
+    WA_PEST_WORD.lastIndex=0;
+  }
+  if(!addrLine){
     const cand=lines.filter(l=>!/^(?:שם|טלפון|נייד|מחיר|תשלום|הערות?)\s*[:\-]/.test(l)).map(l=>l.replace(out.phone?ph&&ph[0]:"@@","").trim());
     addrLine=cand.find(l=>/(?:רח['׳]?|רחוב|שד['׳]?|שדרות|דרך|סמטת)\s*[א-ת]/.test(l))
       ||cand.find(l=>/[א-ת"'׳]{2,}(?:\s+[א-ת"'׳]{2,}){0,3}\s+\d{1,4}(?!\s*(?:חדרים|חד|₪|ש"ח|שח|קומ|:))/.test(l)&&cities.some(c=>l.includes(c)))
@@ -4899,13 +4930,30 @@ function waParse(raw, cityNames){
     const ent=a.match(/כניסה\s*([א-ת\d])/); if(ent){ out.entrance=ent[1]; a=a.replace(ent[0]," "); }
     a=a.replace(/ועד\s*(?:ה)?בית|בניין משותף|בנין משותף/g," ").replace(/איש קשר.*$/," ").replace(/קומ(?:ה|ת)\s*\S+/g," ").replace(/^(?:ב|ברח['׳]?|ברחוב|רח['׳]?|רחוב)\s+/,"").replace(/\s+/g," ").replace(/[,.\-–]+\s*$/,"").replace(/^[,.\-–\s]+/,"").trim();
     const sm=a.match(/^(.*?[א-ת"'׳].*?)\s+(\d{1,4}[א-ת]?)\b/);
-    if(sm){ out.street=sm[1].replace(/,\s*$/,"").trim(); out.buildingNum=sm[2]; } else if(a&&a.length<40) out.street=a.split(",")[0].trim();
+    if(sm){ out.street=sm[1].replace(/,\s*$/,"").replace(/^[\/|\\\-–,.:;\s]+/,"").trim(); out.buildingNum=sm[2]; } else if(a&&a.length<40) out.street=a.split(",")[0].trim();
     if(city) out.city=city;
     if(out.street||out.city) out.found.push("כתובת");
   } else { for(const c of cities){ if(text.includes(c)){ out.city=WA_CITY_NORM[c]||c; out.found.push("עיר"); break; } } }
+  // תיבות האכלה / פיתיון
+  { const NW="(\\d{1,3}|אחת|אחד|שתי|שתיים|שניים|שלוש|שלושה|ארבע|ארבעה|חמש|חמישה|שש|שישה|שבע|שבעה|שמונה|תשע|עשר|עשרה)";
+    const bm=text.match(new RegExp(NW+"\\s*(?:תיבות|תיבת|קופסאות|קופסות|מלכודות|תחנות)(?:\\s*(?:ה)?(?:האכלה|הכלה|פיתיון|פתיון|הזנה|רעל))?"));
+    if(bm){ const n=+(WA_NUM_WORDS[bm[1]]||bm[1]); const isNew=/יביא|להביא|מביא|תביא|חדשות|חדשה|להתקין|התקנת|להציב|לשים|להוסיף/.test(text); const isRefill=/מילוי|למלא|ריענון|לרענן|החלפת\s*(?:ה)?(?:פיתיון|רעל)|קיימות/.test(text);
+      out.boxes={count:n,kind:isRefill&&!isNew?"refill":isRefill&&isNew?"both":"new",label:bm[0].trim()};
+      out.boxesNote="🪤 "+n+" תיבות האכלה "+(out.boxes.kind==="refill"?"(מילוי בתיבות קיימות)":out.boxes.kind==="both"?"(חדשות + מילוי)":"חדשות"+(/יביא|להביא|מביא|תביא/.test(text)?" — המדביר מביא איתו":""));
+      out.found.push("תיבות"); } }
+  if(/(?:רעל|פיתיון|פתיון)[א-ת]*\s*(?:ב|בתוך\s*)?(?:ה)?ביוב/.test(text)) out.sewerNote="☣️ כולל פיתיון/רעל בביובים";
   // שם
   let name=label(/^(?:שם(?:\s*(?:הלקוח|לקוח|מלא))?|לקוח|לקוחה|איש קשר)\s*[:\-]\s*(.+)$/);
-  if(!name){ const ik=text.match(/(?:איש|אשת)\s*קשר\s*[:\-]?\s*([א-ת'׳]{2,}(?:\s[א-ת'׳]{2,})?)/); if(ik) name=ik[1]; }
+  if(!name){
+    // "שם לקוח דודו", "שם הלקוח דודו כהן", "איש קשר משה", "קוראים לו יוסי" — גם בלי נקודתיים, בתוך משפט
+    const NM_STOP=/^(?:הוא|היא|הם|ועד|זה|זו|של|גר|גרה|בעל|בעלת|מנהל|מנהלת|טלפון|מספר|כתובת|מ|ו|ב|ל|שם|לקוח|איש|קשר|יש|אצל|עם|מה|כן|לא|אז|ה|בית|הבית|ברחוב|רחוב|מזמין|מזמינה|ביקש|ביקשה|רוצה|צריך|צריכה)$/;
+    const res=[/(?:^|[\s,.])שם\s*(?:ה)?(?:לקוח|לקוחה|מלא|איש\s*(?:ה)?קשר)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
+      /(?:^|[\s,.])(?:איש|אשת)\s*(?:ה)?קשר\s*(?:הוא|היא)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
+      /(?:^|[\s,.])(?:ה)?לקוח(?:ה)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
+      /(?:קוראים\s*(?:לו|לה)|שמו|שמה)\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/];
+    for(const r of res){ const m=text.match(r); if(!m||NM_STOP.test(m[1])||WA_PEST_WORD.test(m[1])){ WA_PEST_WORD.lastIndex=0; continue; } WA_PEST_WORD.lastIndex=0;
+      name=m[1]; if(m[2]&&!NM_STOP.test(m[2])&&!/^(?:ו|ב|ל|מ|ש|ה)?(?:ועד|בית|רחוב|טלפון|מספר|הדבר|צריך|רוצה)/.test(m[2])&&!cities.includes(m[2])) name+=" "+m[2]; break; }
+  }
   if(!name){
     const STOP=/הדברה|הדברת|דירה|דירת|חדר|קומה|קרקע|חצר|גינה|מחיר|₪|ש"ח|שח|כתובת|טלפון|בין|מחר|היום|שעה|בוקר|ערב|יום|ג'וקים|תיקנים|פרעושים|נמלים|עכבר|חולד|בניין|בית|רחוב|שלום|תודה|היי|אישור|מאושר|לתאם|תיאום|ללא|בלי|מכרסמ|יתוש|פשפש|דחוף/;
     const c=lines.find(l=>/^[א-ת'׳"\-\s]{2,24}$/.test(l)&&l.split(/\s+/).length<=3&&!STOP.test(l)&&!cities.some(x=>l===x));
@@ -4926,12 +4974,15 @@ function WAPasteBox({onApply,cityNames}){
     </div>
     <textarea value={txt} onChange={e=>{setTxt(e.target.value);setRes(e.target.value.trim()?waParse(e.target.value,cityNames):null);}} rows={5} placeholder={"הדבק כאן את ההודעה, למשל:\nהדברת פרעושים, דירת 4 חדרים ללא חצר, קומת קרקע\n550 ש\"ח\nהרצל 12 רמת גן\n054-1234567\nמחר בין 8 ל-10"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #86efac",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}><MicButton label="🎤 דבר" onText={t2=>setTxt(x=>{const v=(x?x.replace(/\s+$/,"")+" ":"")+t2; setRes(waParse(v,cityNames)); return v;})}/>
+    <ContactPickBtn onPick={c=>setTxt(x=>{const v=(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":", "):"")+contactLine(c); setRes(waParse(v,cityNames)); return v;})}/>
     {!txt&&<button type="button" onClick={paste} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>}</div>
     {res&&<div style={{marginTop:8}}>
       <div style={{fontSize:13,color:"#166534",fontWeight:700,marginBottom:6}}>{res.found.length?"זיהיתי — בדוק ולחץ מלא:":"לא זיהיתי פרטים — נסה לכתוב כל פרט בשורה נפרדת"}</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
         {res.brand&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:20,padding:"4px 10px",fontSize:13}}>🏢 נשלח מ: <b>{res.brand}</b> (לא מזיק)</span>}
         {Object.keys(LBL).filter(k=>res[k]!==undefined&&res[k]!==""&&!(Array.isArray(res[k])&&!res[k].length)).map(k=><span key={k} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}><span style={{color:"#64748b"}}>{LBL[k]}:</span> <b>{Array.isArray(res[k])?res[k].join(", "):typeof res[k]==="boolean"?(res[k]?"יש":"אין"):res[k]}</b></span>)}
+        {res.boxesNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.boxesNote}</span>}
+        {res.sewerNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.sewerNote}</span>}
         {!res.name&&<span style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>שם: לא צוין</span>}
       </div>
       {res.found.length>0&&<button type="button" onClick={()=>{onApply(res,txt);setOpen(false);setTxt("");setRes(null);}} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את ההזמנה</button>}
@@ -5054,7 +5105,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       if(known.length) nx.pests=[...new Set([...x.pests,...known])];
       if(other.length) nx.customPest=[x.customPest,...other].filter(Boolean).join(", ");
       if(r.timeFrom) nx.allDay=false;
-      nx.notes=[x.notes,"📋 מההודעה: "+raw.trim().replace(/\s*\n\s*/g," | ")].filter(Boolean).join("\n");
+      nx.notes=[x.notes,r.boxesNote,r.sewerNote,"📋 מההודעה: "+raw.trim().replace(/\s*\n\s*/g," | ")].filter(Boolean).join("\n");
       return nx; });
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
