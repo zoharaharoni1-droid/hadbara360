@@ -4539,7 +4539,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:[{method:"מזומן",amount:String(_amt),date:todayStr(),details:{}}]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {detailAppt&&<ApptDetailModal appt={detailAppt} customers={customers} workers={workers} currentUser={currentUser}
       execLogs={execLogs} finance={finance}
       hasInvoice={hasInvoice(detailAppt.id)} hasLog={apptHasLog(detailAppt.id)}
@@ -5144,7 +5144,7 @@ function parseDoc(raw,{customers=[],cityNames=[]}={}){
   if(!lines.length&&paid&&out.docType!=="קבלה"){ const ps=(waParse(text,cityNames).pests||[]); lines.push({desc:ps.length?"הדברת "+ps.join(", "):"שירותי הדברה",qty:"1",unit:"יח׳",price:String(paid)}); }
   if(lines.length&&out.docType!=="קבלה"){ out.lines=lines; out.found.push("שורות"); }
   const total=lines.reduce((s,l)=>s+(parseFloat(l.price)||0)*(parseFloat(l.qty)||1),0);
-  if(method||paid){ const tp=text.match(/(\d{1,2}|שלושה|ארבעה|חמישה|שישה|עשרה)\s*תשלומים/); out.payment={method:method||"מזומן",amount:paid?String(paid):"",payments:tp?String(SP_NUM(tp[1])||({"שלושה":3,"ארבעה":4,"חמישה":5,"שישה":6,"עשרה":10})[tp[1]]||""):""}; out.found.push("תשלום"); }
+  if(method){ const tp=text.match(/(\d{1,2}|שלושה|ארבעה|חמישה|שישה|עשרה)\s*תשלומים/); out.payment={method,amount:paid?String(paid):"",payments:tp?String(SP_NUM(tp[1])||({"שלושה":3,"ארבעה":4,"חמישה":5,"שישה":6,"עשרה":10})[tp[1]]||""):""}; out.found.push("תשלום"); }
   const d=spDate(text)||(()=>{ const m=text.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/); if(!m) return ""; let y=m[3]?+m[3]:new Date().getFullYear(); if(y<100) y+=2000; return `${y}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`; })();
   if(d){ out.date=d; out.found.push("תאריך"); }
   const pt=text.match(/(?:שוטף\s*\+?\s*(30|45|60|90)|שוטף(?!\s*\+))/); if(pt){ out.payTerms=pt[1]?"שוטף + "+pt[1]:"שוטף"; out.found.push("תנאי תשלום"); }
@@ -6256,7 +6256,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"ג'וקים",price:schedFor.lastPrice||""}}
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:[{method:"מזומן",amount:String(_amt),date:todayStr(),details:{}}]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
   </div>;
 }
 
@@ -6850,9 +6850,9 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     const keep=lines.filter(l=>l.desc||parseFloat(l.price)); const nl=r.lines?[...keep,...r.lines]:keep;
     if(r.lines) setLines(nl.length?nl:[{desc:"",qty:"1",unit:"יח׳",price:""}]);
     if(r.payTerms) setPayTerms(r.payTerms);
-    if(r.payment&&DOC_TYPES[nt].receipt){ const tt=nt==="קבלה"?0:docTotals(nl,iv,showDisc?discount:null,roundTotal).total; const amt=r.payment.amount||String(r2(Math.max(0,tt-paidSum))||"");
+    if(r.payment&&DOC_TYPES[nt].receipt){ const tt=nt==="קבלה"?0:docTotals(nl,iv,showDisc?discount:null,roundTotal).total; const amt=r.payment.amount||String(r2(tt)||"");
       const method=PAY_METHODS_DOC.includes(r.payment.method)?r.payment.method:"אחר";
-      setPayments(ps=>[...ps,{method,amount:amt,date:r.date||date,details:r.payment.payments&&method==="כרטיס אשראי"?{payments:r.payment.payments}:{}}]); }
+      setPayments([{method,amount:amt,date:r.date||date,details:r.payment.payments&&method==="כרטיס אשראי"?{payments:r.payment.payments}:{}}]); }
     if(r.notes) setNotes(n=>mergeNotes(n,r.notes));
   };
   return <Modal title={"🧾 "+type+" (טיוטה)"} onClose={onClose} width={720}>
@@ -6999,7 +6999,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     const paid=parseFloat(l.paymentAmount)||0;
     setDocReq({type:"חשבונית מס/קבלה",prefill:{custId:c?c.id:null,custName:c?c.name:l.clientName,apptId:l.apptId||"",execLogId:l.id,execDocNum:l.docNum||"",
       lines:[{desc:"הדברת "+(l.pest||[]).join(", ")+(l.address?" – "+l.address:""),qty:"1",unit:"יח׳",price:paid?String(paid):""}],inclVat:true,
-      payments:[{method:({"ביט":"ביט","פייבוקס":"פייבוקס","PayBox":"פייבוקס","מזומן":"מזומן","העברה":"העברה בנקאית","העברה בנקאית":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"})[l.paymentMethod]||"מזומן",amount:paid?String(paid):"",date:l.date||todayStr(),details:{}}]}});};
+      payments:(()=>{ const m=({"ביט":"ביט","פייבוקס":"פייבוקס","PayBox":"פייבוקס","מזומן":"מזומן","העברה":"העברה בנקאית","העברה בנקאית":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"})[l.paymentMethod]; return m?[{method:m,amount:paid?String(paid):"",date:l.date||todayStr(),details:{}}]:[]; })()}});};
   const [typeF,setTypeF]=useState("הכל");
   const [statusF,setStatusF]=useState("הכל");
   const [srch,setSrch]=useState("");
