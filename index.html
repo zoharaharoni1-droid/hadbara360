@@ -4149,7 +4149,10 @@ function useTouchDrag(onDrop){
 // ═══ תצוגת יומן בסגנון גוגל: ימים בעמודות זה לצד זה, שעות כלפי מטה ═══
 function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOpen,onNew,tdrag,draggedId,setDraggedId,onMove,narrow,onSwipe}){
   const custById=React.useMemo(()=>{const m={};(customers||[]).forEach(c=>{m[String(c.id)]=c;});return m;},[customers]);
-  const H0=7,H1=21, HH=narrow?46:50;
+  // 🔍 צביטה עם שתי אצבעות: מגדילה/מקטינה את גובה השעות (כמו ביומן גוגל) — יותר פרטים בכל כרטיס
+  const [zoom,setZoom]=useState(()=>{ try{ const z=parseFloat(localStorage.getItem("h360_calzoom")); return z>=1&&z<=3.5?z:1; }catch(e){ return 1; } });
+  const zoomRef=React.useRef(zoom); zoomRef.current=zoom;
+  const H0=7,H1=21, HH=Math.round((narrow?46:50)*zoom);
   const toISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const DN=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"], DNF=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
   const wColor=wid=>{const w=workers.find(x=>String(x.id)===String(wid));return w?.color||CLR.primary;};
@@ -4185,11 +4188,15 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
   const box=React.useRef(null); const swRef=React.useRef(onSwipe); swRef.current=onSwipe; const tdRef=React.useRef(tdrag); tdRef.current=tdrag;
   React.useEffect(()=>{ const el=box.current; if(!el) return; let s=null;
     const setX=(x,anim,op)=>{ el.querySelectorAll(".tg-day").forEach(c=>{ c.style.transition=anim?"transform .22s ease-out, opacity .22s ease-out":"none"; c.style.transform=x?`translateX(${x}px)`:""; c.style.opacity=op==null?"":String(op); }); };
-    const ts=e=>{ if(e.touches.length!==1||!swRef.current) return; s={x:e.touches[0].clientX,y:e.touches[0].clientY,lock:null,dx:0}; };
-    const tm=e=>{ if(!s) return; if(tdRef.current&&tdRef.current.drag){ s=null; setX(0,false); return; } const t=e.touches[0]; const dx=t.clientX-s.x, dy=t.clientY-s.y;
+    let pz=null;
+    const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+    const ts=e=>{ if(e.touches.length===2){ if(s){ s=null; setX(0,false); } pz={d0:dist(e.touches),z0:zoomRef.current,last:zoomRef.current}; return; } if(e.touches.length!==1||!swRef.current||pz) return; s={x:e.touches[0].clientX,y:e.touches[0].clientY,lock:null,dx:0}; };
+    const tm=e=>{ if(pz&&e.touches.length===2){ if(e.cancelable) e.preventDefault(); const z=Math.max(1,Math.min(3.5,pz.z0*dist(e.touches)/pz.d0)); if(Math.abs(z-pz.last)>0.02){
+        const midY=(e.touches[0].clientY+e.touches[1].clientY)/2; const r=el.getBoundingClientRect(); const off=Math.max(0,midY-r.top); const ratio=z/pz.last; pz.last=z; setZoom(z); requestAnimationFrame(()=>window.scrollBy(0,off*(ratio-1))); } return; }
+      if(!s) return; if(tdRef.current&&tdRef.current.drag){ s=null; setX(0,false); return; } const t=e.touches[0]; const dx=t.clientX-s.x, dy=t.clientY-s.y;
       if(s.lock==null&&(Math.abs(dx)>10||Math.abs(dy)>10)) s.lock=Math.abs(dx)>Math.abs(dy)*1.2?"h":"v";
       if(s.lock==="h"){ if(e.cancelable) e.preventDefault(); s.dx=dx; setX(dx,false); } };
-    const te=()=>{ if(!s) return; const st=s; s=null; if(st.lock!=="h") return;
+    const te=e=>{ if(pz){ if(!e.touches||e.touches.length<2){ try{ localStorage.setItem("h360_calzoom",String(Math.round(pz.last*100)/100)); }catch(_){} pz=null; } return; } if(!s) return; const st=s; s=null; if(st.lock!=="h") return;
       const nn=el.querySelectorAll("[data-drop-date].tg-day").length||1; const colW=(el.clientWidth-gutter)/nn; const step=nn===3?1:nn; const W=colW*step; const dir=st.dx>0?1:-1;
       if(Math.abs(st.dx)>Math.min(60,W*0.22)){ setX(dir*W,true); setTimeout(()=>{ swRef.current&&swRef.current(dir); requestAnimationFrame(()=>{ if(step===nn){ setX(-dir*W*0.35,false,0.3); requestAnimationFrame(()=>requestAnimationFrame(()=>setX(0,true,1))); } else setX(0,false); }); },220); }
       else setX(0,true); };
@@ -4208,15 +4215,19 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
         const pestT=Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType; const street=String(a.address||"").split(",")[0];
         if(compact) return <>
           <div style={{fontWeight:800,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:h>=60?2:1,WebkitBoxOrient:"vertical",wordBreak:"break-word",paddingLeft:done?10:0}}>{who}</div>
-          {h>=40&&!pers&&pestT&&<div style={{...L,color:"#334155"}}>{pestT}</div>}
-          {h>=52&&!pers&&street&&<div style={{...L,color:"#475569"}}>{street}</div>}
+          {h>=40&&!pers&&pestT&&<div style={{...(h>=110?{wordBreak:"break-word"}:L),color:"#334155"}}>{pestT}</div>}
+          {h>=52&&!pers&&street&&(h>=90?<div style={{color:"#475569",wordBreak:"break-word"}}>{a.address}</div>:<div style={{...L,color:"#475569"}}>{street}</div>)}
+          {h>=120&&ph&&<div style={{color:"#475569",direction:"ltr",textAlign:"right",fontSize:8.5}}>{ph}</div>}
+          {h>=140&&<div style={{color:"#64748b"}} dir="ltr">{a.timeWindow||a.time}</div>}
+          {h>=160&&!pers&&<div style={{color:done?"#16a34a":pr.color,fontWeight:700}}>{pr.label}</div>}
           {pers&&done&&h>=34&&<div style={{color:"#16a34a",fontWeight:800}}>✓ בוצע</div>}
         </>;
         return <>
           <div style={{...L,fontWeight:800,whiteSpace:small?"nowrap":"normal",paddingLeft:done?14:0}}>{who}</div>
           {!small&&ph&&<div style={{...L,color:"#0f172a",direction:"ltr",textAlign:"right"}}>{ph}</div>}
           {!small&&h>=52&&!pers&&pestT&&<div style={{...L,color:"#334155"}}>🐛 {pestT}</div>}
-          {!small&&h>=66&&!pers&&a.address&&<div style={{...L,color:"#334155"}}>📍 {a.address}</div>}
+          {!small&&h>=66&&!pers&&a.address&&<div style={{...(h>=110?{wordBreak:"break-word"}:L),color:"#334155"}}>📍 {a.address}</div>}
+          {!small&&h>=130&&(a.notes||"").trim()&&<div style={{color:"#64748b",fontSize:10,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:Math.max(1,Math.floor((h-120)/14)),WebkitBoxOrient:"vertical"}}>📝 {a.notes}</div>}
           {!small&&h>=84&&<div style={{...L,color:"#64748b"}} dir="ltr">{a.timeWindow||a.time}</div>}
         </>; })()}
       {!small&&!compact&&h>=44&&(pers?(done?<div style={{color:"#16a34a",fontWeight:800,fontSize:10}}>✓ בוצע</div>:null):<div style={{color:done?"#16a34a":pr.color,fontWeight:700,fontSize:9,whiteSpace:"nowrap",overflow:"hidden"}}>{pr.label}</div>)}
@@ -4224,7 +4235,7 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
   return <div ref={box} style={{direction:"rtl",background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}>
     {/* כותרות ימים */}
     <div style={{display:"flex",borderBottom:`1px solid ${CLR.border}`,position:"sticky",top:0,background:"#fff",zIndex:5,overflow:"hidden"}}>
-      <div style={{width:gutter,flexShrink:0,position:"relative",zIndex:6,background:"#fff"}}/>
+      <div style={{width:gutter,flexShrink:0,position:"relative",zIndex:6,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center"}}>{zoom>1.05&&<button type="button" title="חזרה לגודל רגיל" onClick={()=>{setZoom(1);try{localStorage.setItem("h360_calzoom","1");}catch(e){}}} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,fontSize:11,padding:"2px 4px",cursor:"pointer",color:"#475569"}}>🔍↺</button>}</div>
       {days.map((d,i)=>{const iso=toISO(d);const td=iso===today;return <div key={i} className="tg-day" onClick={()=>onNew(iso,"")} style={{flex:1,minWidth:0,textAlign:"center",padding:"6px 0 5px",cursor:"pointer",borderRight:`1px solid ${CLR.border}`}}>
         <div style={{fontSize:narrow?11:12,color:td?CLR.primary:"#64748b",fontWeight:600}}>{n<=3&&!narrow?DNF[d.getDay()]:DN[d.getDay()]}</div>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:narrow?28:32,height:narrow?28:32,borderRadius:"50%",background:td?CLR.primary:"transparent",color:td?"#fff":"#0f172a",fontWeight:800,fontSize:narrow?15:17}}>{d.getDate()}</div>
