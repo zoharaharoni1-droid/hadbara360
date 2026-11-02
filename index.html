@@ -620,7 +620,7 @@ const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["ד�
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
 // ── מוצרי הדברה (לא כימיים): מלכודות, תחנות ניטור ואמצעי מניעה
 const DEVICE_TYPES = [
-  {g:"מכרסמים",items:["תיבת הכלה כולל רעלים","מילוי רעל בתיבה קיימת","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
+  {g:"מכרסמים",items:["תיבת האכלה כולל רעלים","מילוי רעל בתיבה קיימת","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
   {g:"חרקים",items:["תחנת ניטור לתיקנים","מלכודת פרומונים לעש מזון","מלכודת פרומונים לעש בגדים","מלכודת אור UV לזבובים","החלפת משטח דבק במלכודת אור","מלכודת זבובים (פיתיון)","מלכודת יתושים","מלכודת דבק לנחשים / עקרבים"]},
   {g:"מניעה",items:["אטימת פתחים (צמר פלדה / קצף)","דוקרנים נגד יונים","רשת נגד יונים"]},
 ];
@@ -638,7 +638,7 @@ const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g
 const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.every(g=>parseFloat(r[g.k])===0); };
 const reentryLines = r => { const sh=reentryShown(r); if(sh.length&&sh.every(g=>parseFloat(r[g.k])===0)) return ["אין צורך לצאת מהמקום"]; return sh.map(g=>g.l+": "+hrsLabel(r[g.k])); };
 // תחנות/תיבות האכלה: חדשות שהובאו + מילוי של קיימות
-const stationsText = m => { const n=parseInt(m&&m.stationsNew)||0, r=parseInt(m&&m.stationsRefill)||0; if(n||r) return [n?n+" תיבות הכלה חדשות":"",r?"מילוי "+r+" תיבות קיימות":""].filter(Boolean).join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
+const stationsText = m => { const n=parseInt(m&&m.stationsNew)||0, r=parseInt(m&&m.stationsRefill)||0; if(n||r) return [n?n+" תיבות האכלה חדשות":"",r?"מילוי "+r+" תיבות קיימות":""].filter(Boolean).join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
 // ── הנחיות ללקוח — כפתורים מוכנים
 const INSTR_BASE = [
   "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
@@ -1902,8 +1902,8 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               </div>; };
             const legacyOnly=!m.stationsNew&&!m.stationsRefill&&m.stations;
             return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 תיבות הכלה (אפשר גם וגם)</div>
-              {cnt("stationsNew","🆕 תיבות חדשות שהבאתי","נכנס אוטומטית ל\"מוצרי הדברה\" כתיבת הכלה כולל רעלים")}
+              <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 תיבות האכלה (אפשר גם וגם)</div>
+              {cnt("stationsNew","🆕 תיבות חדשות שהבאתי","נכנס אוטומטית ל\"מוצרי הדברה\" כתיבת האכלה כולל רעלים")}
               {cnt("stationsRefill","🔄 מילוי תיבות קיימות","תיבות שכבר היו במקום — רק מילוי רעל")}
               {legacyOnly&&<div style={{fontSize:12,color:"#64748b"}}>ביומן הישן נרשמו {m.stations} תחנות</div>}
             </div>; })()}
@@ -2010,7 +2010,7 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
 // בלי צפצופים, בלי עצירה בשקט, אפשר לגלול ולעבוד בזמן ההקלטה. לוחצים "סיום" — והטקסט נכנס.
 const TRANSCRIBE_URL = SUPA_URL + "/functions/v1/transcribe";
 const REC_MAX_SEC = 300;
-function recHint(){ try{ return [...new Set([...PEST_TYPES_LOG,...FOOD_PESTS.slice(0,4),...CHEMICALS.map(c=>c.name),...Object.keys(chemMemLoad()),"תיבות הכלה","תחנות האכלה","מילוי","ריסוס","ג'ל","פאנלים","ניקוזים","בורות ביוב","ועד הבית","אחריות","מזומן","ביט","פייבוקס"])].slice(0,90).join(", "); }catch(e){ return ""; } }
+function recHint(){ try{ return [...new Set([...PEST_TYPES_LOG,...FOOD_PESTS.slice(0,4),...CHEMICALS.map(c=>c.name),...Object.keys(chemMemLoad()),"תיבות האכלה","תחנות האכלה","מילוי","ריסוס","ג'ל","פאנלים","ניקוזים","בורות ביוב","ועד הבית","אחריות","מזומן","ביט","פייבוקס"])].slice(0,90).join(", "); }catch(e){ return ""; } }
 // המרת ההקלטה ל-WAV מונו 16kHz (פורמט שכל מודל תמלול מקבל, וקטן)
 async function blobToWav16k(blob){
   const buf=await blob.arrayBuffer();
@@ -2194,7 +2194,7 @@ function elParse(raw,{chemNames=[],memory={},treatMethod={}}={}){
   const method=/ריסוס|ריססתי|רוסס/.test(pt)?"ריסוס":/ג['׳]ל/.test(pt)?"ג'ל":/תיב|תחנ|פיתיון|רעל/.test(pt)?"תחנת האכלה":/ערפול/.test(pt)?"ערפול":/אבקה/.test(pt)?"אבקה":/גרגיר/.test(pt)?"פיזור גרגירים":"";
   out.methodHint=method;
   if(mats.length){ out.materials=mats; out.found.push("חומרים"); }
-  // תיבות הכלה
+  // תיבות האכלה
   const boxRe=new RegExp(EL_NUMW+"\\s*(?:תיבות|תיבת|תחנות|תחנת)(?:\\s*(?:הכלה|האכלה|פיתיון|רעל))?","g"); let m; let newB=0, refB=0;
   while((m=boxRe.exec(pt))){ const n=elNum(m[1]); const ctx=pt.slice(Math.max(0,m.index-30),m.index+m[0].length+30);
     if(/מילאתי|מילוי|מולאו|קיימות|קיימים|החלפתי|הוחלף|חידשתי/.test(ctx)) refB+=n; else newB+=n; }
@@ -2325,12 +2325,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       setF(x=>({...x,instructions:ins}));
     }
   },[matKey,pestKey]);
-  // תיבות הכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
+  // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
   const newBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsNew)||0),0);
   const refillBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsRefill)||0),0);
   React.useEffect(()=>{
-    const BOX="תיבת הכלה כולל רעלים", REF="מילוי רעל בתיבה קיימת";
-    setF(x=>{ let dv=[...x.devices];
+    const BOX="תיבת האכלה כולל רעלים", REF="מילוי רעל בתיבה קיימת";
+    setF(x=>{ let dv=x.devices.map(d=>d.type==="תיבת הכלה כולל רעלים"?{...d,type:BOX}:d);
       const sync=(type,n)=>{ const i=dv.findIndex(d=>d.type===type);
         if(n>0){ if(i<0) dv.push({type,qty:n,location:"",auto:true}); else if(dv[i].auto) dv[i]={...dv[i],qty:n}; }
         else if(i>=0&&dv[i].auto) dv.splice(i,1); };
@@ -2357,8 +2357,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.boxesNew||r.boxesRefill){ const bi=mats.findIndex(m=>m.method==="תחנת האכלה");
         if(bi>=0){ const m0={...mats[bi]}; if(r.boxesNew) m0.stationsNew=String(r.boxesNew); if(r.boxesRefill) m0.stationsRefill=String(r.boxesRefill); m0.stations=String((parseInt(m0.stationsNew)||0)+(parseInt(m0.stationsRefill)||0)); mats[bi]=m0; }
         else { const put=(type,n)=>{ if(!n) return; const k=devices.findIndex(d=>d.type===type); const loc=(r.spots||[]).join(", "); if(k>=0) devices[k]={...devices[k],qty:n,location:devices[k].location||loc}; else devices.push({type,qty:n,location:loc}); };
-          put("תיבת הכלה כולל רעלים",r.boxesNew); put("מילוי רעל בתיבה קיימת",r.boxesRefill); } }
-      if((r.spots||[]).length) devices=devices.map(d=>/תיבת הכלה|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
+          put("תיבת האכלה כולל רעלים",r.boxesNew); put("מילוי רעל בתיבה קיימת",r.boxesRefill); } }
+      if((r.spots||[]).length) devices=devices.map(d=>/תיבת (?:האכלה|הכלה)|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
       nx.materials=mats; nx.devices=devices;
       if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"}; else if(r.reentryAdults) nx.reentry={...x.reentry,adults:r.reentryAdults};
       if(r.price){ nx.agreedPrice=r.price; }
