@@ -5018,11 +5018,12 @@ function suggestWorker(address, workers){
 // ═══ הדבקת הודעת וואטסאפ → מילוי אוטומטי של הזמנת עבודה (בתוך הדפדפן, בלי שירות חיצוני) ═══
 const WA_CITIES=["תל אביב","תל-אביב","ת\"א","יפו","רמת גן","ר\"ג","גבעתיים","בני ברק","ב\"ב","פתח תקווה","פתח תקוה","פ\"ת","חולון","בת ים","ראשון לציון","ראשל\"צ","רחובות","נס ציונה","יבנה","לוד","רמלה","יהוד","יהוד-מונוסון","אור יהודה","קריית אונו","קרית אונו","גבעת שמואל","סביון","גני תקווה","הרצליה","רמת השרון","רעננה","כפר סבא","הוד השרון","נתניה","ראש העין","אלעד","שוהם","מודיעין","אשדוד","אשקלון","ירושלים","חיפה","באר שבע","גדרה","קריית עקרון","מזכרת בתיה","באר יעקב","אזור","כפר יונה","טייבה","קלנסווה","כפר קאסם","ראש פינה","אריאל","גבעת שמואל","קריית גת","ראשון","כפר שמריהו","אבן יהודה","קדימה","צורן","תל מונד","זכרון יעקב","חדרה","בית שמש","מעלה אדומים"];
 const WA_CITY_NORM={"תל-אביב":"תל אביב","ת\"א":"תל אביב","ר\"ג":"רמת גן","ב\"ב":"בני ברק","פ\"ת":"פתח תקווה","פתח תקוה":"פתח תקווה","ראשל\"צ":"ראשון לציון","ראשון":"ראשון לציון","קרית אונו":"קריית אונו","יהוד-מונוסון":"יהוד"};
-const WA_PESTS=[[/ג.?וק|תיקנ|תיקן/,"ג'וקים"],[/אמריקא/,"תיקן אמריקאי"],[/גרמני/,"תיקן גרמני"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/נמל/,"נמלים"],[/יתוש/,"יתושים"],[/טרמיט/,"טרמיטים"],[/זבוב/,"זבובים"],[/פרעוש|פרושים|פירעוש/,"פרעושים"],[/עכביש/,"עכבישים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/שלשול/,"שלשולים"],[/פשפש/,"פשפש מיטה"],[/קרצי/,"קרציות"],[/(?<![א-ת])(?:ה|ב)?נחש(?:ים)?(?![א-ת])/,"נחש"],[/(?<![א-ת])יונ(ים|ה)(?![א-ת])/,"יונים"],[/דג.?הכסף|דג כסף/,"דג הכסף"],[/(?<![א-ת])עש(?![א-ת])/,"עש"],[/חדקונית/,"חדקונית"]];
+const WA_PESTS=[[/ג.?וק|תיקנ|תיקן/,"ג'וקים"],[/אמריקא/,"תיקן אמריקאי"],[/גרמני/,"תיקן גרמני"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/נמל/,"נמלים"],[/יתוש/,"יתושים"],[/טרמיט/,"טרמיטים"],[/זבוב/,"זבובים"],[/פרעוש|פרושים|פירעוש/,"פרעושים"],[/עכביש/,"עכבישים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/שלשול/,"שלשולים"],[/פשפש/,"פשפש מיטה"],[/קרצי/,"קרציות"],[/(?<![א-ת])(?:ה|ב)?נחש(?:ים)?(?![א-ת])/,"נחש"],[/(?<![א-ת])יונ(ים|ה)(?![א-ת])/,"יונים"],[/דג.?הכסף|דג כסף/,"דג הכסף"],[/(?<![א-ת])עש(?![א-ת])/,"עש"],[/חדקונית/,"חדקונית"],[/חיפושי/,"חיפושיות"],[/ברחש/,"ברחשים"],[/עקרב/,"עקרבים"],[/תריפס|טריפס/,"תריפסים"],[/(?<![א-ת])זבובונ|יתושונ|דרוזופיל/,"זבובוני פירות"]];
 const WA_NUM_WORDS={"אחד":1,"אחת":1,"שתיים":2,"שניים":2,"שני":2,"שתי":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10};
 // מילים של מזיקים (לניקוי כתובת/שם) ושמות חברות שדומים למזיקים ("סטופ פשפש", "אנטי ג'וק"...)
-const WA_PEST_WORD=/(?:הדברת\s+|ריסוס\s+|טיפול\s+ב?)?[א-ת'׳]*(?:פשפש|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|פרושים|טרמיט|צרע|דבור|עכביש|קרצי|שלשול|מזיק)[א-ת'׳]*/g;
+const WA_PEST_WORD=/(?:הדברת\s+|ריסוס\s+|טיפול\s+ב?)?[א-ת'׳]*(?:פשפש|חיפושי|ברחש|עקרב|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|פרושים|טרמיט|צרע|דבור|עכביש|קרצי|שלשול|מזיק)[א-ת'׳]*/g;
 const WA_BRAND=/(?:סטופ|stop|אנטי|anti|קיל|kill|ביי|bye|נו|אקס|x|די|סוף|מיסטר|mr\.?|ד["״]ר)[\s\-]*(?:ל|ה)?[א-ת'׳]*(?:פשפש|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|טרמיט|צרע|מזיק|באג|bug)[א-ת'׳]*|[א-ת'׳]*(?:פשפש|ג['׳]?וק|נמל|עכבר|מזיק|פרעוש)[א-ת'׳]*[\s\-]+(?:הדברות|הדברה\s+בע["״]?מ|בע["״]?מ|שירותי הדברה|סרוויס|פלוס|360|גרופ|group)/gi;
+const WA_SOURCES=["הדברה בטוחה","בטוחה","מציל","המדבירים נט","המדבירים","הדברה בפריסה ארצית","בפריסה ארצית","פרץ הדברות","אריאל פרץ הדברות"];
 const WA_DAYS=[["ראשון","א"],["שני","ב"],["שלישי","ג"],["רביעי","ד"],["חמישי","ה"],["שישי","ו"],["שבת","ש"]];
 function waParse(raw, cityNames){
   const out={found:[]}; let t=String(raw||"").replace(/‏|‎/g,"").replace(/\r/g,"");
@@ -5040,6 +5041,8 @@ function waParse(raw, cityNames){
   if(pr){ out.price=String(pr[1]).replace(/[.,]/g,""); rest=rest.replace(pr[0]," "); out.found.push("מחיר"); }
   // מזיקים (בלי שמות חברות שנשמעים כמו מזיק)
   const brands=(text.match(WA_BRAND)||[]); if(brands.length) out.brand=brands[0].trim();
+  const isSrcLine=l=>/^[א-תa-z"'׳\s\-\.]{2,30}$/i.test(l)&&l.split(/\s+/).length<=4&&(WA_SOURCES.some(x=>l===x||l.replace(/^ה/,"")===x)||/(?:^|\s)(?:הדברה|הדברות|מדבירים|מדביר|הדברת\s+\S+\s+בע"?מ)(?:\s|$)|(?:\s|^)נט$|בע"?מ$/.test(l))&&!/^(?:הדברת|ריסוס)\s/.test(l);
+  if(!out.brand){ const sl=lines.find(isSrcLine); if(sl) out.brand=sl; }
   const pt=text.replace(WA_BRAND," ");
   const pests=[]; WA_PESTS.forEach(([re,name])=>{ if(re.test(pt)&&!pests.includes(name)) pests.push(name); });
   if(pests.includes("תיקן אמריקאי")||pests.includes("תיקן גרמני")){ const i=pests.indexOf("ג'וקים"); if(i>=0) pests.splice(i,1); }
@@ -5047,6 +5050,8 @@ function waParse(raw, cityNames){
   // סוג נכס
   const PT=[[/בניין משותף|בנין משותף|ועד בית|ועד הבית|חדר מדרגות|לובי/,"בניין משותף"],[/בית פרטי|וילה|קוטג|דו.?משפחתי|בית קרקע/,"בית פרטי"],[/מסעדה|בית קפה|פיצרי/,"מסעדה"],[/משרד/,"משרד"],[/גן ילדים|גנון|פעוטון/,"גן ילדים"],[/מחסן/,"מחסן"],[/חנות|עסק|מאפי|סופר|מספרה|קיוסק/,"עסק"],[/מלון|צימר/,"מלון"],[/דירה|דירת|דירות|חדרים|חד׳|חד'/,"דירה"]];
   for(const [re,v] of PT){ if(re.test(text)){ out.propertyType=v; out.found.push("סוג נכס"); break; } }
+  const bz=text.match(/(?:^|[\s,])((?:חברת|חב['׳]|משרדי|מסעדת|מאפיית|חנות)\s+[^\s,.\n]+)/); if(bz&&!WA_SOURCES.some(x=>bz[1].includes(x))){ out.bizName=bz[1].trim(); if(!out.propertyType||out.propertyType==="דירה"){ out.propertyType=/מסעד/.test(bz[1])?"מסעדה":/משרד|חברת|חב/.test(bz[1])?"משרד":"עסק"; } if(!out.found.includes("סוג נכס")) out.found.push("סוג נכס"); }
+  if(!out.propertyType&&/(?:^|[\s])(?:ל|ב|ה)?בניין(?![א-ת])/.test(text)&&!/דירה|דירת/.test(text)){ out.propertyType="בניין משותף"; out.found.push("סוג נכס"); }
   // חדרים
   const rm=text.match(/(\d(?:\.5)?)\s*(?:חדרים|חד['׳]|חדר)/)||text.match(/(אחד|אחת|שתיים|שניים|שני|שתי|שלוש|שלושה|ארבע|ארבעה|חמש|חמישה|שש|שישה|שבע|שבעה|שמונה)\s*(?:חדרים|חד['׳])/);
   if(rm){ out.rooms=String(WA_NUM_WORDS[rm[1]]||rm[1]); rest=rest.replace(rm[0]," "); out.found.push("חדרים"); }
@@ -5061,13 +5066,19 @@ function waParse(raw, cityNames){
   const addD=n=>{const d=new Date(now);d.setDate(d.getDate()+n);return d;};
   let date=null;
   if(/מחרתיים/.test(text)) date=addD(2); else if(/(?<![א-ת])מחר(?![א-ת])/.test(text)) date=addD(1); else if(/(?<![א-ת])היום(?![א-ת])|עכשיו|דחוף/.test(text)) date=now;
-  if(!date){ const dm=text.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/); if(dm&&+dm[2]>=1&&+dm[2]<=12&&+dm[1]<=31){ let y=dm[3]?+dm[3]:now.getFullYear(); if(y<100) y+=2000; let d=new Date(y,+dm[2]-1,+dm[1]); if(!dm[3]&&d<addD(-1)) d=new Date(y+1,+dm[2]-1,+dm[1]); date=d; rest=rest.replace(dm[0]," "); } }
+  if(!date){ const dm=text.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b(?!\s*(?:חדרים|חד['׳]|חדר|מטר|מ"ר|קומות))/); if(dm&&+dm[2]>=1&&+dm[2]<=12&&+dm[1]<=31){ let y=dm[3]?+dm[3]:now.getFullYear(); if(y<100) y+=2000; let d=new Date(y,+dm[2]-1,+dm[1]); if(!dm[3]&&d<addD(-1)) d=new Date(y+1,+dm[2]-1,+dm[1]); date=d; rest=rest.replace(dm[0]," "); } }
+  if(!date){ for(let i=0;i<7;i++){ const [full]=WA_DAYS[i]; const re=new RegExp("(?:^|\\n)\\s*"+full+"(?=\\s*(?:\\d|בין|הבא|בבוקר|אחה|בערב|בצהר|$|\\n))"); if(re.test(text)){ let diff=(i-now.getDay()+7)%7; if(diff===0) diff=7; date=addD(diff); break; } } }
   if(!date){ for(let i=0;i<7;i++){ const [full,letter]=WA_DAYS[i]; const re=new RegExp("(?:ביום|יום|ב)\\s*(?:"+full+"|"+letter+"['׳])(?![א-ת])"); if(re.test(text)){ let diff=(i-now.getDay()+7)%7; if(diff===0) diff=7; if(/הבא/.test(text)&&diff<7) diff+=0; date=addD(diff); break; } } }
   if(date){ out.prefDate=iso(date); out.found.push("תאריך"); }
+  // "שעתיים קרובות" / "שעתיים-שלוש קרובות" / "כמה שיותר מהר" → היום, חלון מעכשיו
+  const soon=text.match(/(שעה|שעתיים|שלוש שעות|3 שעות|2 שעות)(?:[\s\-–]*(?:או\s*)?(שלוש|3))?\s*(?:ה)?קרובות/)||text.match(/(כמה\s*שיותר\s*מהר|בהקדם\s*האפשרי|ASAP)/i);
+  if(soon){ const nowD=new Date(); let m0=nowD.getHours()*60+nowD.getMinutes(); m0=Math.ceil(m0/30)*30; const span=soon[2]?180:/שלוש|3|כמה|בהקדם|asap/i.test(soon[1])?180:/שעתיים|2/.test(soon[1])?120:60;
+    const f2=m=>String(Math.min(23,Math.floor(m/60))).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+    if(!out.prefDate){ out.prefDate=iso(nowD); out.found.push("תאריך"); } out.soon=true; if(m0>=7*60&&m0+span<=21*60) out._soon=[f2(m0),f2(m0+span)]; }
   // שעה / חלון
   const hh=h=>String(Math.max(6,Math.min(21,parseInt(h)))).padStart(2,"0")+":00";
   const tw=text.match(/(?:בין|משעה|מ-?|מ)\s*(\d{1,2})(?::(\d{2}))?\s*(?:ל-?|עד|-|–)\s*(\d{1,2})(?::(\d{2}))?/)||text.match(/\b(\d{1,2})(?::(\d{2}))?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\b(?!\s*(?:חדרים|₪|ש))/);
-  if(tw&&+tw[1]<=21&&+tw[3]<=22&&+tw[3]>+tw[1]&&!(out.phone&&String(out.phone).includes(tw[0]))){ out.timeFrom=String(tw[1]).padStart(2,"0")+":"+(tw[2]||"00"); out.timeTo=String(tw[3]).padStart(2,"0")+":"+(tw[4]||"00"); out.found.push("שעה"); }
+  if(tw&&+tw[1]<=21&&+tw[3]<=22&&(+tw[3]*60+(+tw[4]||0))>(+tw[1]*60+(+tw[2]||0))&&!(out.phone&&String(out.phone).includes(tw[0]))){ out.timeFrom=String(tw[1]).padStart(2,"0")+":"+(tw[2]||"00"); out.timeTo=String(tw[3]).padStart(2,"0")+":"+(tw[4]||"00"); out.found.push("שעה"); }
   else { const at=text.match(/(?:בשעה|שעה|ב-|ב)\s*(\d{1,2})(?::(\d{2}))?(?!\s*(?:חדרים|₪|ש"ח|קומ))/); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=hh(+at[1]+2); out.found.push("שעה"); }
     else if((()=>{ const HW={"שבע":7,"שמונה":8,"תשע":9,"עשר":10,"אחת עשרה":11,"אחת-עשרה":11,"שתים עשרה":12,"שתיים עשרה":12,"אחת":13,"שתיים":14,"שלוש":15,"ארבע":16,"חמש":17,"שש":18};
       const W="(אחת[ -]עשרה|שתי?ים עשרה|שבע|שמונה|תשע|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש)(?![א-ת])";
@@ -5077,6 +5088,7 @@ function waParse(raw, cityNames){
     else if(/בבוקר/.test(text)){ out.timeFrom="08:00"; out.timeTo="12:00"; out.found.push("שעה"); }
     else if(/צהריים|צהרים/.test(text)){ out.timeFrom="12:00"; out.timeTo="15:00"; out.found.push("שעה"); }
     else if(/אחה["״]?צ|אחר הצהריים|בערב/.test(text)){ out.timeFrom="15:00"; out.timeTo="19:00"; out.found.push("שעה"); } }
+  if(out._soon&&!out.timeFrom){ out.timeFrom=out._soon[0]; out.timeTo=out._soon[1]; out.found.push("שעה"); } delete out._soon;
   // כתובת
   const cities=[...new Set([...(cityNames||[]),...WA_CITIES])].filter(c=>c&&c.length>1).sort((a,b)=>b.length-a.length);
   let addrLine=label(/^(?:כתובת|כתובות|מיקום|רחוב|address)\s*[:\-]\s*(.+)$/i);
@@ -5102,9 +5114,9 @@ function waParse(raw, cityNames){
   }
   if(!addrLine){
     const cand=lines.filter(l=>!/^(?:שם|טלפון|נייד|מחיר|תשלום|הערות?)\s*[:\-]/.test(l)).map(l=>l.replace(out.phone?ph&&ph[0]:"@@","").trim());
-    addrLine=cand.find(l=>/(?:רח['׳]?|רחוב|שד['׳]?|שדרות|דרך|סמטת)\s*[א-ת]/.test(l))
+    addrLine=cand.find(l=>/(?:^|[\s,])ב?(?:רח['׳]\s*|רחוב\s+|שד['׳]\s*|שדרות\s+|דרך\s+|סמטת\s+)[א-ת]/.test(l)&&/\d/.test(l))
       ||cand.find(l=>/[א-ת"'׳]{2,}(?:\s+[א-ת"'׳]{2,}){0,3}\s+\d{1,4}(?!\s*(?:חדרים|חד|₪|ש"ח|שח|קומ|:))/.test(l)&&cities.some(c=>l.includes(c)))
-      ||cand.find(l=>/^[א-ת"'׳\s]{2,30}\s\d{1,4}[א-ת]?(?:\s*,|\s|$)/.test(l)&&!/חדרים|חד['׳]|קומה|₪|ש"ח/.test(l.slice(0,40)));
+      ||cand.find(l=>/^[א-ת"'׳\s]{2,30}\s\d{1,4}[א-ת]?(?:\s*,|\s|$)/.test(l)&&!/חדרים|חד['׳]|קומה|₪|ש"ח|שח/.test(l.split(/\d/)[0]));
   }
   if(addrLine){
     let a=addrLine.replace(WA_BRAND," ").replace(WA_PEST_WORD," ").replace(/(?:^|\s)(?:ו?דירת|בית פרטי|בניין משותף)\s*(?=\s|$)/g," ");
@@ -5115,7 +5127,7 @@ function waParse(raw, cityNames){
     const ent=a.match(/כניסה\s*([א-ת\d])/); if(ent){ out.entrance=ent[1]; a=a.replace(ent[0]," "); }
     a=a.replace(/ועד\s*(?:ה)?בית|בניין משותף|בנין משותף/g," ").replace(/איש קשר.*$/," ").replace(/קומ(?:ה|ת)\s*\S+/g," ").replace(/^(?:ב|ברח['׳]?|ברחוב|רח['׳]?|רחוב)\s+/,"").replace(/\s+/g," ").replace(/[,.\-–]+\s*$/,"").replace(/^[,.\-–\s]+/,"").trim();
     const sm=a.match(/^(.*?[א-ת"'׳].*?)\s+(\d{1,4}(?:[א-ת]|\s[א-ה](?=\s*(?:,|$)))?)(?![\d])/);
-    if(sm){ out.street=sm[1].replace(/,\s*$/,"").replace(/^[\/|\\\-–,.:;\s]+/,"").trim(); out.buildingNum=sm[2]; } else if(a&&a.length<40) out.street=a.split(",")[0].trim();
+    if(sm){ out.street=sm[1].replace(/,\s*$/,"").split(",").pop().replace(/^[\/|\\\-–,.:;\s]+/,"").trim(); out.buildingNum=sm[2]; } else if(a&&a.length<40) out.street=a.split(",")[0].trim();
     if(city) out.city=city;
     if(out.street||out.city) out.found.push("כתובת");
   } else { for(const c of cities){ if(text.includes(c)){ out.city=WA_CITY_NORM[c]||c; out.found.push("עיר"); break; } } }
@@ -5159,18 +5171,18 @@ function waParse(raw, cityNames){
       name=m[1]; if(m[2]&&!NM_STOP.test(m[2])&&!/^(?:ו|ב|ל|מ|ש|ה)?(?:ועד|בית|רחוב|טלפון|מספר|הדבר|צריך|רוצה)/.test(m[2])&&!cities.includes(m[2])) name+=" "+m[2]; break; }
   }
   if(!name){
-    const STOP=/שער|קוד|חניה|חנייה|מ"ר|מטר|הדברה|הדברת|דירה|דירת|חדר|קומה|קרקע|חצר|גינה|מחיר|₪|ש"ח|שח|כתובת|טלפון|בין|מחר|היום|שעה|בוקר|ערב|יום|ג'וקים|תיקנים|פרעושים|נמלים|עכבר|חולד|בניין|בית|רחוב|שלום|תודה|היי|אישור|מאושר|לתאם|תיאום|ללא|בלי|מכרסמ|יתוש|פשפש|דחוף/;
-    const c=lines.find(l=>/^[א-ת'׳"\-\s]{2,24}$/.test(l)&&l.split(/\s+/).length<=3&&!STOP.test(l)&&!cities.some(x=>l===x));
+    const STOP=/קרובות|מהר|לחייג|יחייג|ההגעה|שיותר|דחוף|בטוחה|ניטור|אבחון|ריסוס|טיפול|שער|קוד|חניה|חנייה|מ"ר|מטר|הדברה|הדברת|דירה|דירת|חדר|קומה|קרקע|חצר|גינה|מחיר|₪|ש"ח|שח|כתובת|טלפון|בין|מחר|היום|שעה|בוקר|ערב|יום|ג'וקים|תיקנים|פרעושים|נמלים|עכבר|חולד|בניין|בית|רחוב|שלום|תודה|היי|אישור|מאושר|לתאם|תיאום|ללא|בלי|מכרסמ|יתוש|פשפש|דחוף/;
+    const nc=out.contacts&&out.contacts.find(c=>c.name); if(nc) name=nc.name;
+    const c=nc?null:lines.find(l=>/^[א-ת'׳"\-\s]{2,24}$/.test(l)&&l.split(/\s+/).length<=3&&!STOP.test(l)&&!cities.some(x=>l===x)&&!isSrcLine(l)&&!(()=>{ const t=WA_PEST_WORD.test(l); WA_PEST_WORD.lastIndex=0; return t; })()&&!WA_PESTS.some(([re])=>re.test(l)));
     if(c) name=c.trim();
   }
-  if(!name&&out.contacts){ const nc=out.contacts.find(c=>c.name); if(nc) name=nc.name; }
   if(name){ out.name=name.replace(/[,.:]+$/,""); out.found.push("שם"); }
   const nts=extractNotes(text); if(nts.length){ out.notes=nts; out.found.push("הערות"); }
   return out;
 }
 // ═══ מילוי חכם לכל הטפסים: פענוח טקסט חופשי / מוכתב ═══
 // הערות: רק משפטים שהם באמת הערה (כלב, אדם חולה, מפתח אצל השכן...) או שנאמר "הערה:"
-const NOTE_RE=/כלב|כלבה|כלבים|חתול|חתולה|חתולים|חיות|חיית מחמד|בעלי חיים|תוכי|ציפור|ציפורים|אקווריום|דגים|ארנב|שרקן|חולה|חולים|אסטמ|אלרג|רגיש|בהריון|הריון|תינוק|תינוקת|ילדים קטנים|ילד קטן|קשיש|קשישה|מבוגר|מבוגרת|נכה|כיסא גלגלים|כסא גלגלים|מפתח|אצל השכן|אצל השכנה|קוד\s*(?:כניסה|בניין|לשער|לדלת)|אינטרקום|להתקשר לפני|תתקשר לפני|לצלצל לפני|להודיע לפני|חניה|חנייה|לא לדפוק|לא לצלצל|ישנ?ה?\s+ב|שומר(?:ת|ים)? שבת|מעשן|ניתוח|אוטיסט|רגישות|לא נמצא בבית|לא נמצאת בבית|לא יהיה בבית|לא תהיה בבית|לא בבית|מנעול|דלת אחורית|כניסה מאחור|להיזהר|זהירות|חשמל|פרקט|ריח/;
+const NOTE_RE=/ניטור|אבחון|איתור|לחייג|יחייג|תחייג|להתקשר|לפני ההגעה|חשבונית מס|באשראי|בצ['׳]ק|תוספת|הצעת מחיר|על המקום|במועד אחר|מים עומדים|אדניות|ארגזי תריס|מחילות|כלב|כלבה|כלבים|חתול|חתולה|חתולים|חיות|חיית מחמד|בעלי חיים|תוכי|ציפור|ציפורים|אקווריום|דגים|ארנב|שרקן|חולה|חולים|אסטמ|אלרג|רגיש|בהריון|הריון|תינוק|תינוקת|ילדים קטנים|ילד קטן|קשיש|קשישה|מבוגר|מבוגרת|נכה|כיסא גלגלים|כסא גלגלים|מפתח|אצל השכן|אצל השכנה|קוד\s*(?:כניסה|בניין|לשער|לדלת)|אינטרקום|להתקשר לפני|תתקשר לפני|לצלצל לפני|להודיע לפני|חניה|חנייה|לא לדפוק|לא לצלצל|ישנ?ה?\s+ב|שומר(?:ת|ים)? שבת|מעשן|ניתוח|אוטיסט|רגישות|לא נמצא בבית|לא נמצאת בבית|לא יהיה בבית|לא תהיה בבית|לא בבית|מנעול|דלת אחורית|כניסה מאחור|להיזהר|זהירות|חשמל|פרקט|ריח/;
 const NOTE_KEY=/(?:^|[\s,])(?:הערות|הערה|לציין|שים לב|תשים לב|חשוב לדעת|לידיעתך|נ\.?ב\.?)\s*(?:[:\-–]\s*|ש)?/;
 function extractNotes(raw){
   const t=String(raw||"").replace(/\r/g,"").replace(QA_TRIGGER,"");
@@ -5560,6 +5572,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       ["phone","city","aptNum","entrance","rooms","floor","price","prefDate","timeFrom","timeTo"].forEach(k=>{ if(r[k]!==undefined&&r[k]!=="") nx[k]=r[k]; });
       if(r.street){ nx.street=[r.street,r.buildingNum].filter(Boolean).join(" "); nx.buildingNum=""; }
       if(r.propertyType){ nx.propertyType=r.propertyType; nx.propOther=false; }
+      if(r.bizName&&!x.bizName) nx.bizName=r.bizName;
       if(r.hasYard!==undefined) nx.hasYard=r.hasYard;
       nx.name=r.name||x.name||"לא צוין";
       if(r.brand&&!x.source) nx.source=r.brand;
