@@ -4037,6 +4037,7 @@ const PERSONAL_CHIPS=["🏦 בנק / צ'ק","🛒 קניות","🩺 רופא","�
 const PERSONAL_CLR="#2563eb";
 // צבעי יומן: הדברה = ירוק בהיר, משימה = כחול בהיר. פתוח = מסגרת מקווקווה, הסתיים = מסגרת אחידה
 const CAL_JOB={bg:"#dcfce7",bd:"#16a34a"}, CAL_TASK={bg:"#dbeafe",bd:"#2563eb"};
+const calIsDone=(a,p)=>{ p=p||{}; return isPersonal(a)?a.status==="בוצע":(!!p.closed||p.stage==="בוצע"||p.stage==="הושלם"||a.status==="בוצע"); };
 function calCardStyle(a,pr,bw=1.5,wc){ const pers=isPersonal(a); const c=pers?CAL_TASK:CAL_JOB; const p=pr||{};
   const cancelled=a.status==="בוטל"; const done=pers?a.status==="בוצע":(!!p.closed||p.stage==="בוצע"||p.stage==="הושלם"||a.status==="בוצע");
   return {background:cancelled?"#f8fafc":"#fff",color:"#0f172a",border:`${Math.max(bw,2)}px ${done&&!cancelled?"solid":"dashed"} ${cancelled?"#94a3b8":c.bd}`,boxShadow:"0 1px 3px rgba(15,23,42,.08)"}; }
@@ -4146,12 +4147,21 @@ function useTouchDrag(onDrop){
   return {drag,ghost,cardProps,justDragged,start};
 }
 // ═══ תצוגת יומן בסגנון גוגל: ימים בעמודות זה לצד זה, שעות כלפי מטה ═══
-function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew,tdrag,draggedId,setDraggedId,onMove,narrow,onSwipe}){
+function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOpen,onNew,tdrag,draggedId,setDraggedId,onMove,narrow,onSwipe}){
   const custById=React.useMemo(()=>{const m={};(customers||[]).forEach(c=>{m[String(c.id)]=c;});return m;},[customers]);
   const H0=7,H1=21, HH=narrow?46:50;
   const toISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const DN=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"], DNF=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
   const wColor=wid=>{const w=workers.find(x=>String(x.id)===String(wid));return w?.color||CLR.primary;};
+  // שבת מקופלת בתצוגת שבוע (כפתור + לפתיחה)
+  const [satOpen,setSatOpen]=useState(()=>{ try{ return localStorage.getItem("h360_satopen")==="1"; }catch(e){ return false; } });
+  const togSat=()=>setSatOpen(v=>{ try{ localStorage.setItem("h360_satopen",v?"0":"1"); }catch(e){} return !v; });
+  const isWeek=allDays.length===7; const satDay=isWeek?allDays.find(d=>d.getDay()===6):null;
+  const days=isWeek&&!satOpen?allDays.filter(d=>d.getDay()!==6):allDays;
+  const satCount=satDay?items.filter(a=>a.date===`${satDay.getFullYear()}-${String(satDay.getMonth()+1).padStart(2,"0")}-${String(satDay.getDate()).padStart(2,"0")}`).length:0;
+  const satStrip=(kind)=>isWeek&&!satOpen?<div key="sat" title="פתח שבת" onClick={togSat} style={{width:22,flexShrink:0,background:"#f1f5f9",borderRight:`1px solid ${CLR.border}`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",paddingTop:kind==="head"?6:0,fontSize:11,color:"#64748b",fontWeight:700,position:"relative",zIndex:6}}>
+    {kind==="head"&&<><span>ש׳</span><span style={{width:18,height:18,borderRadius:"50%",background:CLR.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",marginTop:3,fontSize:13}}>+</span>{satCount>0&&<span style={{marginTop:3,fontSize:10,color:"#b45309"}}>{satCount}</span>}</>}
+  </div>:null;
   const today=todayStr(); const n=days.length;
   const [nowMin,setNowMin]=useState(()=>{const d=new Date();return d.getHours()*60+d.getMinutes();});
   React.useEffect(()=>{const t=setInterval(()=>{const d=new Date();setNowMin(d.getHours()*60+d.getMinutes());},60000);return()=>clearInterval(t);},[]);
@@ -4189,19 +4199,27 @@ function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew
   const evCard=(e,iso)=>{ const a=e.a; const pr=jobProgress(a,execLogs,finance); const pers=isPersonal(a); const col=pers?PERSONAL_CLR:wColor(a.workerId);
     const top=(e.st-H0*60)/60*HH, h=Math.max(20,(e.en-e.st)/60*HH-2); const w=100/e.ncol;
     const cp=tdrag?tdrag.cardProps(a,a.customerName):{};
-    const small=h<40||(narrow&&n>3);
+    const compact=narrow&&n>3; const small=h<40&&!compact; const done=calIsDone(a,pr)&&a.status!=="בוטל";
     return <div key={a.id} {...cp} draggable={!narrow} onDragStart={ev=>{setDraggedId&&setDraggedId(a.id);ev.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId&&setDraggedId(null);setDropKey(null);}}
       onClick={ev=>{ev.stopPropagation();onOpen(a);}} title={(a.timeWindow||a.time)+" · "+a.customerName+(a.pestType&&!pers?" · "+a.pestType:"")}
-      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:small?"1px 3px":"3px 5px",fontSize:narrow&&n>3?9:11,lineHeight:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a",textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
-      {(()=>{ const cu=custById[String(a.customerId)]||{}; const who=pers?a.customerName:(a.contactName||cu.contactName||a.customerName||"—"); const ph=pers?"":(cu.phone||a.phone||""); const L={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:compact?"1px 2px":small?"1px 3px":"3px 5px",fontSize:compact?9:11,lineHeight:compact?1.15:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a"}}>
+      {done&&<span style={{position:"absolute",top:1,left:1,width:compact?11:14,height:compact?11:14,borderRadius:"50%",background:"#16a34a",color:"#fff",fontSize:compact?8:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✓</span>}
+      {(()=>{ const cu=custById[String(a.customerId)]||{}; const who=pers?String(a.customerName||"").replace(/^📌\s*/,compact?"":"📌 "):(a.contactName||cu.contactName||a.customerName||"—"); const ph=pers?"":(cu.phone||a.phone||""); const L={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+        const pestT=Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType; const street=String(a.address||"").split(",")[0];
+        if(compact) return <>
+          <div style={{fontWeight:800,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:h>=60?2:1,WebkitBoxOrient:"vertical",wordBreak:"break-word",paddingLeft:done?10:0}}>{who}</div>
+          {h>=40&&!pers&&pestT&&<div style={{...L,color:"#334155"}}>{pestT}</div>}
+          {h>=52&&!pers&&street&&<div style={{...L,color:"#475569"}}>{street}</div>}
+          {pers&&done&&h>=34&&<div style={{color:"#16a34a",fontWeight:800}}>✓ בוצע</div>}
+        </>;
         return <>
-          <div style={{...L,fontWeight:800,whiteSpace:small?"nowrap":"normal"}}>{who}</div>
+          <div style={{...L,fontWeight:800,whiteSpace:small?"nowrap":"normal",paddingLeft:done?14:0}}>{who}</div>
           {!small&&ph&&<div style={{...L,color:"#0f172a",direction:"ltr",textAlign:"right"}}>{ph}</div>}
-          {!small&&h>=52&&!pers&&a.pestType&&<div style={{...L,color:"#334155"}}>🐛 {(Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType)}</div>}
+          {!small&&h>=52&&!pers&&pestT&&<div style={{...L,color:"#334155"}}>🐛 {pestT}</div>}
           {!small&&h>=66&&!pers&&a.address&&<div style={{...L,color:"#334155"}}>📍 {a.address}</div>}
           {!small&&h>=84&&<div style={{...L,color:"#64748b"}} dir="ltr">{a.timeWindow||a.time}</div>}
         </>; })()}
-      {!small&&h>=44&&<div style={{color:pr.color,fontWeight:700,fontSize:9,whiteSpace:"nowrap",overflow:"hidden"}}>{pr.label}</div>}
+      {!small&&!compact&&h>=44&&(pers?(done?<div style={{color:"#16a34a",fontWeight:800,fontSize:10}}>✓ בוצע</div>:null):<div style={{color:done?"#16a34a":pr.color,fontWeight:700,fontSize:9,whiteSpace:"nowrap",overflow:"hidden"}}>{pr.label}</div>)}
     </div>; };
   return <div ref={box} style={{direction:"rtl",background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}>
     {/* כותרות ימים */}
@@ -4210,14 +4228,17 @@ function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew
       {days.map((d,i)=>{const iso=toISO(d);const td=iso===today;return <div key={i} className="tg-day" onClick={()=>onNew(iso,"")} style={{flex:1,minWidth:0,textAlign:"center",padding:"6px 0 5px",cursor:"pointer",borderRight:`1px solid ${CLR.border}`}}>
         <div style={{fontSize:narrow?11:12,color:td?CLR.primary:"#64748b",fontWeight:600}}>{n<=3&&!narrow?DNF[d.getDay()]:DN[d.getDay()]}</div>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:narrow?28:32,height:narrow?28:32,borderRadius:"50%",background:td?CLR.primary:"transparent",color:td?"#fff":"#0f172a",fontWeight:800,fontSize:narrow?15:17}}>{d.getDate()}</div>
+        {isWeek&&d.getDay()===6&&<button type="button" onClick={ev=>{ev.stopPropagation();togSat();}} style={{display:"block",margin:"2px auto 0",border:"1px solid #cbd5e1",background:"#fff",borderRadius:10,fontSize:11,padding:"0 6px",cursor:"pointer",color:"#64748b"}}>− סגור</button>}
       </div>;})}
+      {satStrip("head")}
     </div>
     {/* במהלך היום */}
     {hasAllDay&&<div style={{display:"flex",borderBottom:"2px solid #fcd34d",background:"#fffbeb",overflow:"hidden"}}>
       <div style={{width:gutter,flexShrink:0,fontSize:9,color:"#92400e",fontWeight:700,textAlign:"center",paddingTop:4,position:"relative",zIndex:6,background:"#fffbeb"}}>☀️</div>
       {allDayBy.map((l,i)=><div key={i} className="tg-day" style={{flex:1,minWidth:0,padding:2,borderRight:`1px solid ${CLR.border}`}}>
-        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),textDecoration:pers&&a.status==="בוצע"?"line-through":"none",borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{a.customerName}</div>;})}
+        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{calIsDone(a,jobProgress(a,execLogs,finance))&&a.status!=="בוטל"?<span style={{color:"#16a34a",fontWeight:900}}>✓ </span>:null}{String(a.customerName||"").replace(/^📌\s*/,"")}</div>;})}
       </div>)}
+      {satStrip("allday")}
     </div>}
     {/* גוף: שעות × ימים */}
     <div style={{display:"flex",position:"relative"}}>
@@ -4225,8 +4246,8 @@ function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew
         {hours.map(h=><div key={h} style={{position:"absolute",top:(h-H0)*HH-6,left:0,right:4,textAlign:"left",fontSize:narrow?10:11,color:"#94a3b8",direction:"ltr"}}>{h>H0?String(h).padStart(2,"0")+":00":""}</div>)}
       </div>
       {days.map((d,i)=>{const iso=toISO(d);const ev=layout(items.filter(a=>a.date===iso&&!isAllDay(a)));const td=iso===today;
-        return <div key={i} className="tg-day" data-drop-date={iso} style={{flex:1,minWidth:0,position:"relative",height:(H1-H0+1)*HH,borderRight:`1px solid ${CLR.border}`,background:td?"#f7fdf9":"#fff",
-          backgroundImage:`repeating-linear-gradient(to bottom, #eef2f6 0, #eef2f6 1px, transparent 1px, transparent ${HH}px)`}}>
+        return <div key={i} className="tg-day" data-drop-date={iso} style={{flex:1,minWidth:0,position:"relative",height:(H1-H0+1)*HH,borderRight:`1px solid ${CLR.border}`,background:td?"#f7fdf9":"#fff"}}>
+          {hours.map(h=><div key={"l"+h} style={{position:"absolute",top:(h-H0)*HH,left:0,right:0,height:0,borderTop:"1px solid #e5e9ef",pointerEvents:"none"}}/>)}
           {half.map(m=>{const k=iso+"|"+tStr(m);const on=dkey===k;return <div key={m} data-drop-date={iso} data-drop-time={tStr(m)}
             onClick={()=>onNew(iso,tStr(m))}
             onDragOver={e=>{e.preventDefault();if(dropKey!==k)setDropKey(k);}} onDragLeave={()=>setDropKey(null)}
@@ -4235,6 +4256,7 @@ function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew
           {ev.map(e=>evCard(e,iso))}
           {td&&nowMin>=H0*60&&nowMin<=(H1+1)*60&&<div style={{position:"absolute",top:(nowMin-H0*60)/60*HH,left:0,right:0,height:2,background:"#ef4444",zIndex:4,pointerEvents:"none"}}><div style={{position:"absolute",right:-4,top:-4,width:10,height:10,borderRadius:"50%",background:"#ef4444"}}/></div>}
         </div>;})}
+      {satStrip("body")}
     </div>
   </div>;
 }
