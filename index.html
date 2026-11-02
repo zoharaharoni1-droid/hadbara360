@@ -2002,11 +2002,11 @@ const micNorm=t=>String(t||"").replace(/[.,!?״"']/g,"").replace(/\s+/g," ").tri
 // מיזוג תוצאות סופיות: אם התוצאה החדשה כוללת את הקודמת (מצטברת) — מחליפים; אם כבר נכללת — מדלגים; אחרת מוסיפים
 const micMerge=(acc,t)=>{ t=String(t||"").replace(/\s+/g," ").trim(); if(!t) return acc; if(!acc) return t; const A=micNorm(acc), T=micNorm(t); if(T.startsWith(A)) return t; if(A.endsWith(T)||A.includes(T)) return acc; return acc+" "+t; };
 function MicButton({onText,label="🎤 דבר"}){
-  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false); const [live,setLive]=useState(""); const [warn,setWarn]=useState("");
+  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false); const [idle,setIdle]=useState(false); const [live,setLive]=useState(""); const [warn,setWarn]=useState("");
   const rec=React.useRef(null); const want=React.useRef(false); const running=React.useRef(false);
   const sess=React.useRef({sent:"",start:0,got:false}); const lastChunk=React.useRef(""); const fails=React.useRef(0); const timer=React.useRef(null);
   const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
-  const cb=React.useRef(onText); cb.current=onText;
+  const cb=React.useRef(onText); cb.current=onText; const idleRef=React.useRef(false); idleRef.current=idle;
   const startRec=()=>{
     if(!SR||running.current||!want.current) return;
     // באנדרואיד: משפט-משפט (כמו בגרסה הראשונה) — המצב "רציף" שם שולח כל משפט מצטבר שוב ושוב וגורם לכפילויות
@@ -2029,31 +2029,42 @@ function MicButton({onText,label="🎤 דבר"}){
     r.onend=()=>{ running.current=false; setLive("");
       if(!want.current){ setOn(false); return; }
       if(document.visibilityState!=="visible"){ setPaused(true); return; }
+      // שקט בלי דיבור — לא פותחים שוב (זה מה שגורם לצפצופים חוזרים). מחכים ללחיצה על "המשך"
+      if(!sess.current.got&&Date.now()-sess.current.start>=1500){ setIdle(true); return; }
       // הגנה מלולאה: אם נעצר מהר בלי שנשמע כלום — מחכים יותר, ואחרי כמה פעמים עוצרים
       const quick=Date.now()-sess.current.start<1500&&!sess.current.got;
       fails.current=quick?fails.current+1:0;
       if(fails.current>=4){ want.current=false; setOn(false); setWarn("המיקרופון לא מצליח להקשיב ברצף בטלפון הזה. אפשר ללחוץ שוב, או להשתמש במיקרופון של המקלדת 🎙️"); return; }
       clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); }, quick?900*fails.current:120);
     };
-    rec.current=r; try{ r.start(); running.current=true; setPaused(false); }catch(e){ running.current=false; }
+    rec.current=r; try{ r.start(); running.current=true; setPaused(false); setIdle(false); }catch(e){ running.current=false; }
   };
   React.useEffect(()=>{
-    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current){ clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); },400); } };
+    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current&&!idleRef.current){ clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); },400); } };
     document.addEventListener("visibilitychange",vis);
     return()=>{ document.removeEventListener("visibilitychange",vis); want.current=false; clearTimeout(timer.current); try{rec.current&&rec.current.abort();}catch(e){} };
   },[]);
   const toggle=()=>{
     if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
     setWarn("");
-    if(want.current){ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
+    if(want.current&&idle){ setIdle(false); fails.current=0; startRec(); return; }
+    if(want.current){ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setIdle(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
     want.current=true; fails.current=0; lastChunk.current=""; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
   };
+  const stop=()=>{ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setIdle(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} };
+  const lbl=on?(idle?"▶ להמשך הקלטה":paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label;
   return <span style={{display:"inline-flex",flexDirection:"column",gap:4,maxWidth:"100%"}}>
-    <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>
+    <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?(idle?"#16a34a":"#dc2626"):"#93c5fd"),background:on?(idle?"#dcfce7":"#fee2e2"):"#fff",color:on?(idle?"#166534":"#b91c1c"):"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused&&!idle?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>
       <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
-      {on?(paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label}</button>
+      {lbl}</button>
     {on&&live&&<span style={{fontSize:13,color:"#64748b",fontStyle:"italic"}}>… {live}</span>}
     {warn&&<span style={{fontSize:12,color:"#b45309"}}>{warn}</span>}
+    {on&&ReactDOM.createPortal(<div style={{position:"fixed",left:"50%",bottom:"calc(86px + env(safe-area-inset-bottom))",transform:"translateX(-50%)",zIndex:7000,display:"flex",alignItems:"center",gap:8,background:"#0f172a",color:"#fff",borderRadius:30,padding:"7px 8px 7px 14px",boxShadow:"0 8px 24px rgba(0,0,0,.3)",direction:"rtl",maxWidth:"94vw"}}>
+      <span style={{width:10,height:10,borderRadius:"50%",background:idle?"#22c55e":paused?"#f59e0b":"#ef4444",animation:!idle&&!paused?"h360pulse 1.2s infinite":"none",flexShrink:0}}/>
+      <span style={{fontSize:14,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"46vw"}}>{idle?"בהשהיה — אפשר לגלול ולחשוב":paused?"ממתין":(live?"… "+live:"מקשיב…")}</span>
+      {idle&&<button type="button" onClick={toggle} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:20,padding:"7px 12px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>▶ המשך</button>}
+      <button type="button" onClick={stop} style={{border:"none",background:"#dc2626",color:"#fff",borderRadius:20,padding:"7px 12px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>⏹ סיום</button>
+    </div>,document.body)}
   </span>;
 }
 // ═══ מילוי חכם של יומן ביצוע: מדברים / מקלידים / מדביקים → היומן מתמלא ═══
