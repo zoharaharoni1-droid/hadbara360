@@ -3831,7 +3831,13 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {kv("סוג נכס",cust.propertyType||appt.propertyType?`${cust.propertyType||appt.propertyType}${(cust.rooms||appt.rooms)?" · "+(cust.rooms||appt.rooms)+" חד׳":""}${(cust.floors||appt.floors)?" · "+(cust.floors||appt.floors)+" קומות":""}`:"")}
       {kv("אזורים",appt.buildingAreas&&appt.buildingAreas.length?appt.buildingAreas.join(", "):"")}
       {kv("מקור",appt.source||cust.source)}
+      {(()=>{ const ec=[...(appt.extraContacts||[]),...((cust.extraContacts||[]).filter(c=>!(appt.extraContacts||[]).some(x=>x.phone===c.phone)))]; return ec.length?<div style={{marginTop:8}}>
+        <div style={{fontSize:13,color:"#64748b",marginBottom:4}}>👥 אנשי קשר</div>
+        {ec.map((c,i)=><button key={i} type="button" onClick={()=>c.phone&&setSheet("ph:"+c.phone)} style={{display:"flex",width:"100%",alignItems:"center",gap:8,padding:"8px 10px",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff",marginBottom:6,cursor:c.phone?"pointer":"default",fontFamily:"inherit",fontSize:14,textAlign:"right"}}>
+          <b style={{flex:1}}>{[c.role,c.name].filter(Boolean).join(" · ")||"איש קשר"}</b><span style={{direction:"ltr",color:"#16a34a",fontWeight:700}}>{c.phone}</span></button>)}
+      </div>:null; })()}
       {appt.notes&&<div style={{background:"#f8fafc",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>📝 <b>הערות לתור:</b> {appt.notes}</div>}
+      {appt.rawMsg&&<details style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"9px 12px",marginTop:8}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#92400e"}}>📋 ההודעה המקורית (פנימי — רק למדביר)</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:6}}>{appt.rawMsg}</div></details>}
       {cust.notes&&<div style={{background:"#fef9c3",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>⚠️ <b>הערות לקוח:</b> {cust.notes}</div>}
       {appt.propertyNotes&&<div style={{background:"#f8fafc",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>🏠 <b>הערות על הנכס:</b> {appt.propertyNotes}</div>}
       {onSaveEdit&&!editMode&&<div style={{marginTop:10}}><Btn v="secondary" full onClick={()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);}}>✏️ ערוך תור / שנה שעה</Btn></div>}
@@ -3934,6 +3940,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </div>}
     </div>}
 
+    {String(sheet||"").startsWith("ph:")&&<ActionSheet title={sheet.slice(3)} items={phoneItems(sheet.slice(3),"שלום, ")} onClose={()=>setSheet(null)}/>}
     {sheet==="phone"&&<ActionSheet title={phone} items={phoneItems(phone,"שלום "+(contact||appt.customerName)+", ")} onClose={()=>setSheet(null)}/>}
     {sheet==="nav"&&<ActionSheet title={appt.address} items={navItems(appt.address)} onClose={()=>setSheet(null)}/>}
     {sheet==="quick"&&<ActionSheet title="⚡ פעולות מהירות" onClose={()=>setSheet(null)} items={[
@@ -4327,7 +4334,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
         status:"פעיל",notes:[r.boxesNote,r.sewerNote,...(r.notes||[])].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
       const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
         pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
-        buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||""};
+        buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||"",rawMsg:clean,extraContacts:(r.contacts||[]).filter((c,i)=>i>0||c.role).map(c=>({role:c.role||"",name:c.name||"",phone:c.phone}))};
       const saved=onSaveJob(cust,appt); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
     }
     try{navigator.vibrate&&navigator.vibrate([30,40,30]);}catch(e){}
@@ -5076,7 +5083,7 @@ function waParse(raw, cityNames){
   let spokenCity="";
   if(!addrLine){
     // טקסט מוכתב (שורה אחת ארוכה): מחפשים "<רחוב> <מספר>, <עיר>" בכל מקום ולוקחים רק את המילים שלפני המספר שהן שם הרחוב
-    const ADDR_STOP=new Set(["של","הוא","היא","הם","ועד","בית","הבית","ועד-בית","רחוב","ברחוב","רח'","רח׳","ברח'","ברח׳","כתובת","הכתובת","בכתובת","לקוח","הלקוח","שם","זה","זו","נמצא","נמצאת","גר","גרה","גרים","ממוקם","באזור","ליד","את","עם","אנחנו","יש","בניין","בבניין","הבניין","דירה","בדירה","משותף","פרטי","ב","מ","ו","וזה","שזה","זאת","אצל","כלומר","יעני","בעצם","אז","גם","נגיד","ברחוב:","סניף","במסעדה","מסעדה","משרד","במשרד","העבודה","עבודה"]);
+    const ADDR_STOP=new Set(["קומה","קומת","בקומה","כניסה","חדרים","חדר","מספר","דירות","של","הוא","היא","הם","ועד","בית","הבית","ועד-בית","רחוב","ברחוב","רח'","רח׳","ברח'","ברח׳","כתובת","הכתובת","בכתובת","לקוח","הלקוח","שם","זה","זו","נמצא","נמצאת","גר","גרה","גרים","ממוקם","באזור","ליד","את","עם","אנחנו","יש","בניין","בבניין","הבניין","דירה","בדירה","משותף","פרטי","ב","מ","ו","וזה","שזה","זאת","אצל","כלומר","יעני","בעצם","אז","גם","נגיד","ברחוב:","סניף","במסעדה","מסעדה","משרד","במשרד","העבודה","עבודה"]);
     const cityAlt=cities.map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
     if(cityAlt){
       const re=new RegExp("((?:[א-ת\"'׳\-]{1,}\\s+){0,5}[א-ת\"'׳\-]{2,})\\s+(\\d{1,4}(?:[א-ת]|\\s[א-ה](?=\\s*,))?)(?:\\s*(?:דירה|דירת)\\s*\\d{1,3})?\\s*[,،]?\\s*(?:ב|ב-)?("+cityAlt+")(?=$|[\\s,.\\-])");
@@ -5112,7 +5119,7 @@ function waParse(raw, cityNames){
     if(city) out.city=city;
     if(out.street||out.city) out.found.push("כתובת");
   } else { for(const c of cities){ if(text.includes(c)){ out.city=WA_CITY_NORM[c]||c; out.found.push("עיר"); break; } } }
-  if(!out.aptNum){ const ap=text.match(/(?:דירה|דירת)\s*(?:מספר|מס['׳]?)?\s*(\d{1,3})(?!\s*(?:\.\d)?\s*(?:חדרים|חד['׳]|חדר))/); if(ap) out.aptNum=ap[1]; }
+  if(!out.aptNum){ const ap=text.match(/(?<![א-ת])(?:דירה|דירת)\s*(?:מספר|מס['׳]?)?\s*(\d{1,3})(?![\d\-])(?!\s*(?:\.\d)?\s*(?:חדרים|חד['׳]|חדר))/); if(ap) out.aptNum=ap[1]; }
   if(!out.entrance){ const en=text.match(/כניסה\s*([א-ו]|\d)(?![א-ת\d])/); if(en) out.entrance=en[1]; }
   if(out.buildingNum) out.buildingNum=out.buildingNum.replace(/\s+/g,"");
   // מזיק שנמצא רק בתוך שם הרחוב ("הנמל", "הנחשונים") — לא מזיק
@@ -5125,6 +5132,20 @@ function waParse(raw, cityNames){
       out.boxesNote="🪤 "+n+" תיבות האכלה "+(out.boxes.kind==="refill"?"(מילוי בתיבות קיימות)":out.boxes.kind==="both"?"(חדשות + מילוי)":"חדשות"+(/יביא|להביא|מביא|תביא/.test(text)?" — המדביר מביא איתו":""));
       out.found.push("תיבות"); } }
   if(/(?:רעל|פיתיון|פתיון)[א-ת]*\s*(?:ב|בתוך\s*)?(?:ה)?ביוב/.test(text)) out.sewerNote="☣️ כולל פיתיון/רעל בביובים";
+  // אנשי קשר: כל טלפון בהודעה + מה שכתוב לידו ("הדיירת", "בעל הדירה", "מנהל", "יוסי"...)
+  { const phRe=/(?:\+?972[\s-]?|0)5\d[\s-]?\d{3}[\s-]?\d{4}|(?:\+?972[\s-]?|0)5\d[\s-]?\d{7}|(?:\+?972[\s-]?|0)(?:[23489]|7\d)[\s-]?\d{3}[\s-]?\d{4}/g;
+    const ROLE=/דייר|בעל(?:ת)?\s*(?:ה)?(?:דירה|בית|נכס|עסק|מקום)|בעל(?:ת)?\s*הבית|משכיר|שוכר|מנהל|אחמ"?ש|אחראי|שכנ|ועד|יו"?ר|אשת|אשתו|בעלה|הבן|הבת|מזכיר|אב\s*בית|מתווך|איש\s*קשר|אשת\s*קשר|לקוח|שומר|קבלן|עובד|אמא|אבא|סבתא|סבא|מטפלת|חברה|נציג/;
+    const cts=[]; const seen=new Set();
+    lines.forEach(l=>{ const ms=[...l.matchAll(phRe)]; if(!ms.length) return; let prev=0;
+      ms.forEach((m,k)=>{ const ph=normILPhone(m[0].replace(/[\s-]/g,"")); if(seen.has(ph)) return; seen.add(ph);
+        const before=l.slice(prev,m.index), after=l.slice(m.index+m[0].length, k+1<ms.length?ms[k+1].index:l.length); prev=m.index+m[0].length;
+        const clean=t=>t.replace(/(?:טלפון|טל['׳]?|נייד|פלאפון|מספר|מס['׳]?)\s*(?:של)?/g," ").replace(/[:\-–,.()|/]+/g," ").replace(/\s+/g," ").trim();
+        let lab=clean(before)||clean(after); if(/\d/.test(lab)||lab.split(" ").length>5) lab=(clean(after).split(" ").length<=5&&!/\d/.test(clean(after)))?clean(after):"";
+        const ik2=lab.match(/^(.*?(?:איש|אשת)\s*(?:ה)?קשר)\s+([א-ת'׳"]{2,}(?:\s[א-ת'׳"]{2,})?)$/); if(ik2){ cts.push({phone:ph,role:ik2[1],name:ik2[2]}); return; }
+        const isRole=ROLE.test(lab); cts.push({phone:ph,role:isRole?lab:"",name:!isRole&&/^[א-ת'׳"]{2,}(?:\s[א-ת'׳"]{2,}){0,2}$/.test(lab)&&!WA_PEST_WORD.test(lab)?lab:""}); WA_PEST_WORD.lastIndex=0; }); });
+    if(cts.length>1||(cts.length===1&&(cts[0].role||cts[0].name))){ out.contacts=cts; if(cts.length>1) out.found.push(cts.length+" אנשי קשר"); }
+    if(cts.length&&cts[0].phone) out.phone=cts[0].phone;
+  }
   // שם
   let name=label(/^(?:שם(?:\s*(?:הלקוח|לקוח|מלא))?|לקוח|לקוחה|איש קשר)\s*[:\-]\s*(.+)$/);
   if(!name){
@@ -5138,10 +5159,11 @@ function waParse(raw, cityNames){
       name=m[1]; if(m[2]&&!NM_STOP.test(m[2])&&!/^(?:ו|ב|ל|מ|ש|ה)?(?:ועד|בית|רחוב|טלפון|מספר|הדבר|צריך|רוצה)/.test(m[2])&&!cities.includes(m[2])) name+=" "+m[2]; break; }
   }
   if(!name){
-    const STOP=/הדברה|הדברת|דירה|דירת|חדר|קומה|קרקע|חצר|גינה|מחיר|₪|ש"ח|שח|כתובת|טלפון|בין|מחר|היום|שעה|בוקר|ערב|יום|ג'וקים|תיקנים|פרעושים|נמלים|עכבר|חולד|בניין|בית|רחוב|שלום|תודה|היי|אישור|מאושר|לתאם|תיאום|ללא|בלי|מכרסמ|יתוש|פשפש|דחוף/;
+    const STOP=/שער|קוד|חניה|חנייה|מ"ר|מטר|הדברה|הדברת|דירה|דירת|חדר|קומה|קרקע|חצר|גינה|מחיר|₪|ש"ח|שח|כתובת|טלפון|בין|מחר|היום|שעה|בוקר|ערב|יום|ג'וקים|תיקנים|פרעושים|נמלים|עכבר|חולד|בניין|בית|רחוב|שלום|תודה|היי|אישור|מאושר|לתאם|תיאום|ללא|בלי|מכרסמ|יתוש|פשפש|דחוף/;
     const c=lines.find(l=>/^[א-ת'׳"\-\s]{2,24}$/.test(l)&&l.split(/\s+/).length<=3&&!STOP.test(l)&&!cities.some(x=>l===x));
     if(c) name=c.trim();
   }
+  if(!name&&out.contacts){ const nc=out.contacts.find(c=>c.name); if(nc) name=nc.name; }
   if(name){ out.name=name.replace(/[,.:]+$/,""); out.found.push("שם"); }
   const nts=extractNotes(text); if(nts.length){ out.notes=nts; out.found.push("הערות"); }
   return out;
@@ -5406,6 +5428,7 @@ function WAPasteBox({onApply,cityNames}){
         {res.brand&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:20,padding:"4px 10px",fontSize:13}}>🏢 נשלח מ: <b>{res.brand}</b> (לא מזיק)</span>}
         {Object.keys(LBL).filter(k=>res[k]!==undefined&&res[k]!==""&&!(Array.isArray(res[k])&&!res[k].length)).map(k=><span key={k} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}><span style={{color:"#64748b"}}>{LBL[k]}:</span> <b>{Array.isArray(res[k])?res[k].join(", "):typeof res[k]==="boolean"?(res[k]?"יש":"אין"):res[k]}</b></span>)}
         {res.boxesNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.boxesNote}</span>}
+        {(res.contacts||[]).filter((c,i)=>i>0||c.role).map((c,i)=><span key={"c"+i} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,padding:"4px 10px",fontSize:13}}>👥 {[c.role,c.name].filter(Boolean).join(" ")||"איש קשר"}: <b dir="ltr">{c.phone}</b></span>)}
         {(res.notes||[]).map((n,i)=><span key={"n"+i} style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>📝 {n}</span>)}
         {res.sewerNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.sewerNote}</span>}
         {!res.name&&<span style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>שם: לא צוין</span>}
@@ -5429,6 +5452,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     pests:[],customPest:"",price:"",source:"",
     buildingAreas:[],
     prefDate:initialDate,timeFrom:initialTime||"08:00",timeTo:"10:00",
+    extraContacts:[],rawMsg:"",
   });
   const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
@@ -5504,7 +5528,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,entrance:f.entrance||"",
       propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
       floor:isApt||isBiz?f.floor:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
-      status:f.status,notes:f.notes,
+      status:f.status,notes:f.notes,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
       totalPaid:0,lastTreatment:"",
     };
@@ -5521,7 +5545,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),
         buildingAreas:f.buildingAreas,
         propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floor:isApt||isBiz?f.floor:"",floors:f.floors,hasYard:isShared?true:f.hasYard,sewers:f.sewers,
-        status:"ממתין",executionLog:null,
+        status:"ממתין",executionLog:null,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),rawMsg:f.rawMsg||"",
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
     }
@@ -5543,6 +5567,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       if(other.length) nx.customPest=[x.customPest,...other].filter(Boolean).join(", ");
       if(r.timeFrom) nx.allDay=false;
       nx.notes=mergeNotes(x.notes,[r.boxesNote,r.sewerNote,...(r.notes||[])]);
+      nx.rawMsg=[x.rawMsg,raw.trim()].filter(Boolean).join("\n— — —\n");
+      if(r.contacts&&r.contacts.length){ const ex=[...(x.extraContacts||[])]; r.contacts.forEach((c,i)=>{ if(i===0&&!c.role) return; if(!ex.some(e=>e.phone===c.phone)) ex.push({role:c.role||"",name:c.name||"",phone:c.phone}); }); nx.extraContacts=ex; }
       return nx; });
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
@@ -5564,6 +5590,19 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       </div>
       <G2><Inp label={isShared||isBiz?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר נוספים <span style={{fontSize:11}}>(דייר, בעל הדירה, מנהל, שכן…)</span></label>
+        {(f.extraContacts||[]).map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.2fr auto",gap:6,marginBottom:6}}>
+          {["role","name","phone"].map(k=><input key={k} value={c[k]||""} onChange={e=>set("extraContacts",f.extraContacts.map((x,j)=>j===i?{...x,[k]:e.target.value}:x))} placeholder={{role:"תפקיד",name:"שם",phone:"טלפון"}[k]} style={{width:"100%",boxSizing:"border-box",padding:"8px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",direction:k==="phone"?"ltr":"rtl",textAlign:"right"}}/>)}
+          <button type="button" onClick={()=>set("extraContacts",f.extraContacts.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:"#b91c1c",borderRadius:8,width:34,cursor:"pointer"}}>✕</button>
+        </div>)}
+        <button type="button" onClick={()=>set("extraContacts",[...(f.extraContacts||[]),{role:"",name:"",phone:""}])} style={{width:"100%",padding:"7px",borderRadius:8,border:`1.5px dashed ${CLR.primary}66`,background:"transparent",color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ איש קשר נוסף</button>
+      </div>
+      {f.rawMsg&&<details style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:12}}>
+        <summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#475569"}}>📋 ההודעה המקורית — פנימי, רק למדביר (לא נשלח ללקוח)</summary>
+        <div style={{whiteSpace:"pre-wrap",fontSize:13,marginTop:6,color:"#0f172a"}}>{f.rawMsg}</div>
+        <button type="button" onClick={()=>set("rawMsg","")} style={{marginTop:6,border:"none",background:"none",color:"#b91c1c",fontSize:12,cursor:"pointer"}}>מחק</button>
+      </details>}
       <Sel label="כיצד הגיע הלקוח?" value={f.source||""} onChange={v=>set("source",v)}
         options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/>
     </FieldCard>
