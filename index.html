@@ -1995,78 +1995,94 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
     </div>}
   </div>;
 }
-// ── הקלטה קולית: מדברים במקום להקליד (זיהוי דיבור של הדפדפן, בעברית, בחינם)
-// ממשיך להקשיב עד שלוחצים עצירה. מגן מלולאת "נעצר-ממשיך", מונע כפילויות (באג אנדרואיד) ומציג מה נשמע בזמן אמת
-const MIC_ANDROID=typeof navigator!=="undefined"&&/Android/i.test(navigator.userAgent||"");
-const micNorm=t=>String(t||"").replace(/[.,!?״"']/g,"").replace(/\s+/g," ").trim();
-// מיזוג תוצאות סופיות: אם התוצאה החדשה כוללת את הקודמת (מצטברת) — מחליפים; אם כבר נכללת — מדלגים; אחרת מוסיפים
-const micMerge=(acc,t)=>{ t=String(t||"").replace(/\s+/g," ").trim(); if(!t) return acc; if(!acc) return t; const A=micNorm(acc), T=micNorm(t); if(T.startsWith(A)) return t; if(A.endsWith(T)||A.includes(T)) return acc; return acc+" "+t; };
+// ── הקלטה קולית מקצועית: הקלטת שמע רגילה (כמו הודעה קולית) → תמלול ב-Gemini דרך השרת שלנו
+// בלי צפצופים, בלי עצירה בשקט, אפשר לגלול ולעבוד בזמן ההקלטה. לוחצים "סיום" — והטקסט נכנס.
+const TRANSCRIBE_URL = SUPA_URL + "/functions/v1/transcribe";
+const REC_MAX_SEC = 300;
+function recHint(){ try{ return [...new Set([...PEST_TYPES_LOG,...FOOD_PESTS.slice(0,4),...CHEMICALS.map(c=>c.name),...Object.keys(chemMemLoad()),"תיבות הכלה","תחנות האכלה","מילוי","ריסוס","ג'ל","פאנלים","ניקוזים","בורות ביוב","ועד הבית","אחריות","מזומן","ביט","פייבוקס"])].slice(0,90).join(", "); }catch(e){ return ""; } }
+// המרת ההקלטה ל-WAV מונו 16kHz (פורמט שכל מודל תמלול מקבל, וקטן)
+async function blobToWav16k(blob){
+  const buf=await blob.arrayBuffer();
+  const AC=window.AudioContext||window.webkitAudioContext; const ac=new AC();
+  const audio=await new Promise((res,rej)=>{ const p=ac.decodeAudioData(buf,res,rej); if(p&&p.then) p.then(res,rej); });
+  try{ ac.close&&ac.close(); }catch(e){}
+  const rate=16000, len=Math.max(1,Math.ceil(audio.duration*rate));
+  const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext; const off=new OAC(1,len,rate);
+  const src=off.createBufferSource(); src.buffer=audio; src.connect(off.destination); src.start(0);
+  const out=await off.startRendering(); const data=out.getChannelData(0);
+  const ab=new ArrayBuffer(44+data.length*2); const v=new DataView(ab);
+  const w=(o,s)=>{ for(let i=0;i<s.length;i++) v.setUint8(o+i,s.charCodeAt(i)); };
+  w(0,"RIFF"); v.setUint32(4,36+data.length*2,true); w(8,"WAVE"); w(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,data.length*2,true);
+  let peak=0; for(let i=0;i<data.length;i++){ const a=Math.abs(data[i]); if(a>peak) peak=a; }
+  const g=peak>0&&peak<0.5?Math.min(4,0.9/peak):1; // הגברה עדינה להקלטה שקטה
+  for(let i=0;i<data.length;i++){ let x=Math.max(-1,Math.min(1,data[i]*g)); v.setInt16(44+i*2,x<0?x*0x8000:x*0x7fff,true); }
+  return {wav:new Blob([ab],{type:"audio/wav"}),sec:audio.duration};
+}
+const blobToB64=b=>new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(",")[1]||""); r.onerror=rej; r.readAsDataURL(b); });
+async function transcribeAudio(blob){
+  let payloadBlob=blob, mime=blob.type||"audio/webm";
+  try{ const {wav}=await blobToWav16k(blob); payloadBlob=wav; mime="audio/wav"; }catch(e){ /* אם ההמרה נכשלה — שולחים כמו שהוא */ }
+  const audio=await blobToB64(payloadBlob);
+  const r=await fetch(TRANSCRIBE_URL,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+SUPA_KEY,"apikey":SUPA_KEY},body:JSON.stringify({audio,mime,hint:recHint()})});
+  let j={}; try{ j=await r.json(); }catch(e){}
+  if(!r.ok||j.error){ const msg=String(j.error||j.message||("HTTP "+r.status));
+    if(r.status===404) throw new Error("שירות התמלול עוד לא הותקן בשרת");
+    if(/GEMINI_API_KEY|missing key/i.test(msg)) throw new Error("חסר מפתח Gemini בשרת");
+    if(/quota|RESOURCE_EXHAUSTED|429/i.test(msg)||r.status===429) throw new Error("הגעת למכסה החינמית לרגע — נסה שוב בעוד דקה");
+    throw new Error("התמלול נכשל: "+msg.slice(0,120)); }
+  return String(j.text||"").trim();
+}
 function MicButton({onText,label="🎤 דבר"}){
-  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false); const [idle,setIdle]=useState(false); const [live,setLive]=useState(""); const [warn,setWarn]=useState("");
-  const rec=React.useRef(null); const want=React.useRef(false); const running=React.useRef(false);
-  const sess=React.useRef({sent:"",start:0,got:false}); const lastChunk=React.useRef(""); const fails=React.useRef(0); const timer=React.useRef(null);
-  const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
-  const cb=React.useRef(onText); cb.current=onText; const idleRef=React.useRef(false); idleRef.current=idle;
-  const startRec=()=>{
-    if(!SR||running.current||!want.current) return;
-    // באנדרואיד: משפט-משפט (כמו בגרסה הראשונה) — המצב "רציף" שם שולח כל משפט מצטבר שוב ושוב וגורם לכפילויות
-    // רציף גם באנדרואיד (פחות פתיחות מחדש = פחות צפצופים). הכפילויות שאנדרואיד שולח מסוננות ב-micMerge
-    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=!MIC_ANDROID; r.maxAlternatives=1;
-    sess.current={sent:"",start:Date.now(),got:false};
-    r.onresult=e=>{
-      // בונים את כל הטקסט הסופי של הסשן מההתחלה, ושולחים רק מה שעוד לא נשלח (אנדרואיד שולח שוב את מה שכבר נשלח)
-      let fin="", intr="";
-      for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin=micMerge(fin,t); else intr+=t; }
-      sess.current.got=true;
-      const prev=sess.current.sent;
-      if(fin&&fin!==prev){ let add=fin.startsWith(prev)?fin.slice(prev.length).trim():(prev.includes(fin)?"":fin);
-        // משפט שחוזר על עצמו מיד אחרי הפעלה מחדש — לא כותבים פעמיים
-        if(add&&!prev&&lastChunk.current&&micNorm(add)===micNorm(lastChunk.current)) add="";
-        if(add) cb.current(add); sess.current.sent=fin; lastChunk.current=fin; }
-      setLive(intr.trim());
-    };
-    r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want.current=false; setOn(false); setWarn(""); alert("צריך לאשר גישה למיקרופון בדפדפן."); } };
-    r.onend=()=>{ running.current=false; setLive("");
-      if(!want.current){ setOn(false); return; }
-      if(document.visibilityState!=="visible"){ setPaused(true); return; }
-      // שקט בלי דיבור — לא פותחים שוב (זה מה שגורם לצפצופים חוזרים). מחכים ללחיצה על "המשך"
-      if(!sess.current.got&&Date.now()-sess.current.start>=1500){ setIdle(true); return; }
-      // הגנה מלולאה: אם נעצר מהר בלי שנשמע כלום — מחכים יותר, ואחרי כמה פעמים עוצרים
-      const quick=Date.now()-sess.current.start<1500&&!sess.current.got;
-      fails.current=quick?fails.current+1:0;
-      if(fails.current>=4){ want.current=false; setOn(false); setWarn("המיקרופון לא מצליח להקשיב ברצף בטלפון הזה. אפשר ללחוץ שוב, או להשתמש במיקרופון של המקלדת 🎙️"); return; }
-      clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); }, quick?900*fails.current:120);
-    };
-    rec.current=r; try{ r.start(); running.current=true; setPaused(false); setIdle(false); }catch(e){ running.current=false; }
+  const [st,setSt]=useState("idle"); // idle | rec | work
+  const [sec,setSec]=useState(0); const [lvl,setLvl]=useState(0); const [err,setErr]=useState(""); const [hidden,setHidden]=useState(false);
+  const R=React.useRef({}); const cb=React.useRef(onText); cb.current=onText;
+  const cleanup=()=>{ const x=R.current; clearInterval(x.tick); cancelAnimationFrame(x.raf||0); try{x.stream&&x.stream.getTracks().forEach(t=>t.stop());}catch(e){} try{x.ac&&x.ac.close();}catch(e){} R.current={lastBlob:x.lastBlob}; };
+  React.useEffect(()=>{ const vis=()=>setHidden(document.visibilityState!=="visible"); document.addEventListener("visibilitychange",vis); return()=>{ document.removeEventListener("visibilitychange",vis); try{R.current.mr&&R.current.mr.state!=="inactive"&&(R.current.cancel=true,R.current.mr.stop());}catch(e){} cleanup(); }; },[]);
+  const send=async blob=>{
+    setSt("work"); setErr("");
+    try{ const t=await transcribeAudio(blob); setSt("idle"); if(t){ cb.current(t); R.current.lastBlob=null; } else setErr("לא נשמע דיבור בהקלטה"); }
+    catch(e){ setSt("idle"); setErr(e.message||"התמלול נכשל"); }
   };
-  React.useEffect(()=>{
-    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current&&!idleRef.current){ clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); },400); } };
-    document.addEventListener("visibilitychange",vis);
-    return()=>{ document.removeEventListener("visibilitychange",vis); want.current=false; clearTimeout(timer.current); try{rec.current&&rec.current.abort();}catch(e){} };
-  },[]);
-  const toggle=()=>{
-    if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
-    setWarn("");
-    if(want.current&&idle){ setIdle(false); fails.current=0; startRec(); return; }
-    if(want.current){ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setIdle(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
-    want.current=true; fails.current=0; lastChunk.current=""; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
+  const start=async()=>{
+    setErr("");
+    if(!navigator.mediaDevices||!window.MediaRecorder){ setErr("הטלפון/הדפדפן הזה לא תומך בהקלטה. עדכן את הדפדפן (Chrome)."); return; }
+    let stream; try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}}); }
+    catch(e){ setErr(e&&e.name==="NotAllowedError"?"צריך לאשר גישה למיקרופון (בהגדרות האתר בדפדפן).":"לא הצלחתי לפתוח את המיקרופון."); return; }
+    const types=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus"]; const mt=types.find(t=>{try{return MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||"";
+    const mr=new MediaRecorder(stream,mt?{mimeType:mt,audioBitsPerSecond:48000}:undefined); const chunks=[];
+    mr.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    mr.onstop=()=>{ const cancel=R.current.cancel; const blob=new Blob(chunks,{type:mr.mimeType||mt||"audio/webm"}); cleanup(); if(cancel){ setSt("idle"); return; } R.current.lastBlob=blob; send(blob); };
+    // מד עוצמה — שיהיה ברור שהמיקרופון שומע
+    try{ const AC=window.AudioContext||window.webkitAudioContext; const ac=new AC(); const an=ac.createAnalyser(); an.fftSize=512; ac.createMediaStreamSource(stream).connect(an); const arr=new Uint8Array(an.fftSize);
+      const loop=()=>{ an.getByteTimeDomainData(arr); let m=0; for(let i=0;i<arr.length;i++){ const d=Math.abs(arr[i]-128); if(d>m) m=d; } setLvl(Math.min(1,m/60)); R.current.raf=requestAnimationFrame(loop); }; loop(); R.current.ac=ac; }catch(e){}
+    const t0=Date.now(); R.current={...R.current,mr,stream,cancel:false,tick:setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); setSec(s); if(s>=REC_MAX_SEC){ try{mr.stop();}catch(e){} } },250)};
+    mr.start(1000); setSec(0); setSt("rec"); try{navigator.vibrate&&navigator.vibrate(25);}catch(_){}
   };
-  const stop=()=>{ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setIdle(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} };
-  const lbl=on?(idle?"▶ להמשך הקלטה":paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label;
+  const stop=()=>{ try{navigator.vibrate&&navigator.vibrate(25);}catch(_){} try{R.current.mr&&R.current.mr.stop();}catch(e){} };
+  const cancel=()=>{ R.current.cancel=true; try{R.current.mr&&R.current.mr.stop();}catch(e){ cleanup(); setSt("idle"); } };
+  const mm=s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+  const btnLbl=st==="rec"?"⏹ סיום ותמלול · "+mm(sec):st==="work"?"✍️ מתמלל…":label;
   return <span style={{display:"inline-flex",flexDirection:"column",gap:4,maxWidth:"100%"}}>
-    <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?(idle?"#16a34a":"#dc2626"):"#93c5fd"),background:on?(idle?"#dcfce7":"#fee2e2"):"#fff",color:on?(idle?"#166534":"#b91c1c"):"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused&&!idle?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>
-      <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
-      {lbl}</button>
-    {on&&live&&<span style={{fontSize:13,color:"#64748b",fontStyle:"italic"}}>… {live}</span>}
-    {warn&&<span style={{fontSize:12,color:"#b45309"}}>{warn}</span>}
-    {on&&ReactDOM.createPortal(<div style={{position:"fixed",left:"50%",bottom:"calc(86px + env(safe-area-inset-bottom))",transform:"translateX(-50%)",zIndex:7000,display:"flex",alignItems:"center",gap:8,background:"#0f172a",color:"#fff",borderRadius:30,padding:"7px 8px 7px 14px",boxShadow:"0 8px 24px rgba(0,0,0,.3)",direction:"rtl",maxWidth:"94vw"}}>
-      <span style={{width:10,height:10,borderRadius:"50%",background:idle?"#22c55e":paused?"#f59e0b":"#ef4444",animation:!idle&&!paused?"h360pulse 1.2s infinite":"none",flexShrink:0}}/>
-      <span style={{fontSize:14,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"46vw"}}>{idle?"בהשהיה — אפשר לגלול ולחשוב":paused?"ממתין":(live?"… "+live:"מקשיב…")}</span>
-      {idle&&<button type="button" onClick={toggle} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:20,padding:"7px 12px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>▶ המשך</button>}
-      <button type="button" onClick={stop} style={{border:"none",background:"#dc2626",color:"#fff",borderRadius:20,padding:"7px 12px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>⏹ סיום</button>
+    <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}@keyframes h360spin{to{transform:rotate(360deg)}}"}</style>
+    <button type="button" disabled={st==="work"} onClick={()=>st==="idle"?start():st==="rec"?stop():null} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(st==="rec"?"#dc2626":st==="work"?"#7c3aed":"#93c5fd"),background:st==="rec"?"#fee2e2":st==="work"?"#f5f3ff":"#fff",color:st==="rec"?"#b91c1c":st==="work"?"#6d28d9":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:st==="work"?"wait":"pointer",fontFamily:"inherit",animation:st==="rec"?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>{btnLbl}</button>
+    {err&&<span style={{fontSize:12,color:"#b45309",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>⚠️ {err}{R.current.lastBlob&&<button type="button" onClick={()=>send(R.current.lastBlob)} style={{border:"1px solid #f59e0b",background:"#fff",color:"#b45309",borderRadius:14,padding:"2px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}}>🔁 נסה שוב</button>}</span>}
+    {st!=="idle"&&ReactDOM.createPortal(<div style={{position:"fixed",left:"50%",bottom:"calc(86px + env(safe-area-inset-bottom))",transform:"translateX(-50%)",zIndex:7000,display:"flex",alignItems:"center",gap:10,background:"#0f172a",color:"#fff",borderRadius:30,padding:"8px 8px 8px 14px",boxShadow:"0 8px 24px rgba(0,0,0,.3)",direction:"rtl",maxWidth:"96vw"}}>
+      {st==="rec"?<>
+        <span style={{width:11,height:11,borderRadius:"50%",background:"#ef4444",animation:"h360pulse 1.2s infinite",flexShrink:0}}/>
+        <span style={{fontSize:15,fontWeight:800,minWidth:40,direction:"ltr"}}>{mm(sec)}</span>
+        <span style={{display:"flex",alignItems:"center",gap:2,height:22}}>{[0.5,0.8,1,0.8,0.5].map((k,i)=><span key={i} style={{width:4,borderRadius:2,background:"#22c55e",height:Math.max(3,Math.round(22*lvl*k))}}/>)}</span>
+        <span style={{fontSize:12,color:"#cbd5e1",whiteSpace:"nowrap"}}>{hidden?"מקליט…":"אפשר לגלול ולחשוב"}</span>
+        <button type="button" onClick={cancel} title="בטל הקלטה" style={{border:"1px solid #475569",background:"transparent",color:"#cbd5e1",borderRadius:20,padding:"7px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+        <button type="button" onClick={stop} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:20,padding:"8px 14px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>✓ סיום</button>
+      </>:<>
+        <span style={{width:16,height:16,border:"2.5px solid #a78bfa",borderTopColor:"transparent",borderRadius:"50%",animation:"h360spin .8s linear infinite"}}/>
+        <span style={{fontSize:14,fontWeight:700,padding:"6px 6px 6px 0"}}>✍️ מתמלל את ההקלטה…</span>
+      </>}
     </div>,document.body)}
   </span>;
 }
+
 // ═══ מילוי חכם של יומן ביצוע: מדברים / מקלידים / מדביקים → היומן מתמלא ═══
 const EL_NUM={"אחת":1,"אחד":1,"שתיים":2,"שניים":2,"שתי":2,"שני":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10,"שתים עשרה":12,"שנים עשר":12};
 const elNum=s=>{ if(s==null) return 0; const n=parseInt(s); if(!isNaN(n)) return n; return EL_NUM[String(s).trim()]||0; };
