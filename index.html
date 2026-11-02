@@ -2010,7 +2010,8 @@ function MicButton({onText,label="🎤 דבר"}){
   const startRec=()=>{
     if(!SR||running.current||!want.current) return;
     // באנדרואיד: משפט-משפט (כמו בגרסה הראשונה) — המצב "רציף" שם שולח כל משפט מצטבר שוב ושוב וגורם לכפילויות
-    const r=new SR(); r.lang="he-IL"; r.continuous=!MIC_ANDROID; r.interimResults=!MIC_ANDROID; r.maxAlternatives=1;
+    // רציף גם באנדרואיד (פחות פתיחות מחדש = פחות צפצופים). הכפילויות שאנדרואיד שולח מסוננות ב-micMerge
+    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=!MIC_ANDROID; r.maxAlternatives=1;
     sess.current={sent:"",start:Date.now(),got:false};
     r.onresult=e=>{
       // בונים את כל הטקסט הסופי של הסשן מההתחלה, ושולחים רק מה שעוד לא נשלח (אנדרואיד שולח שוב את מה שכבר נשלח)
