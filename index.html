@@ -2229,7 +2229,10 @@ function ExecSmartFill({onApply,chemNames,memory}){
 }
 
 function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[],maintenance=[]}){
-  const chemMem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
+  // 🧪 הערכה של המדביר (החומרים שלי) — מספר האצווה משם נכנס לבד
+  const kitW=(prefillAppt&&workers.find(w=>w.id===prefillAppt.workerId))||(worker&&(workers.find(w=>String(w.id)===String(worker.id))||worker))||{};
+  const kit=Array.isArray(kitW.chemKit)?kitW.chemKit:[];
+  const chemMem=React.useMemo(()=>{ const m=chemMemory(execLogs); kit.forEach(k=>{ if(!k||!k.name) return; m[k.name]={...(m[k.name]||{}),...Object.fromEntries(Object.entries(k).filter(([kk,v])=>v&&["batch","method","active","reg","maker","cat"].includes(kk)))}; }); return m; },[execLogs,JSON.stringify(kit)]);
   // Auto-detect worker from appointment
   const apptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
   const defaultWorker = apptWorker || worker || {};
@@ -2273,7 +2276,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   });
   const [scopeAdd,setScopeAdd]=useState("");
   const regAll=useRegProducts(); const TM_REF=React.useRef(null);
-  const chemNames=React.useMemo(()=>[...new Set([...regAll.map(r=>r[0]),...Object.keys(chemMem||{}),...myChemicals(execLogs,defaultWorker.name),...CHEMICALS.map(c=>c.name)])],[regAll,chemMem]);
+  const chemNames=React.useMemo(()=>[...new Set([...kit.map(k=>k.name),...regAll.map(r=>r[0]),...Object.keys(chemMem||{}),...myChemicals(execLogs,defaultWorker.name),...CHEMICALS.map(c=>c.name)])],[regAll,chemMem]);
   const [review,setReview]=useState(null); const [showPrev,setShowPrev]=useState(false);
   // סוג היומן — נשמר לכל מדביר: "steps" לפי שלבים / "flat" רציף
   const modeKey="h360_logmode_"+String(defaultWorker.name||"x");
@@ -2460,7 +2463,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>)}
     {(f.exterminate||f.materials.length>0)&&sec("chem","🧪","חומרי הדברה",f.materials.map(m=>m.name).join(", ")||(f.devices.length?"ללא חומר — מוצרי הדברה בלבד":""),missingBatch.length?"req":(f.materials.length?"ok":(f.devices.length||!f.exterminate?"opt":"req")),<>
     <div style={{marginBottom:14}}>
-      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={myChemicals(execLogs, f.workerName)} pests={allPests}/>
+      <ChemPicker selected={f.materials} onChange={v=>set("materials",v)} treatMethod={TREAT_METHOD} memory={chemMem} mine={[...new Set([...kit.map(k=>k.name),...myChemicals(execLogs, f.workerName)])]} pests={allPests}/>
     </div>
 
     </>)}
@@ -4374,7 +4377,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     setTimeout(()=>{ if(moved) showToast("✅ הועבר ל־"+fmtDate(moved.date)+(isAllDay(moved)?" · במהלך היום":" · \u2066"+moved.timeWindow+"\u2069")); },0);
   };
   const tdrag=useTouchDrag((id,date,time)=>moveAppt(id,date,time||null,null));
-  const openItem=a=>{ if(tdrag.justDragged()) return; isPersonal(a)?setEditTask(a):setDetailAppt(a); };
+  const openItem=a=>{ if(tdrag.justDragged()) return; if(a.virtual){ window.__h360Nav&&window.__h360Nav("mychems"); return; } isPersonal(a)?setEditTask(a):setDetailAppt(a); };
 
   const workerObj = workers.find(w=>w.id===currentUser.id) || {name:currentUser.name,license:"—"};
   const apptHasLog=id=>execLogs.some(l=>l.apptId===id);
@@ -8265,8 +8268,8 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
         {myPersonal.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:"1px solid #ede9fe"}}>
           <div style={{fontWeight:700,fontSize:13,minWidth:84,color:"#4c1d95"}}>{a.blockDay?"כל היום":isAllDay(a)?"במהלך היום":<span dir="ltr">{a.timeWindow||a.time}</span>}</div>
-          <div onClick={()=>onOpenAppt&&onOpenAppt(a)} style={{flex:1,minWidth:0,cursor:"pointer",textDecoration:a.status==="בוצע"?"line-through":"none",color:a.status==="בוצע"?"#94a3b8":"#0f172a",fontSize:14}}>{personalTitle(a)}{a.notes?<span style={{color:"#64748b",fontSize:12}}> · {a.notes}</span>:null}</div>
-          <button onClick={()=>updateStatus(a,a.status==="בוצע"?"ממתין":"בוצע")} style={{border:"1px solid #c4b5fd",background:a.status==="בוצע"?"#ede9fe":"#fff",color:PERSONAL_CLR,borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{a.status==="בוצע"?"↺":"✓ בוצע"}</button>
+          <div onClick={()=>a.virtual?(window.__h360Nav&&window.__h360Nav("mychems")):onOpenAppt&&onOpenAppt(a)} style={{flex:1,minWidth:0,cursor:"pointer",textDecoration:a.status==="בוצע"?"line-through":"none",color:a.status==="בוצע"?"#94a3b8":"#0f172a",fontSize:14}}>{personalTitle(a)}{a.notes?<span style={{color:"#64748b",fontSize:12}}> · {a.notes}</span>:null}</div>
+          <button onClick={()=>a.virtual?(window.__h360Nav&&window.__h360Nav("mychems")):updateStatus(a,a.status==="בוצע"?"ממתין":"בוצע")} style={{border:"1px solid #c4b5fd",background:a.status==="בוצע"?"#ede9fe":"#fff",color:PERSONAL_CLR,borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{a.status==="בוצע"?"↺":"✓ בוצע"}</button>
         </div>)}
       </div>}
       {/* רשימת תורים */}
@@ -9427,6 +9430,80 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
   </div>;
 }
 
+// ═══ 🧪 החומרים שלי: הערכה שהמדביר מסתובב איתה + מספרי אצווה → נכנסים לבד ליומן הביצוע ═══
+const KIT_METHODS=["ריסוס","ג'ל","תחנת האכלה","פיזור גרגירים","אבקה","ערפול","השמדת קן","אחר"];
+const kitMonthStart=()=>todayStr().slice(0,8)+"01";
+const kitNeedsCheck=w=>!!w&&String(w.kitCheckedAt||"")<kitMonthStart();
+function MyChemicals({currentUser,workers,setWorkers,execLogs}){
+  const reg=useRegProducts();
+  const me=myWorkerFor(currentUser,workers);
+  const isStaff=currentUser&&currentUser.role!=="מדביר";
+  const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל"&&isTech(w));
+  const [wid,setWid]=useState(String((me||techs[0]||{}).id||""));
+  const w=(workers||[]).find(x=>String(x.id)===String(wid))||null;
+  const kit=(w&&Array.isArray(w.chemKit))?w.chemKit:[];
+  const [q,setQ]=useState(""); const [vt,setVt]=useState("");
+  const mem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
+  const byName=React.useMemo(()=>{const m={}; reg.forEach(r=>{m[r[0]]=r;}); return m;},[reg]);
+  const allNames=React.useMemo(()=>[...new Set([...myChemicals(execLogs,w&&w.name),...reg.map(r=>r[0]),...CHEMICALS.map(c=>c.name)])],[reg,execLogs,wid]);
+  const save=(k,extra={})=>setWorkers(ws=>ws.map(x=>String(x.id)===String(wid)?{...x,chemKit:k,...extra}:x));
+  const infoOf=name=>{ const r=byName[name]; const l=CHEMICALS.find(c=>c.name===name)||{}; const m=mem[name]||{};
+    const cat=r?regCat(r):(m.cat||(l.method==="ג'ל"?"gel":l.method==="תחנת האכלה"?"rodent":"spray"));
+    return {active:(r&&r[4])||l.active||m.active||"",reg:(r&&r[2])||m.reg||"",maker:(r&&r[1])||l.mfr||m.maker||"",cat,method:m.method||(cat==="gel"?"ג'ל":cat==="rodent"?"תחנת האכלה":"ריסוס"),batch:m.batch||""}; };
+  const add=(name,batch)=>{ if(!name||kit.some(k=>k.name===name)) return; const inf=infoOf(name); save([...kit,{name,batch:batch||inf.batch||"",expiry:"",method:KIT_METHODS.includes(inf.method)?inf.method:"ריסוס",active:inf.active,reg:inf.reg,maker:inf.maker,cat:inf.cat}]); setQ(""); };
+  const upd=(i,k,v)=>save(kit.map((x,j)=>j===i?{...x,[k]:v}:x));
+  const sugg=q.trim().length>=2?allNames.filter(n=>elNorm(n).includes(elNorm(q))&&!kit.some(k=>k.name===n)).slice(0,8):[];
+  // הקלטה / הקלדה חופשית: "סיפרמטרין אצווה 12345, פרוג'ל אצווה 778"
+  const fromText=t=>{ const N=elNorm(t); const found=[]; const cands=[...allNames].sort((a,b)=>b.length-a.length); let N2=N;
+    cands.forEach(n=>{ const k=elNorm(n); if(k.length>=3&&N2.includes(k)){ const idx=N.indexOf(k); const after=N.slice(idx+k.length,idx+k.length+40); const bm=after.match(/^\s*(?:,|-)?\s*(?:אצווה|אצוות|מספר אצווה|מס אצווה|batch|לוט|lot)?\s*(?:מספר)?\s*[:\-]?\s*([a-z0-9][a-z0-9\-\/]{2,})/i); found.push({name:n,batch:bm?bm[1].toUpperCase():""}); N2=N2.split(k).join(" "); } });
+    if(!found.length) return alert("לא זיהיתי שם של חומר. נסה לכתוב את השם כמו שהוא מופיע על האריזה.");
+    let k=[...kit]; found.forEach(f=>{ const i=k.findIndex(x=>x.name===f.name); if(i>=0){ if(f.batch) k[i]={...k[i],batch:f.batch}; } else { const inf=infoOf(f.name); k.push({name:f.name,batch:f.batch||inf.batch||"",expiry:"",method:KIT_METHODS.includes(inf.method)?inf.method:"ריסוס",active:inf.active,reg:inf.reg,maker:inf.maker,cat:inf.cat}); } });
+    save(k); setVt(""); showToast("✅ עודכנו: "+found.map(f=>f.name+(f.batch?" ("+f.batch+")":"")).join(", ")); };
+  const missing=kit.filter(k=>!String(k.batch||"").trim()).length;
+  const expired=kit.filter(k=>k.expiry&&k.expiry<todayStr()).length;
+  const need=kitNeedsCheck(w);
+  const fld={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",fontFamily:"inherit",background:"#fff"};
+  if(!techs.length) return <div style={{padding:20}}>אין עדיין מדבירים ברשימת העובדים.</div>;
+  return <div style={{maxWidth:640,margin:"0 auto"}}>
+    <h2 style={{margin:"0 0 4px",color:CLR.primary}}>🧪 החומרים שלי</h2>
+    <div style={{fontSize:14,color:"#475569",marginBottom:12}}>החומרים שאתה מסתובב איתם ומספרי האצווה שלהם. מה שתרשום כאן ייכנס לבד ליומן הביצוע — גם כשבוחרים חומר וגם כשאומרים אותו בהקלטה.</div>
+    {(isStaff||techs.length>1)&&<div style={{marginBottom:12}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>הערכה של</label>
+      <select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(t=><option key={t.id} value={t.id}>{t.name}{(t.chemKit||[]).length?" ("+(t.chemKit||[]).length+")":""}</option>)}</select></div>}
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:need?"#fff7ed":"#f0fdf4",border:"1px solid "+(need?"#fdba74":"#86efac"),borderRadius:12,padding:"10px 12px",marginBottom:12}}>
+      <div style={{flex:1,minWidth:180,fontSize:14,color:need?"#9a3412":"#166534"}}>{need?"⏰ בדיקת אצוות חודשית — עבור על החומרים ובדוק שמספרי האצווה תואמים למה שיש לך ברכב.":"✅ האצוות נבדקו החודש"}{w&&w.kitCheckedAt?<span style={{display:"block",fontSize:12,color:"#64748b"}}>בדיקה אחרונה: {fmtDate(w.kitCheckedAt)}</span>:null}</div>
+      <button type="button" onClick={()=>{ save(kit,{kitCheckedAt:todayStr()}); showToast("✅ נרשם — האצוות מעודכנות"); }} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ בדקתי, הכל מעודכן</button>
+    </div>
+    {(missing>0||expired>0)&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>{missing>0?`חסר מספר אצווה ב-${missing} חומרים. `:""}{expired>0?`${expired} חומרים פג תוקפם.`:""}</div>}
+    {kit.map((k,i)=>{ const noB=!String(k.batch||"").trim(); const exp=k.expiry&&k.expiry<todayStr();
+      return <div key={k.name} style={{background:"#fff",border:"1px solid "+(noB||exp?"#fca5a5":"#e2e8f0"),borderRadius:12,padding:"10px 12px",marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{width:26,height:26,borderRadius:8,background:"#ecfdf5",color:"#047857",fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>{i+1}</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:15}}>{k.name}</div>{(k.active||k.reg)&&<div style={{fontSize:12,color:"#64748b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{[k.active,k.reg?"רישום "+k.reg:""].filter(Boolean).join(" · ")}</div>}</div>
+          <button type="button" onClick={()=>{ if(confirm("להוריד את "+k.name+" מהרשימה?")) save(kit.filter((_,j)=>j!==i)); }} style={{border:"none",background:"#fee2e2",color:"#b91c1c",borderRadius:8,width:32,height:32,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:6}}>
+          <div><label style={{fontSize:11,color:noB?"#b91c1c":"#64748b"}}>מספר אצווה {noB?"*":""}</label><input value={k.batch||""} onChange={e=>upd(i,"batch",e.target.value)} placeholder="מהאריזה" style={{...fld,borderColor:noB?"#fca5a5":"#d1d5db",direction:"ltr",textAlign:"right"}}/></div>
+          <div><label style={{fontSize:11,color:exp?"#b91c1c":"#64748b"}}>תוקף {exp?"(פג!)":""}</label><input type="date" value={k.expiry||""} onChange={e=>upd(i,"expiry",e.target.value)} style={{...fld,padding:"8px 6px",fontSize:13}}/></div>
+          <div><label style={{fontSize:11,color:"#64748b"}}>צורת טיפול</label><select value={k.method||"ריסוס"} onChange={e=>upd(i,"method",e.target.value)} style={{...fld,padding:"8px 6px",fontSize:13}}>{KIT_METHODS.map(m=><option key={m}>{m}</option>)}</select></div>
+        </div>
+      </div>; })}
+    <div style={{background:"#f8fafc",border:"1.5px dashed #94a3b8",borderRadius:12,padding:12,marginTop:6,position:"relative"}}>
+      <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>+ הוסף חומר {kit.length>=10?<span style={{fontWeight:500,color:"#b45309",fontSize:12}}>(כבר יש {kit.length} — בדרך כלל עד 10)</span>:null}</div>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="חפש לפי שם החומר…" style={fld}/>
+      {sugg.length>0&&<div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,marginTop:4,overflow:"hidden"}}>
+        {sugg.map(n=><button key={n} type="button" onClick={()=>add(n)} style={{display:"block",width:"100%",textAlign:"right",padding:"10px 12px",border:"none",borderBottom:"1px solid #f1f5f9",background:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:14}}>{n}{(infoOf(n).active)?<span style={{color:"#64748b",fontSize:12}}> · {infoOf(n).active}</span>:null}</button>)}
+      </div>}
+      {q.trim().length>=2&&!allNames.some(n=>elNorm(n)===elNorm(q))&&<button type="button" onClick={()=>add(q.trim())} style={{marginTop:6,border:"1px solid #cbd5e1",background:"#fff",borderRadius:10,padding:"8px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ הוסף "{q.trim()}" כחומר אחר</button>}
+      <div style={{fontSize:12,color:"#64748b",margin:"10px 0 4px"}}>או תגיד / תכתוב כמה ביחד, למשל: "סיפרמטרין אצווה 4521, פרוג'ל אצווה 778"</div>
+      <textarea value={vt} onChange={e=>setVt(e.target.value)} rows={2} style={{...fld,resize:"vertical"}}/>
+      <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+        <MicButton onText={t=>setVt(x=>(x?x+" ":"")+t)}/>
+        {vt.trim()&&<button type="button" onClick={()=>fromText(vt)} style={{border:"none",background:CLR.primary,color:"#fff",borderRadius:20,padding:"7px 16px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ עדכן</button>}
+      </div>
+    </div>
+  </div>;
+}
+
 function App(){
   const [authUser,setAuthUser]=React.useState(()=>{
     try{const u=localStorage.getItem('crm_auth');return u?JSON.parse(u):null;}catch{return null;}
@@ -9554,6 +9631,16 @@ function App(){
     return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); return !!c&&!c.deleted; });
   },[appointments,customers]);
   const jobAppointments = React.useMemo(()=>activeAppointments.filter(a=>!isPersonal(a)),[activeAppointments]);
+  // 🧪 תזכורת ב-1 לכל חודש: בדיקת / סנכרון אצוות חומרים (לא נשמרת כתור — מוצגת ביומן)
+  const calAppointments = React.useMemo(()=>{
+    const me=myWorkerFor(user,activeWorkers)||activeWorkers.find(w=>isTech(w))||null; if(!me) return activeAppointments;
+    const now=new Date(); const out=[];
+    for(let k=-2;k<=12;k++){ const d=new Date(now.getFullYear(),now.getMonth()+k,1); const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`;
+      out.push({id:"kit-"+iso,virtual:true,kind:"personal",title:"🧪 בדיקת אצוות חומרים",customerName:"📌 🧪 בדיקת אצוות חומרים",pestType:"משימה אישית",price:0,address:"",date:iso,time:"07:00",timeWindow:ALL_DAY_TW,allDay:true,blockDay:false,
+        notes:"לעבור על החומרים שברכב ולוודא שמספרי האצווה מעודכנים (תפריט ← החומרים שלי)",workerId:me.id,workerName:me.name,status:String(me.kitCheckedAt||"")>=iso?"בוצע":"ממתין"}); }
+    return [...activeAppointments,...out];
+  },[activeAppointments,activeWorkers,user]);
+  React.useEffect(()=>{ window.__h360Nav=t=>setTab(t); },[]);
   const activeFinance = React.useMemo(()=>activeOnly(finance),[finance]);
   const activeNotes = React.useMemo(()=>activeOnly(notes),[notes]);
   const activeMaintenance = React.useMemo(()=>activeOnly(maintenance),[maintenance]);
@@ -9596,6 +9683,7 @@ function App(){
     {id:"leads",label:"🌐 לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),short:"🌐",hideFor:"מדביר"},
     {id:"calendar",label:"📅 יומן תורים",short:"📅"},
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
+    {id:"mychems",label:"🧪 החומרים שלי",short:"🧪"},
     {id:"invoices",label:"🧾 חשבוניות",short:"🧾",hideFor:"מדביר"},
     {id:"maintenance",label:"🔁 אחזקות",short:"🔁",hideFor:"מדביר"},
     {id:"projects",label:"🏗️ פרויקטים",short:"🏗️",hideFor:"מדביר"},
@@ -9653,7 +9741,7 @@ function App(){
         <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
@@ -9752,7 +9840,7 @@ function App(){
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה",hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
@@ -9789,14 +9877,15 @@ function App(){
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
-              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
+              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={calAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
+              {tab==="mychems"&&<MyChemicals currentUser={user} workers={activeWorkers} setWorkers={setWorkers} execLogs={execLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={jobAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={jobAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
-            {tab==="calendar"&&<WeekCalendar appointments={activeAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
+            {tab==="calendar"&&<WeekCalendar appointments={calAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
             {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
