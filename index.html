@@ -5034,7 +5034,7 @@ function waParse(raw, cityNames){
   const label=(re)=>{ for(const l of lines){ const m=l.match(re); if(m&&m[1]&&m[1].trim()) return m[1].trim(); } return ""; };
   let rest=text;
   // טלפון
-  const ph=text.match(/(?:\+?972[\s-]?|0)(?:5\d|[23489]|7\d)[\s-]?\d{3}[\s-]?\d{4}|(?:\+?972[\s-]?|0)5\d[\s-]?\d{7}/);
+  const ph=text.match(/(?:\+?972[\s-]?|0)(?:5\d|[23489]|7\d)[\s-]?\d{3}[\s-]?\d{4}|(?:\+?972[\s-]?|0)5\d[\s-]?\d{7}/)||text.match(/(?<![\d])05\d[\s-]?\d{3}[\s-]?\d{3}(?![\d])/); // גם 9 ספרות (ספרה חסרה בהקלדה/בתמלול)
   if(ph){ out.phone=normILPhone(ph[0].replace(/[\s-]/g,"")); rest=rest.replace(ph[0]," "); out.found.push("טלפון"); }
   // מחיר
   const pr=text.match(/(\d{2,5}(?:[.,]\d{3})?)\s*(?:₪|ש["״']?ח|שקל(?:ים)?|nis)/i)||text.match(/(?:מחיר|עלות|סכום|לתשלום)\s*[:\-]?\s*₪?\s*(\d{2,5}(?:[.,]\d{3})?)/)||text.match(/₪\s*(\d{2,5})/);
@@ -5057,7 +5057,7 @@ function waParse(raw, cityNames){
   if(rm){ out.rooms=String(WA_NUM_WORDS[rm[1]]||rm[1]); rest=rest.replace(rm[0]," "); out.found.push("חדרים"); }
   // קומה
   if(/קומת?\s*קרקע|(?<![א-ת])קרקע(?![א-ת])/.test(text)){ out.floor="קרקע"; out.found.push("קומה"); }
-  else { const fl=text.match(/קומה\s*(\d{1,2})/)||text.match(/קומה\s*(אחת|שתיים|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)/); if(fl){ out.floor=String(WA_NUM_WORDS[fl[1]]||fl[1]); rest=rest.replace(fl[0]," "); out.found.push("קומה"); } }
+  else { const ORD={"ראשונה":1,"שנייה":2,"שניה":2,"שלישית":3,"רביעית":4,"חמישית":5,"שישית":6,"שביעית":7,"שמינית":8,"תשיעית":9,"עשירית":10}; const fl=text.match(/קומה\s*(\d{1,2})/)||text.match(/קומה\s*(אחת|שתיים|שלוש|ארבע|חמש|שש|שבע|שמונה|תשע|עשר)(?![א-ת])/)||(()=>{ const m=text.match(/קומה\s*(ראשונה|שנייה|שניה|שלישית|רביעית|חמישית|שישית|שביעית|שמינית|תשיעית|עשירית)/); return m?[m[0],String(ORD[m[1]])]:null; })(); if(fl){ out.floor=String(WA_NUM_WORDS[fl[1]]||fl[1]); rest=rest.replace(fl[0]," "); out.found.push("קומה"); } }
   // חצר
   if(/(?:ללא|בלי|אין)\s*(?:חצר|גינה)/.test(text)) { out.hasYard=false; out.found.push("חצר"); }
   else if(/חצר|גינה/.test(text)) { out.hasYard=true; out.found.push("חצר"); }
@@ -5150,13 +5150,13 @@ function waParse(raw, cityNames){
   if(/(?:רעל|פיתיון|פתיון)[א-ת]*\s*(?:ב|בתוך\s*)?(?:ה)?ביוב/.test(text)) out.sewerNote="☣️ כולל פיתיון/רעל בביובים";
   if(!out.price){ const pl=lines.map(l=>l.match(/^\s*(?:סגור\s*|מחיר\s*)?(\d{3,4})(?:\s*(?:כולל|לפני|\+)\s*מע"?מ)?\s*$/)).find(Boolean); if(pl&&+pl[1]>=100&&pl[1]!==out.buildingNum){ out.price=pl[1]; out.found.push("מחיר"); } }
   // אנשי קשר: כל טלפון בהודעה + מה שכתוב לידו ("הדיירת", "בעל הדירה", "מנהל", "יוסי"...)
-  { const phRe=/(?:\+?972[\s-]?|0)5\d[\s-]?\d{3}[\s-]?\d{4}|(?:\+?972[\s-]?|0)5\d[\s-]?\d{7}|(?:\+?972[\s-]?|0)(?:[23489]|7\d)[\s-]?\d{3}[\s-]?\d{4}/g;
+  { const phRe=/(?:\+?972[\s-]?|0)5\d[\s-]?\d{3}[\s-]?\d{4}|(?:\+?972[\s-]?|0)5\d[\s-]?\d{7}|(?:\+?972[\s-]?|0)(?:[23489]|7\d)[\s-]?\d{3}[\s-]?\d{4}|(?<![\d])05\d[\s-]?\d{3}[\s-]?\d{3}(?![\d])/g;
     const ROLE=/דייר|בעל(?:ת)?\s*(?:ה)?(?:דירה|בית|נכס|עסק|מקום)|בעל(?:ת)?\s*הבית|משכיר|שוכר|מנהל|אחמ"?ש|אחראי|שכנ|ועד|יו"?ר|אשת|אשתו|בעלה|הבן|הבת|מזכיר|אב\s*בית|מתווך|איש\s*קשר|אשת\s*קשר|לקוח|שומר|קבלן|עובד|אמא|אבא|סבתא|סבא|מטפלת|חברה|נציג/;
     const cts=[]; const seen=new Set();
     lines.forEach(l=>{ const ms=[...l.matchAll(phRe)]; if(!ms.length) return; let prev=0;
       ms.forEach((m,k)=>{ const ph=normILPhone(m[0].replace(/[\s-]/g,"")); if(seen.has(ph)) return; seen.add(ph);
         const before=l.slice(prev,m.index), after=l.slice(m.index+m[0].length, k+1<ms.length?ms[k+1].index:l.length); prev=m.index+m[0].length;
-        const clean=t=>t.replace(/(?<![א-ת])(?:טלפון|טל['׳]|נייד|פלאפון|מספר|מס['׳])(?![א-ת])\s*(?:של)?/g," ").replace(/[:\-–,.()|/]+/g," ").replace(/\s+/g," ").trim();
+        const clean=t=>t.replace(/(?<![א-ת])(?:ה)?(?:טלפון|טל['׳]|נייד|פלאפון|מספר|מס['׳])(?![א-ת])/g," ").replace(/(?<![א-ת])(?:של|שלה|שלו|זה|זו|הוא|היא|השם|שמה|שמו|קוראים|לה|לו|תתקשרו|תתקשר|ל|את)(?![א-ת])/g," ").replace(/[:\-–,.()|/]+/g," ").replace(/\s+/g," ").trim();
         const bp=before.split(/[,.!;]/).pop(), ap=after.split(/[,.!;]/)[0]; const full=clean(bp)||clean(ap); let lab=clean(bp)?clean(bp).split(" ").slice(-3).join(" "):clean(ap).split(" ").slice(0,3).join(" "); const rm=full.match(ROLE); if(rm&&!ROLE.test(lab)) lab=rm[0]; lab=lab.replace(/(?:^|\s)(?:חצי|שעה|לפני|לחייג|יחייג|להתקשר|תתקשר|אליו|אליה)(?=\s|$)/g," ").replace(/\s+/g," ").trim(); if(/לחייג|יחייג|חייג|להתקשר|תתקשר|אליו|אליה|לפני|דקות|שעה|הנחיות|קליטה/.test(lab)&&!ROLE.test(lab)) lab=""; if(/\d/.test(lab)||lab.split(" ").length>5) lab=(clean(after).split(" ").length<=5&&!/\d/.test(clean(after)))?clean(after):"";
         const ik2=lab.match(/^(.*?(?:איש|אשת)\s*(?:ה)?קשר)\s+([א-ת'׳"]{2,}(?:\s[א-ת'׳"]{2,})?)$/); if(ik2){ cts.push({phone:ph,role:ik2[1],name:ik2[2]}); return; }
         lab=lab.replace(/\s+/g," "); if(out.city) [out.city,...cities.filter(c=>(WA_CITY_NORM[c]||c)===out.city)].forEach(c=>{ if(lab.includes(c)) lab=lab.replace(c," "); }); lab=lab.replace(/(?:^|\s)(?:רחוב|רח['׳]|מחיר|שח|ש"ח)(?=\s|$)/g," ").replace(/\s+/g," ").trim();
@@ -5170,9 +5170,9 @@ function waParse(raw, cityNames){
     // "שם לקוח דודו", "שם הלקוח דודו כהן", "איש קשר משה", "קוראים לו יוסי" — גם בלי נקודתיים, בתוך משפט
     const NM_STOP=/^(?:להתקשר|לחייג|חוזר|חוזרת|חדש|חדשה|קבוע|קבועה|הוא|היא|הם|ועד|זה|זו|של|גר|גרה|בעל|בעלת|מנהל|מנהלת|טלפון|מספר|כתובת|מ|ו|ב|ל|שם|לקוח|איש|קשר|יש|אצל|עם|מה|כן|לא|אז|ה|בית|הבית|ברחוב|רחוב|מזמין|מזמינה|ביקש|ביקשה|רוצה|צריך|צריכה)$/;
     const res=[/(?:^|[\s,.])(?:שם\s*(?:ה)?(?:לקוח|לקוחה|מלא|איש\s*(?:ה)?קשר)\s*[:\-]?|שם\s*[:\-])\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
-      /(?:^|[\s,.])(?:איש|אשת)\s*(?:ה)?קשר\s*(?:הוא|היא)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
+      /(?:^|[\s,.])(?:איש|אשת)\s*(?:ה)?קשר\s*(?:הוא|היא|זה|זו)?\s*[:\-.,]?\s*(?:(?:הוא|היא|זה|זו)\s+)?([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
       /(?:^|[\s,.])(?:ה)?לקוח(?:ה)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/,
-      /(?:קוראים\s*(?:לו|לה)|(?<![א-ת])שמו|(?<![א-ת])שמה)(?![א-ת])\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/];
+      /(?:קוראים\s*(?:לו|לה)|(?<![א-ת])שמו|(?<![א-ת])שמה|(?<![א-ת])השם\s*(?:שלה|שלו))(?![א-ת])\s*(?:הוא|היא|זה)?\s*[:\-]?\s*([א-ת'׳]{2,})(?:\s+([א-ת'׳]{2,}))?/];
     for(const r of res){ const m=text.match(r); if(!m||NM_STOP.test(m[1])||WA_PEST_WORD.test(m[1])){ WA_PEST_WORD.lastIndex=0; continue; } WA_PEST_WORD.lastIndex=0;
       name=m[1]; if(m[2]&&!NM_STOP.test(m[2])&&!/^(?:ו|ב|ל|מ|ש|ה)?(?:ועד|בית|רחוב|טלפון|מספר|הדבר|צריך|רוצה)/.test(m[2])&&!cities.includes(m[2])) name+=" "+m[2]; break; }
   }
