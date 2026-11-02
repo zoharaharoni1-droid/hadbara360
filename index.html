@@ -1997,23 +1997,31 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
 }
 // ── הקלטה קולית: מדברים במקום להקליד (זיהוי דיבור של הדפדפן, בעברית, בחינם)
 // ממשיך להקשיב עד שלוחצים עצירה. מגן מלולאת "נעצר-ממשיך", מונע כפילויות (באג אנדרואיד) ומציג מה נשמע בזמן אמת
+const MIC_ANDROID=typeof navigator!=="undefined"&&/Android/i.test(navigator.userAgent||"");
+const micNorm=t=>String(t||"").replace(/[.,!?״"']/g,"").replace(/\s+/g," ").trim();
+// מיזוג תוצאות סופיות: אם התוצאה החדשה כוללת את הקודמת (מצטברת) — מחליפים; אם כבר נכללת — מדלגים; אחרת מוסיפים
+const micMerge=(acc,t)=>{ t=String(t||"").replace(/\s+/g," ").trim(); if(!t) return acc; if(!acc) return t; const A=micNorm(acc), T=micNorm(t); if(T.startsWith(A)) return t; if(A.endsWith(T)||A.includes(T)) return acc; return acc+" "+t; };
 function MicButton({onText,label="🎤 דבר"}){
   const [on,setOn]=useState(false); const [paused,setPaused]=useState(false); const [live,setLive]=useState(""); const [warn,setWarn]=useState("");
   const rec=React.useRef(null); const want=React.useRef(false); const running=React.useRef(false);
-  const sess=React.useRef({sent:"",start:0,got:false}); const fails=React.useRef(0); const timer=React.useRef(null);
+  const sess=React.useRef({sent:"",start:0,got:false}); const lastChunk=React.useRef(""); const fails=React.useRef(0); const timer=React.useRef(null);
   const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
   const cb=React.useRef(onText); cb.current=onText;
   const startRec=()=>{
     if(!SR||running.current||!want.current) return;
-    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=true; r.maxAlternatives=1;
+    // באנדרואיד: משפט-משפט (כמו בגרסה הראשונה) — המצב "רציף" שם שולח כל משפט מצטבר שוב ושוב וגורם לכפילויות
+    const r=new SR(); r.lang="he-IL"; r.continuous=!MIC_ANDROID; r.interimResults=!MIC_ANDROID; r.maxAlternatives=1;
     sess.current={sent:"",start:Date.now(),got:false};
     r.onresult=e=>{
       // בונים את כל הטקסט הסופי של הסשן מההתחלה, ושולחים רק מה שעוד לא נשלח (אנדרואיד שולח שוב את מה שכבר נשלח)
       let fin="", intr="";
-      for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=(fin&&!/\s$/.test(fin)?" ":"")+t.trim(); else intr+=t; }
-      fin=fin.replace(/\s+/g," ").trim(); sess.current.got=true;
+      for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin=micMerge(fin,t); else intr+=t; }
+      sess.current.got=true;
       const prev=sess.current.sent;
-      if(fin&&fin!==prev){ let add=fin.startsWith(prev)?fin.slice(prev.length).trim():fin; if(prev&&!fin.startsWith(prev)&&prev.includes(fin)) add=""; if(add) cb.current(add); sess.current.sent=fin; }
+      if(fin&&fin!==prev){ let add=fin.startsWith(prev)?fin.slice(prev.length).trim():(prev.includes(fin)?"":fin);
+        // משפט שחוזר על עצמו מיד אחרי הפעלה מחדש — לא כותבים פעמיים
+        if(add&&!prev&&lastChunk.current&&micNorm(add)===micNorm(lastChunk.current)) add="";
+        if(add) cb.current(add); sess.current.sent=fin; lastChunk.current=fin; }
       setLive(intr.trim());
     };
     r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want.current=false; setOn(false); setWarn(""); alert("צריך לאשר גישה למיקרופון בדפדפן."); } };
@@ -2037,7 +2045,7 @@ function MicButton({onText,label="🎤 דבר"}){
     if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
     setWarn("");
     if(want.current){ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
-    want.current=true; fails.current=0; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
+    want.current=true; fails.current=0; lastChunk.current=""; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
   };
   return <span style={{display:"inline-flex",flexDirection:"column",gap:4,maxWidth:"100%"}}>
     <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>
