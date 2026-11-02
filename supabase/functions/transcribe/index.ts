@@ -9,7 +9,10 @@ const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 // מודלים מועדפים (שמות "latest" מתעדכנים לבד אצל גוגל). אם כולם לא זמינים — שואלים את גוגל אילו מודלים קיימים.
-const PREFERRED = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
+const PREFERRED = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash"];
+// בלי "חשיבה" — תמלול לא צריך, וזה מה שהאט את התשובה
+const thinkOff = (m: string) => m.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : { thinkingConfig: { thinkingLevel: "minimal" } };
+const noThink = new Set<string>();
 let cachedModel = "";
 async function listFlashModels(key: string): Promise<string[]> {
   try {
@@ -45,22 +48,26 @@ Deno.serve(async (req) => {
     while (queue.length) {
       const model = queue.shift()!;
       if (tried.has(model)) continue; tried.add(model);
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: "POST",
+      let r: Response;
+      try { r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST", signal: AbortSignal.timeout(14000),
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system + (vocab ? "\n" + vocab : "") }] },
           contents: [{ role: "user", parts: [{ text: "Transcribe this audio:" }, { inline_data: { mime_type: mime || "audio/wav", data: audio } }] }],
-          generationConfig: { temperature: 0, ...(model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
+          generationConfig: { temperature: 0, ...(noThink.has(model) ? {} : thinkOff(model)) },
         }),
-      });
+      }); } catch (_e) { errors.push(model + ": timeout"); if (cachedModel === model) cachedModel = ""; if (!queue.length && !listed) { listed = true; queue = (await listFlashModels(key)).filter((m) => !tried.has(m)); } continue; }
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
         const text = (j?.candidates?.[0]?.content?.parts || []).map((p: { text?: string }) => p.text || "").join("").trim();
         cachedModel = model;
         return json({ text, model, ...(errors.length ? { skipped: errors } : {}) });
       }
-      lastErr = j?.error?.message || `HTTP ${r.status}`; errors.push(model + ": " + r.status + " " + lastErr.slice(0, 90));
+      lastErr = j?.error?.message || `HTTP ${r.status}`;
+      // המודל לא מכיר את הגדרת החשיבה — מנסים אותו שוב בלעדיה
+      if (r.status === 400 && /thinking/i.test(lastErr) && !noThink.has(model)) { noThink.add(model); tried.delete(model); queue.unshift(model); continue; }
+      if (cachedModel === model) cachedModel = ""; errors.push(model + ": " + r.status + " " + lastErr.slice(0, 90));
       // מפתח שגוי / מכסה — אין טעם לנסות מודל אחר
       if (r.status === 400 && /API key/i.test(lastErr)) return json({ error: "מפתח Gemini לא תקין" }, 401);
       if (r.status === 429 && !queue.length) return json({ error: "quota: " + lastErr, skipped: errors }, 429);
