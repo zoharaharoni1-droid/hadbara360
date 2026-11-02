@@ -100,6 +100,17 @@ function loadScript(urls,cb,i){
   *{box-sizing:border-box}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+<style>
+  /* 🌙 מצב לילה: היפוך צבעים חכם (תמונות ולוגו נשארים בצבעים המקוריים) */
+  html.h360-dark{filter:invert(0.92) hue-rotate(180deg);background:#fff}
+  html.h360-dark [style*="background: rgba(0, 0, 0, 0."],html.h360-dark [style*="background: rgba(15, 23, 42, 0."]{background:rgba(255,255,255,.62)!important}
+  html.h360-dark img,html.h360-dark video,html.h360-dark canvas,html.h360-dark iframe,html.h360-dark svg image,html.h360-dark .h360-noinv{filter:invert(1) hue-rotate(180deg)}
+</style>
+<script>
+  function h360ApplyTheme(){ try{ var t=localStorage.getItem('h360_theme')||'light'; var dark=t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('h360-dark',dark); var m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content',dark?'#0f172a':'#16a34a'); }catch(e){} }
+  h360ApplyTheme(); try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',h360ApplyTheme); }catch(e){}
+</script>
 </head>
 <body>
 <div id="root"><div id="loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#1a5c3a;direction:rtl;gap:12px">
@@ -3806,7 +3817,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {phone?<button type="button" onClick={()=>setSheet("phone")} style={row}><span style={{fontSize:18}}>📞</span><span style={{flex:1,direction:"ltr",textAlign:"right",fontWeight:700}}>{phone}</span><span style={{fontSize:12,color:"#16a34a",fontWeight:700}}>התקשר / וואטסאפ ›</span></button>
         :<div style={{...row,cursor:"default",color:"#94a3b8"}}><span style={{fontSize:18}}>📞</span>אין טלפון</div>}
       {appt.address?<button type="button" onClick={()=>setSheet("nav")} style={row}><span style={{fontSize:18}}>📍</span><span style={{flex:1,fontWeight:700}}>{appt.address}{appt.unit?<span style={{fontWeight:500,color:"#64748b"}}> · {appt.unit}</span>:null}</span><span style={{fontSize:12,color:"#2563eb",fontWeight:700}}>ניווט ›</span></button>:null}
-      <div style={{...row,cursor:"default",marginBottom:0}}><span style={{fontSize:18}}>🕐</span><span style={{flex:1,fontWeight:700}}>{when}</span><ProgressBadge prog={prog}/></div>
+      <div style={{...row,cursor:"default",marginBottom:0}}><span style={{fontSize:18}}>🕐</span><span style={{flex:1,fontWeight:700}}>{fmtDate(appt.date)} · {isAllDay(appt)?ALL_DAY_TW:<span dir="ltr" style={{whiteSpace:"nowrap",display:"inline-block"}}>{appt.timeWindow||appt.time||""}</span>}</span><ProgressBadge prog={prog}/></div>
     </div>
     {/* ── שלבים ── */}
     {!prog.personal&&<div style={{background:"#f8fafc",borderRadius:12,padding:"10px 12px",marginBottom:12}}><ProgressTrack steps={prog.steps}/>{prog.next&&<div style={{fontSize:12,color:"#b45309",fontWeight:700,marginTop:6}}>⬅ הבא: {prog.next}</div>}</div>}
@@ -4023,7 +4034,12 @@ const ALL_DAY_TW="במהלך היום";
 // "במהלך היום" — לא שעה קבועה, לא חוסם את היומן (אפשר לשבץ עוד עבודות באותו יום)
 const isAllDay=a=>!!a&&!a.blockDay&&(String(a.timeWindow||"").trim()===ALL_DAY_TW||(isPersonal(a)&&!!a.allDay));
 const PERSONAL_CHIPS=["🏦 בנק / צ'ק","🛒 קניות","🩺 רופא","🚗 מוסך / רכב","📦 סידורים","👨‍👩‍👧 משפחה","🍽️ הפסקה","📞 פגישה"];
-const PERSONAL_CLR="#7c3aed";
+const PERSONAL_CLR="#2563eb";
+// צבעי יומן: הדברה = ירוק בהיר, משימה = כחול בהיר. פתוח = מסגרת מקווקווה, הסתיים = מסגרת אחידה
+const CAL_JOB={bg:"#dcfce7",bd:"#16a34a"}, CAL_TASK={bg:"#dbeafe",bd:"#2563eb"};
+function calCardStyle(a,pr,bw=1.5,wc){ const pers=isPersonal(a); const c=pers?CAL_TASK:CAL_JOB; const p=pr||{};
+  const cancelled=a.status==="בוטל"; const done=pers?a.status==="בוצע":(!!p.closed||p.stage==="בוצע"||p.stage==="הושלם"||a.status==="בוצע");
+  return {background:cancelled?"#f1f5f9":c.bg,border:`${bw}px ${done&&!cancelled?"solid":"dashed"} ${cancelled?"#94a3b8":c.bd}`,boxShadow:!pers&&a.workerId!=null&&wc?`inset -4px 0 0 ${wc(a.workerId)}`:"none"}; }
 function personalTitle(a){ return a.title||String(a.customerName||"").replace(/^📌\s*/,"")||"משימה"; }
 function myWorkerFor(currentUser,workers){
   const ws=(workers||[]).filter(w=>!w.deleted);
@@ -4161,7 +4177,7 @@ function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,dragge
     const small=h<40||(narrow&&n>3);
     return <div key={a.id} {...cp} draggable={!narrow} onDragStart={ev=>{setDraggedId&&setDraggedId(a.id);ev.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId&&setDraggedId(null);setDropKey(null);}}
       onClick={ev=>{ev.stopPropagation();onOpen(a);}} title={(a.timeWindow||a.time)+" · "+a.customerName+(a.pestType&&!pers?" · "+a.pestType:"")}
-      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,background:pers?"#f5f3ff":col+"22",borderRight:`3px ${pers?"dashed":"solid"} ${col}`,borderRadius:6,padding:small?"1px 3px":"3px 5px",fontSize:narrow&&n>3?9:11,lineHeight:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxShadow:"0 1px 2px rgba(0,0,0,.08)",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a",textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
+      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:small?"1px 3px":"3px 5px",fontSize:narrow&&n>3?9:11,lineHeight:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a",textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
       <div style={{fontWeight:700,whiteSpace:small?"nowrap":"normal",overflow:"hidden",textOverflow:"ellipsis"}}>{a.customerName||"—"}</div>
       {!small&&<div style={{color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} dir="ltr">{a.timeWindow||a.time}</div>}
       {!small&&h>=58&&!pers&&<div style={{color:"#64748b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.pestType}</div>}
@@ -4183,7 +4199,7 @@ function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,dragge
     {hasAllDay&&<div style={{display:"flex",borderBottom:"2px solid #fcd34d",background:"#fffbeb"}}>
       <div style={{width:gutter,flexShrink:0,fontSize:9,color:"#92400e",fontWeight:700,textAlign:"center",paddingTop:4}}>☀️</div>
       {allDayBy.map((l,i)=><div key={i} style={{flex:1,minWidth:0,padding:2,borderRight:`1px solid ${CLR.border}`}}>
-        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,background:pers?"#f5f3ff":wColor(a.workerId)+"22",borderRight:`3px ${pers?"dashed":"solid"} ${pers?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{a.customerName}</div>;})}
+        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),textDecoration:pers&&a.status==="בוצע"?"line-through":"none",borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{a.customerName}</div>;})}
       </div>)}
     </div>}
     {/* גוף: שעות × ימים */}
@@ -4492,7 +4508,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
           </div>
           {list.length===0
             ? <div style={{padding:"10px 14px",fontSize:13,color:CLR.muted}}>אין תורים</div>
-            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);const _cp=tdrag.cardProps(a,a.customerName);return <div key={a.id} {..._cp} onClick={()=>openItem(a)} style={{..._cp.style,opacity:tdrag.drag&&tdrag.drag.id===a.id?0.35:1,display:"flex",gap:12,alignItems:"center",padding:"12px 14px",borderTop:`1px solid ${CLR.border}`,borderRight:`4px solid ${wColor(a.workerId)}`,cursor:"pointer"}}>
+            : list.map(a=>{const prog=jobProgress(a,execLogs,finance);const _cp=tdrag.cardProps(a,a.customerName);return <div key={a.id} {..._cp} onClick={()=>openItem(a)} style={{..._cp.style,opacity:tdrag.drag&&tdrag.drag.id===a.id?0.35:1,display:"flex",gap:12,alignItems:"center",padding:"10px 12px",margin:"6px 8px",borderRadius:10,...calCardStyle(a,prog,1.5,wColor),cursor:"pointer"}}>
                 <div style={{fontWeight:800,fontSize:isAllDay(a)?11:15,color:isAllDay(a)?"#92400e":"#0f172a",minWidth:48,textAlign:"center"}}>{isAllDay(a)?"☀️ במהלך היום":(a.time||"—")}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
@@ -9228,7 +9244,7 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
     {allDayList.length>0&&<div style={{border:"1px solid #fcd34d",background:"#fffbeb",borderRadius:10,padding:"8px 10px",marginBottom:10}}>
       <div style={{fontWeight:800,fontSize:13,color:"#92400e",marginBottom:6}}>☀️ במהלך היום <span style={{fontWeight:400,color:"#a16207",fontSize:12}}>· בלי שעה קבועה, לא חוסם</span></div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {allDayList.map(a=>{const pr=jobProgress(a,execLogs,finance);const pers=isPersonal(a);const _cp=cp(a);return <div key={a.id} {..._cp} onClick={()=>onApptClick(a)} style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,cursor:"pointer",background:pers?"#f5f3ff":"#fff",border:`2px ${pers?"dashed":"solid"} ${pers?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"6px 10px",flex:"1 1 200px",maxWidth:380,textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
+        {allDayList.map(a=>{const pr=jobProgress(a,execLogs,finance);const pers=isPersonal(a);const _cp=cp(a);return <div key={a.id} {..._cp} onClick={()=>onApptClick(a)} style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,cursor:"pointer",...calCardStyle(a,pr,2,wColor),borderRadius:10,padding:"6px 10px",flex:"1 1 200px",maxWidth:380,textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
           <div style={{display:"flex",justifyContent:"space-between",gap:6,alignItems:"center"}}><span style={{fontWeight:700,fontSize:13}}>{a.customerName}</span><span style={{fontSize:11,color:pr.color,fontWeight:600}}>{pr.label}</span></div>
           <div style={{fontSize:11,color:"#6b7280"}}>{pers?(a.notes||""):(a.pestType+" · 📍 "+(a.address||"").slice(0,40))}{a.workerName?" · 👷 "+a.workerName:""}</div>
         </div>;})}
@@ -9253,7 +9269,7 @@ function DayView({date, appointments, workers, finance, execLogs, currentUser, o
               const prog=jobProgress(a,execLogs,finance);
               const _cp=cp(a);
               return <div key={a.id} {..._cp} onClick={e=>{e.stopPropagation();onApptClick(a);}}
-                style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,background:isPersonal(a)?"#f5f3ff":"#fff",border:`2px ${isPersonal(a)?"dashed":"solid"} ${isPersonal(a)?PERSONAL_CLR:wColor(a.workerId)}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380,boxShadow:"0 1px 4px rgba(0,0,0,0.07)"}}>
+                style={{..._cp.style,opacity:tdrag&&tdrag.drag&&tdrag.drag.id===a.id?0.35:1,...calCardStyle(a,jobProgress(a,execLogs,finance),2,wColor),borderRadius:10,padding:"8px 12px",cursor:"pointer",flex:"1 1 220px",maxWidth:380}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                   <span style={{fontWeight:700,fontSize:13,color:"#111"}}>{a.time} · {a.customerName}</span>
                   <span style={{fontSize:11,color:prog.color,fontWeight:600,background:prog.color+"18",padding:"1px 7px",borderRadius:20}}>{prog.label}</span>
@@ -9313,7 +9329,7 @@ function MonthView({year, month, appointments, workers, finance, execLogs, curre
             {day.appts.slice(0,3).map(a=>{
               const prog=jobProgress(a,execLogs,finance);
               return <div key={a.id} style={{fontSize:10,padding:"2px 5px",borderRadius:4,marginBottom:2,
-                background:wColor(a.workerId)+"22",borderRight:`3px solid ${wColor(a.workerId)}`,
+                ...calCardStyle(a,prog,1,wColor),
                 overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:"#111"}}>
                 {isAllDay(a)?"☀️":a.time} {a.customerName}
               </div>;
@@ -9504,6 +9520,24 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
   </div>;
 }
 
+function SettingsPage(){
+  const [theme,setTheme]=useState(()=>{ try{ return localStorage.getItem('h360_theme')||'light'; }catch(e){ return 'light'; } });
+  const pick=t=>{ setTheme(t); try{ localStorage.setItem('h360_theme',t); }catch(e){} try{ window.h360ApplyTheme&&window.h360ApplyTheme(); }catch(e){} };
+  const opt=(k,icon,title,sub)=><button key={k} type="button" onClick={()=>pick(k)} style={{flex:"1 1 150px",textAlign:"right",padding:"14px",borderRadius:14,border:"2px solid "+(theme===k?CLR.primary:"#e2e8f0"),background:theme===k?"#f0fdf4":"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+    <div style={{fontSize:26}}>{icon}</div><div style={{fontWeight:800,fontSize:15,marginTop:4}}>{title}{theme===k?" ✓":""}</div><div style={{fontSize:12,color:"#64748b"}}>{sub}</div></button>;
+  return <div style={{maxWidth:640,margin:"0 auto"}}>
+    <h2 style={{margin:"0 0 12px",color:CLR.primary}}>⚙️ הגדרות</h2>
+    <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+      <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>🌙 מצב תצוגה</div>
+      <div style={{fontSize:13,color:"#64748b",marginBottom:10}}>מצב לילה מכהה את כל המערכת — היומן, הטפסים והחלונות — כדי שלא יסנוור בחושך. נשמר בטלפון הזה.</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {opt("light","☀️","בהיר","רקע לבן")}
+        {opt("dark","🌙","לילה","רקע כהה")}
+        {opt("auto","🌗","אוטומטי","לפי הגדרת הטלפון")}
+      </div>
+    </div>
+  </div>;
+}
 function App(){
   const [authUser,setAuthUser]=React.useState(()=>{
     try{const u=localStorage.getItem('crm_auth');return u?JSON.parse(u):null;}catch{return null;}
@@ -9694,6 +9728,7 @@ function App(){
     {id:"finance",label:"💰 כספים",short:"💰"},
     {id:"collabs",label:"🤝 שיתופי פעולה",short:"🤝",hideFor:"מדביר"},
     {id:"workers",label:"👥 עובדים",short:"👥",adminOnly:true},
+    {id:"settings",label:"⚙️ הגדרות",short:"⚙️"},
   ].filter(t=>{
     if(!user || !user.role) return true;
     if(t.hideFor===user.role) return false;
@@ -9744,7 +9779,7 @@ function App(){
             {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
-            {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
+            {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות",hide:null}]},
           ].map(group=>(
             <div key={group.lbl} style={{marginBottom:16}}>
               <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
@@ -9843,7 +9878,7 @@ function App(){
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
-                {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true}]},
+                {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
               ].map(group=>(
                 <div key={group.lbl} style={{marginBottom:16}}>
                   <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
@@ -9878,6 +9913,7 @@ function App(){
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={calAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
+              {tab==="settings"&&<SettingsPage/>}
               {tab==="mychems"&&<MyChemicals currentUser={user} workers={activeWorkers} setWorkers={setWorkers} execLogs={execLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
