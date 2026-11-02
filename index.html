@@ -3845,10 +3845,120 @@ function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,dragge
   </div>;
 }
 
+// ═══ הוספה מהירה ליומן: הדבקה / הקלדה / דיבור → הדברה או משימה, ונכנס ליומן ═══
+const QA_TRIGGER=/(?:ת?הכנס|תכניס|הכניסי|הכניסו|תשים|שים|תרשום|רשום|תקבע|קבע|תוסיף|הוסף)\s+(?:את\s+זה\s+|את\s+הכל\s+)?(?:ל|ב)יומן(?:\s+(?:של\s+)?([א-ת'׳"]+(?:\s+[א-ת'׳"]+){0,2}))?\s*[.!]?\s*$/;
+const QA_TASK=/משימה|תזכורת|להזכיר|לזכור|רופא|רופאה|קופת חולים|בנק|צ['׳]ק|קניות|סופר|סידור|סידורים|דואר|מוסך|טסט|פגישה|לאסוף|לקחת|להביא|ללכת|לשלם|להתקשר|לחייג|ישיבה|אסיפה|ילדים|גן|הורים|ארוחה|חופש/;
+function qaKind(text,r){
+  const pestish=(r.pests||[]).length>0||!!r.price||/הדבר|ריסוס|מדביר|ג['׳]ל|פיתיון|תיבות|מלכוד/.test(text);
+  if(pestish) return "job";
+  if(QA_TASK.test(text)) return "personal";
+  return r.phone?"job":"personal";
+}
+function qaWorker(nameTxt,workers,me){
+  const ws=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
+  if(!nameTxt) return null; const n=nameTxt.replace(/["׳']/g,"").trim(); if(/^(שלי|שלך|ש?לי)$/.test(n)) return me;
+  const toks=n.split(/\s+/).filter(t=>t.length>1);
+  let best=null,score=0; ws.forEach(w=>{ const hay=[w.name,w.fullName,w.docName].filter(Boolean).join(" ").replace(/["׳']/g,""); const sc=toks.filter(t=>hay.includes(t)).length; if(sc>score){score=sc;best=w;} });
+  return best;
+}
+function qaTitle(text){
+  let t=text.replace(QA_TRIGGER,"").replace(/^(?:משימה|תזכורת)\s*[:\-]?\s*/,"")
+    .replace(/(?<![א-ת])(?:היום|מחר|מחרתיים)(?![א-ת])/g,"").replace(/(?:ב?יום\s+)?(?:ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)(?![א-ת])/g,"")
+    .replace(/(?:בין|משעה|בשעה|שעה|ב-?|מ-?)\s*\d{1,2}(?::\d{2})?(?:\s*(?:ל-?|עד|-|–)\s*\d{1,2}(?::\d{2})?)?/g,"").replace(/\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?/g,"")
+    .replace(/\s+/g," ").replace(/^[\s,.\-–]+|[\s,.\-–]+$/g,"").trim();
+  if(t.length>70) t=t.slice(0,68).replace(/\s+\S*$/,"")+"…";
+  return t||"משימה";
+}
+function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTask,onUndo,onOpenFull,cityNames}){
+  const me=myWorkerFor(currentUser,workers);
+  const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
+  const [txt,setTxt]=useState(""); const [kind,setKind]=useState(null); const [wid,setWid]=useState(me?String(me.id):(techs[0]?String(techs[0].id):""));
+  const [done,setDone]=useState(null); const voice=React.useRef(false); const fired=React.useRef(false);
+  const clean=txt.replace(QA_TRIGGER,"").trim();
+  const trig=txt.trim().match(QA_TRIGGER);
+  const r=React.useMemo(()=>clean?waParse(clean,cityNames):null,[clean]);
+  const autoKind=r?qaKind(clean,r):"job"; const k=kind||autoKind;
+  React.useEffect(()=>{ if(trig&&trig[1]){ const w=qaWorker(trig[1],workers,me); if(w) setWid(String(w.id)); } },[trig&&trig[1]]);
+  const w=techs.find(x=>String(x.id)===String(wid))||me||null;
+  const today=todayStr();
+  const date=(r&&r.prefDate)||today; const hasTime=!!(r&&r.timeFrom);
+  const isRange=!!(r&&/(?:בין|משעה|מ-?)\s*\d{1,2}(?::\d{2})?\s*(?:ל-?|עד|-|–)\s*\d{1,2}|\d{1,2}(?::\d{2})?\s*[-–]\s*\d{1,2}/.test(clean));
+  const toT=hasTime?(k==="personal"&&!isRange?String(Math.min(23,parseInt(r.timeFrom)+1)).padStart(2,"0")+r.timeFrom.slice(2):r.timeTo):"";
+  const when=fmtDate(date)+" · "+(hasTime?"\u2066"+r.timeFrom+"–"+toT+"\u2069":"במהלך היום (בלי שעה קבועה)");
+  const insert=()=>{
+    if(!r||!clean) return;
+    if(k==="personal"){
+      const title=qaTitle(clean);
+      const t={kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+toT:ALL_DAY_TW,allDay:!hasTime,blockDay:false,notes:clean!==title?clean:"",workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
+      const saved=onSaveTask(t); setDone({kind:"personal",label:"📌 "+title,date,ref:saved});
+    } else {
+      const PK=r.pests||[]; const known=PK.filter(p=>PEST_TYPES_CRM.includes(p));
+      const street=[r.street,r.buildingNum].filter(Boolean).join(" "); const addr=[street,r.city].filter(Boolean).join(", ");
+      const pt=r.propertyType||"דירה";
+      const cust={name:r.name||"לא צוין",contactName:"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
+        propertyType:pt,rooms:pt==="בניין משותף"?"":(r.rooms||""),levels:"1",floors:"",sewers:"",floor:r.floor||"",hasYard:!!r.hasYard,buildingAreas:[],underground:"0",propertyNotes:"",
+        status:"פעיל",notes:"📋 מההודעה: "+clean.replace(/\s*\n\s*/g," | "),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
+      const appt={contactName:"",propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
+        pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
+        buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||""};
+      const saved=onSaveJob(cust,appt); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
+    }
+    try{navigator.vibrate&&navigator.vibrate([30,40,30]);}catch(e){}
+  };
+  React.useEffect(()=>{ if(voice.current&&trig&&r&&!fired.current&&!done){ fired.current=true; const t=setTimeout(insert,700); return()=>clearTimeout(t); } },[txt]);
+  const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ voice.current=false; setTxt(t); } }catch(e){ alert("הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
+  const chip=(on,c)=>({flex:1,padding:"9px 6px",borderRadius:10,border:"1.5px solid "+(on?c:"#e2e8f0"),background:on?c+"18":"#fff",color:on?c:"#475569",fontWeight:on?800:500,fontSize:15,cursor:"pointer",fontFamily:"inherit"});
+  if(done) return <Modal title="⚡ הוספה מהירה" onClose={onClose} width={480}>
+    <div style={{textAlign:"center",padding:"10px 0 4px"}}>
+      <div style={{fontSize:44}}>✅</div>
+      <div style={{fontWeight:800,fontSize:18,margin:"6px 0"}}>נכנס ליומן{w?" של "+w.name:""}</div>
+      <div style={{fontSize:15,color:"#334155"}}>{done.label}</div>
+      <div style={{fontSize:14,color:CLR.muted,marginTop:2}}>{when}</div>
+      <div style={{display:"flex",gap:8,marginTop:16}}>
+        <Btn full onClick={()=>{setDone(null);setTxt("");setKind(null);fired.current=false;}}>+ עוד אחד</Btn>
+        <Btn full v="secondary" onClick={onClose}>סגור</Btn>
+        <Btn full v="ghost" style={{color:"#dc2626"}} onClick={()=>{onUndo(done);setDone(null);fired.current=false;}}>↩ בטל</Btn>
+      </div>
+    </div>
+  </Modal>;
+  return <Modal title="⚡ הוספה מהירה ליומן" onClose={onClose} width={520}>
+    <div style={{fontSize:13,color:CLR.muted,marginBottom:8}}>הדבק הודעה, הקלד, או לחץ 🎤 ודבר. אפשר לסיים ב: <b>"הכנס ליומן של {me?me.name:"..."}"</b> — וזה נכנס לבד.</div>
+    <textarea value={txt} onChange={e=>{voice.current=false;setTxt(e.target.value);}} rows={5} placeholder={"למשל:\nפרעושים, נחמני 54 תל אביב קומת קרקע, 500 שח, 0528285665, מחר בין 10 ל12\n— או —\nמחר ב-9 לקחת צ'ק מוועד הבית בהרצל"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
+    <div style={{display:"flex",gap:8,margin:"8px 0 12px",flexWrap:"wrap"}}>
+      <MicButton label="🎤 דבר" onText={t=>{voice.current=true;setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t);}}/>
+      <button type="button" onClick={paste} style={{border:"1.5px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>
+      {txt&&<button type="button" onClick={()=>{setTxt("");setKind(null);fired.current=false;}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>נקה</button>}
+    </div>
+    {r&&<>
+      <div style={{display:"flex",gap:6,marginBottom:10}}>
+        <button type="button" onClick={()=>setKind("job")} style={chip(k==="job",CLR.primary)}>🐜 הדברה</button>
+        <button type="button" onClick={()=>setKind("personal")} style={chip(k==="personal",PERSONAL_CLR)}>📌 משימה</button>
+      </div>
+      <div style={{background:"#f8fafc",border:"1px solid "+CLR.border,borderRadius:12,padding:"10px 12px",marginBottom:10,fontSize:14,lineHeight:1.7}}>
+        {k==="personal"?<div><b>📌 {qaTitle(clean)}</b></div>:<>
+          <div><b>👤 {r.name||"לא צוין"}</b>{r.phone?" · 📞 "+r.phone:""}{r.brand?<span style={{color:CLR.muted}}> · נשלח מ{r.brand}</span>:null}</div>
+          <div>🐛 {(r.pests||[]).join(", ")||<span style={{color:"#b45309"}}>מזיק לא זוהה</span>}{r.price?" · 💰 ₪"+r.price:""}</div>
+          <div>📍 {[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", ")||<span style={{color:"#b45309"}}>כתובת לא זוהתה</span>}{r.aptNum?" · דירה "+r.aptNum:""}{r.floor?" · קומה "+r.floor:""}</div>
+          {(r.propertyType||r.rooms)&&<div>🏠 {[r.propertyType,r.rooms?r.rooms+" חד׳":"",r.hasYard===false?"ללא חצר":r.hasYard?"עם חצר":""].filter(Boolean).join(" · ")}</div>}
+        </>}
+        <div>🕐 {when}</div>
+      </div>
+      {techs.length>1&&<div style={{marginBottom:10}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>ביומן של</label>
+        <select value={wid} onChange={e=>setWid(e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff"}}>{techs.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div>}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn style={{flex:"2 1 200px",...(k==="personal"?{background:PERSONAL_CLR}:{})}} onClick={insert}>✓ הכנס ליומן</Btn>
+        {k==="job"&&<Btn v="secondary" style={{flex:"1 1 140px"}} onClick={()=>onOpenFull(clean)}>📝 לטופס המלא</Btn>}
+      </div>
+    </>}
+  </Modal>;
+}
+
 function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[],openReq=null,onOpenDone}){
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
   const [newKind,setNewKind]=useState("job");
+  const [showQuick,setShowQuick]=useState(false);
+  const [fullText,setFullText]=useState(null);
   const [editTask,setEditTask]=useState(null);
   const [prefill,setPrefill]=useState({});
   const [viewWk,setViewWk]=useState("all");
@@ -3869,6 +3979,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   // פתיחה ישירה של תור מ"המשימות שלי" — וחזרה לשם בסגירה
   React.useEffect(()=>{
     if(!openReq) return;
+    if(openReq.quick){ setShowQuick(true); return; }
     const a=appointments.find(x=>String(x.id)===String(openReq.id)); if(!a) return;
     if(a.date){ setCalMode("day"); setDayDate(new Date(a.date+"T12:00:00")); }
     if(isPersonal(a)){ setEditTask(a); return; }
@@ -3962,6 +4073,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       </div>
       <Btn sm onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
       <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
+      <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>⚡ מהיר 🎤</Btn>
     </div>
     {/* שורה 2: ניווט — החצים מצביעים החוצה */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
@@ -4091,7 +4203,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         </tr>)}</tbody>
       </table>
     </div>}
-    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>setShowNew(false)} width={newKind==="personal"?520:860}>
+    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>{setShowNew(false);setFullText(null);}} width={newKind==="personal"?520:860}>
       <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:12}}>
         {[["job","🐜 הזמנת עבודה (לקוח)"],["personal","📌 משימה אישית / סידור"]].map(([k,l])=><button key={k} type="button" onClick={()=>setNewKind(k)} style={{flex:1,padding:"9px 8px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:newKind===k?800:500,background:newKind===k?"#fff":"transparent",color:newKind===k?(k==="personal"?PERSONAL_CLR:CLR.primary):"#64748b",boxShadow:newKind===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
       </div>
@@ -4099,7 +4211,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       <div style={{fontSize:12,color:CLR.muted,marginBottom:12,background:CLR.primaryLight,borderRadius:8,padding:"8px 12px"}}>
         📅 נפתח מהיומן — התאריך והשעה מולאו מראש. השלם את שאר הפרטים ושגר.
       </div>
-      <OrderForm workers={workers} showGuidance={false}
+      <OrderForm workers={workers} showGuidance={false} initialParsed={fullText}
         initialDate={prefill.date} initialTime={prefill.time} initialWorker={prefill.workerId}
         onSave={c=>{const saved={...c,id:nextId(customers)};setCustomers(cs=>[...cs,saved]);return saved;}}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
@@ -4110,6 +4222,12 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         }}
         onCancel={()=>setShowNew(false)}/></>}
     </Modal>}
+    {showQuick&&<QuickAddModal workers={workers} currentUser={currentUser} customers={customers} cityNames={[]}
+      onClose={()=>{setShowQuick(false);backIfReq();}}
+      onSaveTask={t=>{let id;setAppointments(as=>{id=nextId(as);return [...as,{...t,id}];});setDayDate(new Date(t.date+"T12:00:00"));return {apptId:()=>id};}}
+      onSaveJob={(c,a)=>{const cid=nextId(customers);let aid;setCustomers(cs=>[...cs,{...c,id:cid}]);setAppointments(as=>{aid=nextId(as);return [...as,{...a,customerId:cid,customerName:c.name,id:aid}];});setDayDate(new Date(a.date+"T12:00:00"));return {apptId:()=>aid,custId:()=>cid};}}
+      onUndo={d=>{const r=d.ref||{}; const aid=r.apptId&&r.apptId(); if(aid!=null) setAppointments(as=>as.filter(x=>x.id!==aid)); const cid=r.custId&&r.custId(); if(cid!=null) setCustomers(cs=>cs.filter(x=>x.id!==cid)); showToast("↩ בוטל");}}
+      onOpenFull={txt=>{setShowQuick(false);setFullText({text:txt,n:Date.now()});setPrefill({});setNewKind("job");setShowNew(true);}}/>}
     {editTask&&<Modal title={"📌 "+personalTitle(editTask)} onClose={()=>{setEditTask(null);backIfReq();}} width={520}>
       <PersonalTaskForm task={editTask} workers={workers} currentUser={currentUser}
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
@@ -4467,6 +4585,9 @@ const WA_CITIES=["תל אביב","תל-אביב","ת\"א","יפו","רמת גן"
 const WA_CITY_NORM={"תל-אביב":"תל אביב","ת\"א":"תל אביב","ר\"ג":"רמת גן","ב\"ב":"בני ברק","פ\"ת":"פתח תקווה","פתח תקוה":"פתח תקווה","ראשל\"צ":"ראשון לציון","ראשון":"ראשון לציון","קרית אונו":"קריית אונו","יהוד-מונוסון":"יהוד"};
 const WA_PESTS=[[/ג.?וק|תיקנ|תיקן/,"ג'וקים"],[/אמריקא/,"תיקן אמריקאי"],[/גרמני/,"תיקן גרמני"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/נמל/,"נמלים"],[/יתוש/,"יתושים"],[/טרמיט/,"טרמיטים"],[/זבוב/,"זבובים"],[/פרעוש|פרושים|פירעוש/,"פרעושים"],[/עכביש/,"עכבישים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/שלשול/,"שלשולים"],[/פשפש/,"פשפש מיטה"],[/קרצי/,"קרציות"],[/נחש/,"נחש"],[/(?<![א-ת])יונ(ים|ה)(?![א-ת])/,"יונים"],[/דג.?הכסף|דג כסף/,"דג הכסף"],[/(?<![א-ת])עש(?![א-ת])/,"עש"],[/חדקונית/,"חדקונית"]];
 const WA_NUM_WORDS={"אחד":1,"אחת":1,"שתיים":2,"שניים":2,"שני":2,"שתי":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10};
+// מילים של מזיקים (לניקוי כתובת/שם) ושמות חברות שדומים למזיקים ("סטופ פשפש", "אנטי ג'וק"...)
+const WA_PEST_WORD=/(?:הדברת\s+|ריסוס\s+|טיפול\s+ב?)?[א-ת'׳]*(?:פשפש|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|פרושים|טרמיט|צרע|דבור|עכביש|קרצי|שלשול|מזיק)[א-ת'׳]*/g;
+const WA_BRAND=/(?:סטופ|stop|אנטי|anti|קיל|kill|ביי|bye|נו|אקס|x|די|סוף|מיסטר|mr\.?|ד["״]ר)[\s\-]*(?:ל|ה)?[א-ת'׳]*(?:פשפש|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|טרמיט|צרע|מזיק|באג|bug)[א-ת'׳]*|[א-ת'׳]*(?:פשפש|ג['׳]?וק|נמל|עכבר|מזיק|פרעוש)[א-ת'׳]*[\s\-]+(?:הדברות|הדברה\s+בע["״]?מ|בע["״]?מ|שירותי הדברה|סרוויס|פלוס|360|גרופ|group)/gi;
 const WA_DAYS=[["ראשון","א"],["שני","ב"],["שלישי","ג"],["רביעי","ד"],["חמישי","ה"],["שישי","ו"],["שבת","ש"]];
 function waParse(raw, cityNames){
   const out={found:[]}; let t=String(raw||"").replace(/‏|‎/g,"").replace(/\r/g,"");
@@ -4481,8 +4602,10 @@ function waParse(raw, cityNames){
   // מחיר
   const pr=text.match(/(\d{2,5}(?:[.,]\d{3})?)\s*(?:₪|ש["״']?ח|שקל(?:ים)?|nis)/i)||text.match(/(?:מחיר|עלות|סכום|לתשלום)\s*[:\-]?\s*₪?\s*(\d{2,5}(?:[.,]\d{3})?)/)||text.match(/₪\s*(\d{2,5})/);
   if(pr){ out.price=String(pr[1]).replace(/[.,]/g,""); rest=rest.replace(pr[0]," "); out.found.push("מחיר"); }
-  // מזיקים
-  const pests=[]; WA_PESTS.forEach(([re,name])=>{ if(re.test(text)&&!pests.includes(name)) pests.push(name); });
+  // מזיקים (בלי שמות חברות שנשמעים כמו מזיק)
+  const brands=(text.match(WA_BRAND)||[]); if(brands.length) out.brand=brands[0].trim();
+  const pt=text.replace(WA_BRAND," ");
+  const pests=[]; WA_PESTS.forEach(([re,name])=>{ if(re.test(pt)&&!pests.includes(name)) pests.push(name); });
   if(pests.includes("תיקן אמריקאי")||pests.includes("תיקן גרמני")){ const i=pests.indexOf("ג'וקים"); if(i>=0) pests.splice(i,1); }
   if(pests.length){ out.pests=pests; out.found.push("מזיק"); }
   // סוג נכס
@@ -4510,6 +4633,11 @@ function waParse(raw, cityNames){
   const tw=text.match(/(?:בין|משעה|מ-?|מ)\s*(\d{1,2})(?::(\d{2}))?\s*(?:ל-?|עד|-|–)\s*(\d{1,2})(?::(\d{2}))?/)||text.match(/\b(\d{1,2})(?::(\d{2}))?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\b(?!\s*(?:חדרים|₪|ש))/);
   if(tw&&+tw[1]<=21&&+tw[3]<=22&&+tw[3]>+tw[1]&&!(out.phone&&String(out.phone).includes(tw[0]))){ out.timeFrom=String(tw[1]).padStart(2,"0")+":"+(tw[2]||"00"); out.timeTo=String(tw[3]).padStart(2,"0")+":"+(tw[4]||"00"); out.found.push("שעה"); }
   else { const at=text.match(/(?:בשעה|שעה|ב-|ב)\s*(\d{1,2})(?::(\d{2}))?(?!\s*(?:חדרים|₪|ש"ח|קומ))/); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=hh(+at[1]+2); out.found.push("שעה"); }
+    else if((()=>{ const HW={"שבע":7,"שמונה":8,"תשע":9,"עשר":10,"אחת עשרה":11,"אחת-עשרה":11,"שתים עשרה":12,"שתיים עשרה":12,"אחת":13,"שתיים":14,"שלוש":15,"ארבע":16,"חמש":17,"שש":18};
+      const W="(אחת[ -]עשרה|שתי?ים עשרה|שבע|שמונה|תשע|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש)(?![א-ת])";
+      const rg=text.match(new RegExp("בין\\s*(?:ה)?"+W+"\\s*(?:ל|עד\\s*)(?:ה)?"+W)); if(rg){ out.timeFrom=String(HW[rg[1].replace("-"," ")]).padStart(2,"0")+":00"; out.timeTo=String(HW[rg[2].replace("-"," ")]).padStart(2,"0")+":00"; out.found.push("שעה"); return true; }
+      const one=text.match(new RegExp("(?:בשעה\\s*|(?<![א-ת])ב)"+W)); if(one){ const h=HW[one[1].replace("-"," ")]; out.timeFrom=String(h).padStart(2,"0")+":00"; out.timeTo=String(Math.min(21,h+2)).padStart(2,"0")+":00"; out.found.push("שעה"); return true; }
+      return false; })()){}
     else if(/בבוקר/.test(text)){ out.timeFrom="08:00"; out.timeTo="12:00"; out.found.push("שעה"); }
     else if(/צהריים|צהרים/.test(text)){ out.timeFrom="12:00"; out.timeTo="15:00"; out.found.push("שעה"); }
     else if(/אחה["״]?צ|אחר הצהריים|בערב/.test(text)){ out.timeFrom="15:00"; out.timeTo="19:00"; out.found.push("שעה"); } }
@@ -4523,7 +4651,7 @@ function waParse(raw, cityNames){
       ||cand.find(l=>/^[א-ת"'׳\s]{2,30}\s\d{1,4}[א-ת]?(?:\s*,|\s|$)/.test(l)&&!/חדרים|חד['׳]|קומה|₪|ש"ח/.test(l.slice(0,40)));
   }
   if(addrLine){
-    let a=addrLine;
+    let a=addrLine.replace(WA_BRAND," ").replace(WA_PEST_WORD," ").replace(/(?:^|\s)(?:ו?דירת|בית פרטי|בניין משותף)\s*(?=\s|$)/g," ");
     // עיר
     let city=""; for(const c of cities){ const re=new RegExp("(^|[\\s,\\-])"+c.replace(/["]/g,'\\"')+"(?=$|[\\s,.\\-])"); if(re.test(a)){ city=WA_CITY_NORM[c]||c; a=a.replace(c," "); break; } }
     if(!city){ for(const c of cities){ if(text.includes(c)){ city=WA_CITY_NORM[c]||c; break; } } }
@@ -4557,19 +4685,21 @@ function WAPasteBox({onApply,cityNames}){
       <button type="button" onClick={()=>{setOpen(false);setTxt("");setRes(null);}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>
     </div>
     <textarea value={txt} onChange={e=>{setTxt(e.target.value);setRes(e.target.value.trim()?waParse(e.target.value,cityNames):null);}} rows={5} placeholder={"הדבק כאן את ההודעה, למשל:\nהדברת פרעושים, דירת 4 חדרים ללא חצר, קומת קרקע\n550 ש\"ח\nהרצל 12 רמת גן\n054-1234567\nמחר בין 8 ל-10"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #86efac",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
-    {!txt&&<button type="button" onClick={paste} style={{marginTop:6,border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>}
+    <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}><MicButton label="🎤 דבר" onText={t2=>setTxt(x=>{const v=(x?x.replace(/\s+$/,"")+" ":"")+t2; setRes(waParse(v,cityNames)); return v;})}/>
+    {!txt&&<button type="button" onClick={paste} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>}</div>
     {res&&<div style={{marginTop:8}}>
       <div style={{fontSize:13,color:"#166534",fontWeight:700,marginBottom:6}}>{res.found.length?"זיהיתי — בדוק ולחץ מלא:":"לא זיהיתי פרטים — נסה לכתוב כל פרט בשורה נפרדת"}</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+        {res.brand&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:20,padding:"4px 10px",fontSize:13}}>🏢 נשלח מ: <b>{res.brand}</b> (לא מזיק)</span>}
         {Object.keys(LBL).filter(k=>res[k]!==undefined&&res[k]!==""&&!(Array.isArray(res[k])&&!res[k].length)).map(k=><span key={k} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}><span style={{color:"#64748b"}}>{LBL[k]}:</span> <b>{Array.isArray(res[k])?res[k].join(", "):typeof res[k]==="boolean"?(res[k]?"יש":"אין"):res[k]}</b></span>)}
-        {!res.name&&<span style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>שם: לא צוין — יירשם "לקוח"</span>}
+        {!res.name&&<span style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>שם: לא צוין</span>}
       </div>
       {res.found.length>0&&<button type="button" onClick={()=>{onApply(res,txt);setOpen(false);setTxt("");setRes(null);}} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את ההזמנה</button>}
     </div>}
   </div>;
 }
 
-function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick}){
+function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed}){
   const [f,setF]=useState({
     name:"",phone:"",email:"",
     city:"",street:"",buildingNum:"",aptNum:"",entrance:"",
@@ -4679,7 +4809,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       if(r.street){ nx.street=[r.street,r.buildingNum].filter(Boolean).join(" "); nx.buildingNum=""; }
       if(r.propertyType){ nx.propertyType=r.propertyType; nx.propOther=false; }
       if(r.hasYard!==undefined) nx.hasYard=r.hasYard;
-      nx.name=r.name||x.name||"לקוח";
+      nx.name=r.name||x.name||"לא צוין";
+      if(r.brand&&!x.source) nx.source=r.brand;
       if(known.length) nx.pests=[...new Set([...x.pests,...known])];
       if(other.length) nx.customPest=[x.customPest,...other].filter(Boolean).join(", ");
       if(r.timeFrom) nx.allDay=false;
@@ -4688,6 +4819,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
   };
+  React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     <WAPasteBox onApply={applyWA} cityNames={ilCities.map(c=>c.name)}/>
     <FieldCard title="פרטי לקוח">
@@ -7361,7 +7493,7 @@ function RegionalStats({appointments,customers,workers,finance}){
   </div>;
 }
 // ─── תצוגת מדביר ─────────────────────────────────────────────────────────
-function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[], finance=[], onOpenAppt}){
+function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[], finance=[], onOpenAppt, onQuickAdd}){
   const today = todayStr();
   const [expandedId, setExpandedId] = React.useState(null);
   const [note, setNote] = React.useState({});
@@ -7436,6 +7568,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         </div>
       </div>
 
+      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>⚡ הוספה מהירה ליומן — 🎤 דיבור / 📋 הדבקה</button>}
       {/* משימות אישיות של היום */}
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
@@ -8965,7 +9098,7 @@ function App(){
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
-              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}}/>}
+              {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={activeAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="dashboard"&&<Dashboard customers={customers} appointments={jobAppointments} finance={activeFinance} workers={activeWorkers} execLogs={execLogs} maintenance={activeMaintenance} scheduledMsgs={activeScheduledMsgs}/>}
