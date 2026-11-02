@@ -1996,23 +1996,119 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
   </div>;
 }
 // ── הקלטה קולית: מדברים במקום להקליד (זיהוי דיבור של הדפדפן, בעברית, בחינם)
+// ממשיך להקשיב עד שלוחצים עצירה — גם אחרי הפסקה בדיבור, וחוזר להקשיב כשחוזרים לאפליקציה
 function MicButton({onText,label="🎤 דבר"}){
-  const [on,setOn]=useState(false); const rec=React.useRef(null);
+  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false);
+  const rec=React.useRef(null); const want=React.useRef(false); const running=React.useRef(false);
   const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
-  React.useEffect(()=>()=>{try{rec.current&&rec.current.stop();}catch(e){}},[]);
-  const start=()=>{
-    if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
-    if(on){ try{rec.current.stop();}catch(e){} return; }
+  const cb=React.useRef(onText); cb.current=onText;
+  const startRec=()=>{
+    if(!SR||running.current) return;
     const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=false;
-    r.onresult=e=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) t+=e.results[i][0].transcript; } t=t.trim(); if(t) onText(t); };
-    r.onerror=e=>{ setOn(false); if(e.error==="not-allowed"||e.error==="service-not-allowed") alert("צריך לאשר גישה למיקרופון בדפדפן."); };
-    r.onend=()=>setOn(false);
-    rec.current=r; try{ r.start(); setOn(true); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} }catch(e){ setOn(false); }
+    r.onresult=e=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) t+=e.results[i][0].transcript; } t=t.trim(); if(t) cb.current(t); };
+    r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want.current=false; setOn(false); alert("צריך לאשר גישה למיקרופון בדפדפן."); } };
+    r.onend=()=>{ running.current=false; if(want.current){ if(document.visibilityState==="visible") setTimeout(()=>{ if(want.current) startRec(); },250); else setPaused(true); } else setOn(false); };
+    rec.current=r; try{ r.start(); running.current=true; setPaused(false); }catch(e){ running.current=false; }
   };
-  return <button type="button" onClick={start} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on?"h360pulse 1.2s infinite":"none"}}>
+  React.useEffect(()=>{
+    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current){ setTimeout(()=>{ if(want.current) startRec(); },300); } };
+    document.addEventListener("visibilitychange",vis); window.addEventListener("focus",vis);
+    return()=>{ document.removeEventListener("visibilitychange",vis); window.removeEventListener("focus",vis); want.current=false; try{rec.current&&rec.current.stop();}catch(e){} };
+  },[]);
+  const toggle=()=>{
+    if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
+    if(want.current){ want.current=false; setOn(false); setPaused(false); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
+    want.current=true; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
+  };
+  return <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused?"h360pulse 1.2s infinite":"none"}}>
     <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
-    {on?"⏺ מקליט… לחץ לעצירה":label}</button>;
+    {on?(paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label}</button>;
 }
+// ═══ מילוי חכם של יומן ביצוע: מדברים / מקלידים / מדביקים → היומן מתמלא ═══
+const EL_NUM={"אחת":1,"אחד":1,"שתיים":2,"שניים":2,"שתי":2,"שני":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10,"שתים עשרה":12,"שנים עשר":12};
+const elNum=s=>{ if(s==null) return 0; const n=parseInt(s); if(!isNaN(n)) return n; return EL_NUM[String(s).trim()]||0; };
+const EL_NUMW="(\\d{1,3}|אחת|אחד|שתיים|שניים|שתי|שני|שלוש|שלושה|ארבע|ארבעה|חמש|חמישה|שש|שישה|שבע|שבעה|שמונה|תשע|תשעה|עשר|עשרה)";
+const elNorm=s=>String(s||"").replace(/["'׳״`]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+function elParse(raw,{chemNames=[],memory={},treatMethod={}}={}){
+  const text=String(raw||"").replace(/\r/g,"").trim(); const out={found:[]}; if(!text) return out;
+  const pt=text.replace(WA_BRAND," "); const N=elNorm(pt);
+  // מזיקים
+  const pests=[]; const add=p=>{ if(!pests.includes(p)) pests.push(p); };
+  if(/ג.?וק|תיקנ|תיקן/.test(pt)) add(/גרמני/.test(pt)?"תיקן גרמני":"תיקן אמריקאי");
+  if(/גרמני/.test(pt)&&/אמריקא/.test(pt)) { add("תיקן אמריקאי"); add("תיקן גרמני"); }
+  [[/נמל/,"נמלים"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/פרעוש|פרושים/,"פרעושים"],[/יתוש/,"יתושים"],[/זבוב/,"זבובים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/פשפש/,"פשפש מיטה"],[/טרמיט/,"טרמיטים"],[/עכביש/,"עכבישים"],[/קרצי/,"קרציות"]].forEach(([re,n])=>{ if(re.test(pt)) add(n); });
+  if(pests.length){ out.pests=pests; out.found.push("מזיקים"); }
+  const lv=pt.match(/נגיעות\s*(?:ב?רמה\s*)?(קלה|קל|בינונית|גבוהה|חמורה|קשה|כבדה|חזקה)|(קלה|בינונית|גבוהה)\s*(?:של\s*)?נגיעות/);
+  if(lv){ const w=lv[1]||lv[2]; out.level=/קל/.test(w)?"קלה":/בינונ/.test(w)?"בינונית":"גבוהה"; out.found.push("רמת נגיעות"); }
+  // מקום
+  const PT=[[/בניין משותף|בנין משותף|ועד בית|חדר מדרגות|לובי/,"בניין משותף"],[/בית פרטי|וילה|קוטג/,"בית פרטי"],[/מסעדה/,"מסעדה"],[/משרד/,"משרד"],[/גן ילדים|גנון/,"גן ילדים"],[/מחסן/,"מחסן"],[/עסק|חנות|מאפי/,"עסק"],[/דירה|דירת/,"דירה"]];
+  for(const [re,v] of PT){ if(re.test(pt)){ out.placeType=v; out.found.push("מקום"); break; } }
+  const rm=pt.match(new RegExp(EL_NUMW+"\\s*(?:חדרים|חד['׳])")); if(rm){ out.rooms=String(elNum(rm[1])); }
+  if(/קומת?\s*קרקע/.test(pt)) out.floor="קרקע"; else { const fl=pt.match(new RegExp("קומה\\s*"+EL_NUMW)); if(fl) out.floor=String(elNum(fl[1])); }
+  const EX=[[/חצר|גינה/,"חצר / גינה"],[/מרפסת/,"מרפסת"],[/ביוב/,"בורות ביוב"],[/חדר מדרגות/,"חדר מדרגות"],[/מקלט/,"מקלט"],[/(?<![א-ת])גג/,"גג"],[/מחסן/,"מחסן"],[/חניון/,"חניון"],[/חדר אשפה|פחי אשפה/,"חדר אשפה"]];
+  out.extras=EX.filter(([re])=>re.test(pt)).map(([,v])=>v);
+  // חומרים
+  const cands=[...new Set(chemNames.filter(n=>n&&elNorm(n).length>=3))].sort((a,b)=>b.length-a.length);
+  const mats=[]; let N2=N;
+  cands.forEach(n=>{ const k=elNorm(n); if(N2.includes(k)){ mats.push(n); N2=N2.split(k).join(" "); } });
+  // אזורי יישום
+  const allAreas=[...new Set(Object.values(APPLY_AREAS).flat())];
+  const areas=allAreas.filter(a=>{ const k=elNorm(a).split("/")[0].trim(); return k.length>=3&&N.includes(k); });
+  if(/מטבח/.test(pt)&&!areas.includes("ארונות מטבח")) areas.push("ארונות מטבח");
+  if(/פנלים|פאנל/.test(pt)&&!areas.includes("פאנלים")) areas.push("פאנלים");
+  if(/ניקוז|סיפון/.test(pt)&&!areas.includes("ניקוזים")) areas.push("ניקוזים");
+  if(/(?:מסביב|סביב)\s*ל?(?:ה)?(?:בניין|בית|מבנה)/.test(pt)&&!areas.includes("היקף המבנה")) areas.push("היקף המבנה");
+  if(/אמבטי|שירותים|מקלחת/.test(pt)&&!areas.includes("חדרי רחצה")) areas.push("חדרי רחצה");
+  out.areas=areas;
+  // שיטה
+  const method=/ריסוס|ריססתי|רוסס/.test(pt)?"ריסוס":/ג['׳]ל/.test(pt)?"ג'ל":/תיב|תחנ|פיתיון|רעל/.test(pt)?"תחנת האכלה":/ערפול/.test(pt)?"ערפול":/אבקה/.test(pt)?"אבקה":/גרגיר/.test(pt)?"פיזור גרגירים":"";
+  out.methodHint=method;
+  if(mats.length){ out.materials=mats; out.found.push("חומרים"); }
+  // תיבות הכלה
+  const boxRe=new RegExp(EL_NUMW+"\\s*(?:תיבות|תיבת|תחנות|תחנת)(?:\\s*(?:הכלה|האכלה|פיתיון|רעל))?","g"); let m; let newB=0, refB=0;
+  while((m=boxRe.exec(pt))){ const n=elNum(m[1]); const ctx=pt.slice(Math.max(0,m.index-30),m.index+m[0].length+30);
+    if(/מילאתי|מילוי|מולאו|קיימות|קיימים|החלפתי|הוחלף|חידשתי/.test(ctx)) refB+=n; else newB+=n; }
+  if(!newB&&!refB&&/תיב|תחנ/.test(pt)){ const one=pt.match(/(?:תיבה|תחנה)\s*(?:אחת|חדשה)/); if(one) newB=1; }
+  if(newB||refB){ out.boxesNew=newB; out.boxesRefill=refB; out.found.push("תיבות"); }
+  const spots=["היקף המבנה","חצר","חדר אשפה","חניה","מטבח","מתחת לכיור","ארונות","חדר שירות","מחסן","מרפסת","מקלט"].filter(sx=>pt.includes(sx)||(sx==="חצר"&&/גינה/.test(pt))||(sx==="היקף המבנה"&&/מסביב לבניין|סביב הבניין|מסביב לבית|היקף/.test(pt)));
+  out.spots=spots;
+  // יציאה מהמקום
+  if(/אין צורך לצאת|לא צריך לצאת|בלי לצאת|אפשר להישאר/.test(pt)){ out.reentry0=true; out.found.push("זמן מחוץ למקום"); }
+  else { const rh=pt.match(/(?:לצאת|מחוץ לבית|מחוץ לדירה|לא להיכנס)[^.\n]{0,20}?(חצי שעה|שעתיים|שעה|(\d+)\s*שעות)/); if(rh){ out.reentryAdults=rh[1]==="חצי שעה"?"0.5":rh[1]==="שעתיים"?"2":rh[1]==="שעה"?"1":rh[2]; out.found.push("זמן מחוץ למקום"); } }
+  // תשלום
+  const pay=pt.match(/(\d{2,5})\s*(?:₪|ש["״]?ח|שח|שקל)/);
+  const meth=/מזומן|קאש/.test(pt)?"מזומן":/ביט/.test(pt)?"ביט":/פייבוקס|paybox/i.test(pt)?"PayBox":/העברה/.test(pt)?"העברה בנקאית":/אשראי|כרטיס/.test(pt)?"אשראי":/צ['׳]ק/.test(pt)?"צ'ק":"";
+  if(/לא שילם|חוב|ישלם|ישולם|יעביר|בהמשך/.test(pt)) out.payStatus="debt"; else if(/שילם|שולם|קיבלתי|קיבלנו/.test(pt)||meth) out.payStatus="paid";
+  if(pay){ out.price=pay[1]; out.found.push("מחיר"); }
+  if(meth){ out.payMethod=meth; if(!out.found.includes("מחיר")) out.found.push("תשלום"); }
+  // אחריות
+  const wr=pt.match(new RegExp("אחריות\\s*(?:של\\s*)?(?:ל)?"+EL_NUMW+"\\s*חודש"))||pt.match(/אחריות\s*(?:של\s*)?(?:ל)?(חצי שנה|שנה|חודש)/);
+  if(wr){ out.warranty=wr[1]==="חצי שנה"?"6":wr[1]==="שנה"?"12":wr[1]==="חודש"?"1":String(elNum(wr[1])); out.found.push("אחריות"); }
+  out.notes=text;
+  return out;
+}
+function ExecSmartFill({onApply,chemNames,memory}){
+  const [open,setOpen]=useState(false); const [txt,setTxt]=useState("");
+  const r=React.useMemo(()=>txt.trim()?elParse(txt,{chemNames,memory}):null,[txt,chemNames]);
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid #7c3aed",background:"#f5f3ff",color:"#5b21b6",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>✨ מילוי חכם — ספר מה עשית 🎤</button>;
+  const chips=r?[r.pests&&"🐛 "+r.pests.join(", ")+(r.level?" ("+r.level+")":""),r.placeType&&"🏠 "+[r.placeType,r.rooms?r.rooms+" חד׳":"",r.floor?"קומה "+r.floor:""].filter(Boolean).join(" · "),(r.extras||[]).length&&"➕ "+r.extras.join(", "),r.materials&&"🧪 "+r.materials.join(", ")+(r.methodHint?" · "+r.methodHint:""),(r.areas||[]).length&&"📍 "+r.areas.join(", "),(r.boxesNew||r.boxesRefill)&&"🪤 "+[r.boxesNew?r.boxesNew+" תיבות חדשות":"",r.boxesRefill?"מילוי "+r.boxesRefill:""].filter(Boolean).join(" + ")+(r.spots.length?" · "+r.spots.join(", "):""),r.reentry0&&"⏱️ אין צורך לצאת",r.reentryAdults&&"⏱️ "+hrsLabel(r.reentryAdults)+" מחוץ למקום",(r.price||r.payMethod||r.payStatus)&&"💳 "+[r.price?"₪"+r.price:"",r.payStatus==="debt"?"חוב":r.payStatus==="paid"?"שולם":"",r.payMethod].filter(Boolean).join(" "),r.warranty&&"🛡️ אחריות "+r.warranty+" חו׳"].filter(Boolean):[];
+  return <div style={{border:"2px solid #7c3aed",background:"#f5f3ff",borderRadius:12,padding:12,marginBottom:12}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><b style={{color:"#5b21b6",fontSize:15}}>✨ מילוי חכם</b><button type="button" onClick={()=>{setOpen(false);setTxt("");}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button></div>
+    <div style={{fontSize:12,color:"#6d28d9",marginBottom:6}}>ספר במילים שלך מה עשית — מזיק, רמת נגיעות, חומר, איפה, כמה תיבות (חדשות / מילוי), אם צריך לצאת, כמה שולם ואיך, אחריות.</div>
+    <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder={"למשל: חולדות, נגיעות בינונית. שמתי רטרים בלוק, ארבע תיבות חדשות שהבאתי מהבית בחצר הבניין ומילאתי שתי תיבות קיימות. אין צורך לצאת. שילם 600 במזומן. אחריות 3 חודשים."} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
+    <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+      <MicButton label="🎤 דבר" onText={t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t)}/>
+      {!txt&&<button type="button" onClick={async()=>{try{const t=await navigator.clipboard.readText();if(t)setTxt(t);}catch(e){alert("הדבק ידנית בתיבה");}}} style={{border:"1.5px solid #c4b5fd",background:"#fff",color:"#5b21b6",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>}
+    </div>
+    {r&&<div style={{marginTop:8}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}
+        {!chips.length&&<span style={{fontSize:13,color:"#6d28d9"}}>עדיין לא זיהיתי פרטים — המשך לספר…</span>}</div>
+      <button type="button" onClick={()=>{onApply(r);setOpen(false);setTxt("");}} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את היומן</button>
+      <div style={{fontSize:11,color:"#6d28d9",marginTop:4,textAlign:"center"}}>הטקסט עצמו נכנס ל"הערות / תיאור הטיפול" — אפשר לערוך אחר כך</div>
+    </div>}
+  </div>;
+}
+
 function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appointments=[],customers=[],execLogs=[],maintenance=[]}){
   const chemMem=React.useMemo(()=>chemMemory(execLogs),[execLogs]);
   // Auto-detect worker from appointment
@@ -2057,6 +2153,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     scope:         initialData?.scope || scopeFromProperty({...(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}),...Object.fromEntries(Object.entries(prefillAppt||{}).filter(([k,v])=>["propertyType","rooms","floor","floors","hasYard","sewers","buildingAreas","underground"].includes(k)&&v!==undefined&&v!==""))}),
   });
   const [scopeAdd,setScopeAdd]=useState("");
+  const regAll=useRegProducts(); const TM_REF=React.useRef(null);
+  const chemNames=React.useMemo(()=>[...new Set([...regAll.map(r=>r[0]),...Object.keys(chemMem||{}),...myChemicals(execLogs,defaultWorker.name),...CHEMICALS.map(c=>c.name)])],[regAll,chemMem]);
+  const [review,setReview]=useState(null); const [showPrev,setShowPrev]=useState(false);
   // סוג היומן — נשמר לכל מדביר: "steps" לפי שלבים / "flat" רציף
   const modeKey="h360_logmode_"+String(defaultWorker.name||"x");
   const [logMode,setLogModeS]=useState(()=>{ try{ return localStorage.getItem(modeKey)||"steps"; }catch(e){ return "steps"; } });
@@ -2105,6 +2204,39 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       sync(BOX,newBoxes); sync(REF,refillBoxes);
       return JSON.stringify(dv)===JSON.stringify(x.devices)?x:{...x,devices:dv}; });
   },[newBoxes,refillBoxes]);
+  const applySmart=r=>{
+    const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
+    if(r.reentry0||r.reentryAdults) touched.current.reentry=true;
+    setF(x=>{ const nx={...x,exterminate:true};
+      if(r.pests){ const known=r.pests.filter(p=>PEST_TYPES_LOG.includes(p)), other=r.pests.filter(p=>!PEST_TYPES_LOG.includes(p));
+        nx.pest=[...new Set([...x.pest,...known])]; if(other.length) nx.customPest=[x.customPest,...other.filter(o=>!String(x.customPest||"").includes(o))].filter(Boolean).join(", ");
+        if(r.level){ const lv={...x.pestLevels}; [...nx.pest,...(nx.customPest?[nx.customPest]:[])].filter(p=>p!=="חרקי מזון").forEach(p=>{ if(!lv[p]) lv[p]=r.level; }); nx.pestLevels=lv; } }
+      else if(r.level){ const lv={...x.pestLevels}; x.pest.forEach(p=>{ if(!lv[p]) lv[p]=r.level; }); nx.pestLevels=lv; }
+      if(r.placeType||r.rooms||r.floor||(r.extras||[]).length){ const pl={...(x.place||{})}; if(r.placeType) pl.type=r.placeType; if(r.rooms) pl.rooms=r.rooms; if(r.floor) pl.floor=r.floor; pl.extras=[...new Set([...(pl.extras||[]),...(r.extras||[])])]; nx.place=pl; }
+      let mats=[...x.materials];
+      (r.materials||[]).forEach(name=>{ if(mats.some(m=>m.name===name)) return; const mem=(chemMem||{})[name]||{}; const rg=regBy[name]; const lg=CHEMICALS.find(c=>c.name===name)||{};
+        const cat=mem.cat||(rg?regCat(rg):(lg.method==="ג'ל"?"gel":lg.method==="תחנת האכלה"?"rodent":"spray"));
+        let method=(r.materials.length===1&&r.methodHint)?r.methodHint:(mem.method||(TM_REF.current||{})[name]||CAT_METHOD[cat]||"ריסוס");
+        if(cat==="rodent") method="תחנת האכלה";
+        const okAreas=APPLY_AREAS[method]||DEFAULT_AREAS; const areas=[...new Set([...(r.areas||[]).filter(a=>okAreas.includes(a)),...(method==="תחנת האכלה"?(r.spots||[]).filter(a=>okAreas.includes(a)):[])])];
+        mats.push({name,batch:mem.batch||"",method,active:(rg&&rg[4])||lg.active||mem.active||"",reg:(rg&&rg[2])||mem.reg||"",maker:(rg&&rg[1])||lg.mfr||mem.maker||"",cat,dose:pickDose(name,nx.pest,chemMem||{}),areas,stations:"",custom:!rg}); });
+      let devices=[...x.devices];
+      if(r.boxesNew||r.boxesRefill){ const bi=mats.findIndex(m=>m.method==="תחנת האכלה");
+        if(bi>=0){ const m0={...mats[bi]}; if(r.boxesNew) m0.stationsNew=String(r.boxesNew); if(r.boxesRefill) m0.stationsRefill=String(r.boxesRefill); m0.stations=String((parseInt(m0.stationsNew)||0)+(parseInt(m0.stationsRefill)||0)); mats[bi]=m0; }
+        else { const put=(type,n)=>{ if(!n) return; const k=devices.findIndex(d=>d.type===type); const loc=(r.spots||[]).join(", "); if(k>=0) devices[k]={...devices[k],qty:n,location:devices[k].location||loc}; else devices.push({type,qty:n,location:loc}); };
+          put("תיבת הכלה כולל רעלים",r.boxesNew); put("מילוי רעל בתיבה קיימת",r.boxesRefill); } }
+      if((r.spots||[]).length) devices=devices.map(d=>/תיבת הכלה|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
+      nx.materials=mats; nx.devices=devices;
+      if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"}; else if(r.reentryAdults) nx.reentry={...x.reentry,adults:r.reentryAdults};
+      if(r.price){ nx.agreedPrice=r.price; }
+      if(r.payStatus==="paid"){ nx.paymentStatus="paid"; nx.paymentDone=true; nx.paymentAmount=r.price||x.paymentAmount||x.agreedPrice; if(r.payMethod) nx.paymentMethod=r.payMethod; }
+      else if(r.payStatus==="debt"){ nx.paymentStatus="debt"; nx.paymentDone=false; nx.paymentDebt=r.price||x.paymentDebt||x.agreedPrice; }
+      else if(r.payMethod){ nx.paymentMethod=r.payMethod; }
+      if(r.warranty) nx.warranty=r.warranty;
+      if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
+      return nx; });
+    setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
+  };
   const setReentry=(k,v)=>{touched.current.reentry=true;setF(x=>({...x,reentry:{...x.reentry,[k]:v}}));};
   const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
   const [instrAdd,setInstrAdd]=useState("");
@@ -2127,6 +2259,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     "רטרים בלוק":"תחנת האכלה","רטרים פסטה":"תחנת האכלה",
   };
 
+  TM_REF.current=TREAT_METHOD;
   const safety=null; // הנחיות בטיחות
   const allPests=[...f.pest,...(f.customPest?[f.customPest]:[])];
   const levelPests=allPests.filter(p=>p!=="חרקי מזון");
@@ -2143,6 +2276,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const placeSum=placeToScope(f.place).join(" · ");
   const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
   return <CompactCtx.Provider value={logMode==="flat"}><div style={{color:"#0f172a",paddingBottom:8}}>
+    <ExecSmartFill onApply={applySmart} chemNames={chemNames} memory={chemMem}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן לפי שלבים"],["flat","📄 יומן רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
     </div>
@@ -2353,12 +2487,59 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
-    {(()=>{ const go=(send,inv)=>{ if(!valid) return alert(f.exterminate?"שם לקוח, כתובת ומזיקים – חובה, ולפחות חומר הדברה או מוצר הדברה אחד":"שם לקוח, כתובת ובחירת השירות שבוצע – חובה"); if(f.exterminate&&missingLevel.length) return alert("בחר רמת נגיעות ל: "+missingLevel.join(", ")); if(missingBatch.length) return alert("חסר מספר אצווה ל: "+missingBatch.map(m=>m.name).join(", ")); const miss=f.materials.find(m=>!String(m.active||"").trim()); if(miss) return alert("חסר הרכב/חומר פעיל ל"+miss.name); const noDose=f.materials.find(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()); if(noDose) return alert("חסר אופן הכנה (מינון) ל"+noDose.name); if(!String(f.agreedPrice||"").trim()) return alert("רשום את המחיר הסופי שסוכם עם הלקוח"); if(f.paymentStatus==="paid"&&!f.paymentMethod) return alert("בחר איך התקבל התשלום (מזומן, ביט...)"); if(send&&!String(f.phone||"").trim()) return alert("אין טלפון ללקוח — הוסף טלפון או לחץ 'שמור' בלבד"); onPreview({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]},{send,invoice:!!inv}); };
-      return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    {(()=>{
+      const buildData=()=>({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
+      const problems=send=>{ const P=[]; const add=(sec,label,block)=>P.push({sec,label,block:!!block});
+        if(!f.clientName) add("client","שם לקוח",true); if(!f.address) add("client","כתובת",true);
+        if(send&&!String(f.phone||"").trim()) add("client","טלפון לקוח (כדי לשלוח)",true);
+        if(f.exterminate){ if(!allPests.length) add("pests","מזיקים"); else if(missingLevel.length) add("pests","רמת נגיעות ל: "+missingLevel.join(", "));
+          if(!f.materials.length&&!f.devices.length) add("chem","חומר הדברה או מוצר הדברה"); }
+        else if(!f.services.length) add("service","איזה שירות בוצע");
+        missingBatch.forEach(m=>add("chem","מספר אצווה — "+m.name));
+        f.materials.filter(m=>!String(m.active||"").trim()).forEach(m=>add("chem","חומר פעיל — "+m.name));
+        f.materials.filter(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()).forEach(m=>add("chem","מינון — "+m.name));
+        f.materials.filter(m=>!(m.areas||[]).length).forEach(m=>add("chem","אזורי יישום — "+m.name));
+        f.materials.filter(m=>m.method==="תחנת האכלה"&&!m.stationsNew&&!m.stationsRefill&&!m.stations).forEach(m=>add("chem","כמה תיבות (חדשות / מילוי) — "+m.name));
+        if(f.exterminate&&!REENTRY_GROUPS.some(g=>f.reentry[g.k])) add("reentry","זמן מחוץ למקום");
+        if(!f.instructions.length) add("instr","הנחיות ללקוח");
+        if(!String(f.notes||"").trim()) add("notes","הערות / תיאור הטיפול");
+        if(!String(f.warranty||"").trim()) add("notes","אחריות (חודשים)");
+        if(!String(f.agreedPrice||"").trim()) add("pay","מחיר שסוכם");
+        if(f.paymentStatus==="paid"&&!f.paymentMethod) add("pay","איך שולם");
+        if(!f.workerName) add("worker","שם מדביר");
+        return P; };
+      const finish=(send,inv)=>{ setReview(null); onPreview(buildData(),{send,invoice:!!inv}); };
+      const go=(send,inv)=>{ const P=problems(send); if(P.length) return setReview({send,inv,P}); finish(send,inv); };
+      const jump=sec=>{ setReview(null); setShowPrev(false); if(logMode!=="flat") setOpenSec(sec); setTimeout(()=>{try{const el=document.getElementById("sec-"+sec); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},120); };
+      const prevHtml=()=>{ const d=buildData(); return execLogHtml({company:COMPANY,docNum:"טיוטה",log:{...d,workerDocName:d.workerName},chemicals:CHEMICALS}); };
+      const blocks=review?review.P.filter(x=>x.block):[];
+      return <>
+      {review&&ReactDOM.createPortal(<div style={{position:"relative",zIndex:6000}}><Modal title="🔎 בדיקה לפני שמירה" onClose={()=>setReview(null)} width={520}>
+        <div style={{fontSize:14,color:"#334155",marginBottom:8}}>{blocks.length?"חסרים פרטים שבלעדיהם אי אפשר לשמור:":"לא מילאת את הדברים האלה. אפשר לחזור ולהשלים — או לשמור בכל זאת אם זה בכוונה:"}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
+          {review.P.map((x,i)=><button key={i} type="button" onClick={()=>jump(x.sec)} style={{display:"flex",alignItems:"center",gap:8,textAlign:"right",padding:"9px 12px",borderRadius:10,border:"1.5px solid "+(x.block?"#fca5a5":"#fde68a"),background:x.block?"#fef2f2":"#fffbeb",color:"#0f172a",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>
+            <span>{x.block?"⛔":"⚠️"}</span><span style={{flex:1}}>{x.label}</span><span style={{fontSize:12,color:"#2563eb",fontWeight:700}}>✏️ לערוך</span></button>)}
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn v="secondary" style={{flex:"1 1 130px"}} onClick={()=>{setReview(null);setShowPrev(true);}}>👁️ תצוגה מקדימה</Btn>
+          <Btn v="ghost" style={{flex:"1 1 110px"}} onClick={()=>jump(review.P[0].sec)}>✏️ חזור לערוך</Btn>
+          {!blocks.length&&<Btn style={{flex:"2 1 160px"}} onClick={()=>finish(review.send,review.inv)}>{review.inv?"🧾 המשך לחשבונית בכל זאת":review.send?"📤 שמור ושלח בכל זאת":"💾 שמור בכל זאת"}</Btn>}
+        </div>
+      </Modal></div>,document.body)}
+      {showPrev&&ReactDOM.createPortal(<div style={{position:"relative",zIndex:6000}}><Modal title="👁️ תצוגה מקדימה — יומן ביצוע (טיוטה)" onClose={()=>setShowPrev(false)} width={820}>
+        <div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"auto",maxHeight:"62vh",background:"#fff",padding:"14px 10px",direction:"rtl",fontFamily:"Arial,sans-serif",fontSize:13}} dangerouslySetInnerHTML={{__html:prevHtml()}}/>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
+          <Btn v="secondary" style={{flex:"1 1 120px"}} onClick={()=>setShowPrev(false)}>✏️ חזור לערוך</Btn>
+          <Btn style={{flex:"1 1 150px",background:"#25D366",border:"none"}} onClick={()=>{setShowPrev(false);go(true);}}>📤 שמור ושלח</Btn>
+          <Btn style={{flex:"2 1 180px",background:"#0f766e",border:"none"}} onClick={()=>{setShowPrev(false);go(false,true);}}>🧾 שמור והמשך לחשבונית</Btn>
+        </div>
+      </Modal></div>,document.body)}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         <Btn full onClick={()=>go(false,true)} style={{flex:"2 1 220px",background:"#0f766e",border:"none"}}>🧾 שמור והמשך לחשבונית</Btn>
         <Btn full onClick={()=>go(true)} style={{flex:"1 1 150px",background:"#25D366",border:"none"}}>📤 שמור ושלח</Btn>
         <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 100px"}}>💾 שמור</Btn>
-      </div>; })()}
+        <Btn full v="ghost" onClick={()=>setShowPrev(true)} style={{flex:"1 1 100%",padding:"8px"}}>👁️ תצוגה מקדימה של היומן</Btn>
+      </div></>; })()}
     {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* חובה: שם לקוח, כתובת, מזיקים + רמת נגיעות, חומר או מוצר הדברה, אצווה לכל חומר</div>}
     </div>
   </div></CompactCtx.Provider>;
@@ -3908,7 +4089,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
   React.useEffect(()=>{ if(voice.current&&trig&&r&&!fired.current&&!done){ fired.current=true; const t=setTimeout(insert,700); return()=>clearTimeout(t); } },[txt]);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ voice.current=false; setTxt(t); } }catch(e){ alert("הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
   const chip=(on,c)=>({flex:1,padding:"9px 6px",borderRadius:10,border:"1.5px solid "+(on?c:"#e2e8f0"),background:on?c+"18":"#fff",color:on?c:"#475569",fontWeight:on?800:500,fontSize:15,cursor:"pointer",fontFamily:"inherit"});
-  if(done) return <Modal title="⚡ הוספה מהירה" onClose={onClose} width={480}>
+  if(done) return <Modal title="✨ מילוי חכם ליומן" onClose={onClose} width={480}>
     <div style={{textAlign:"center",padding:"10px 0 4px"}}>
       <div style={{fontSize:44}}>✅</div>
       <div style={{fontWeight:800,fontSize:18,margin:"6px 0"}}>נכנס ליומן{w?" של "+w.name:""}</div>
@@ -3921,7 +4102,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       </div>
     </div>
   </Modal>;
-  return <Modal title="⚡ הוספה מהירה ליומן" onClose={onClose} width={520}>
+  return <Modal title="✨ מילוי חכם ליומן" onClose={onClose} width={520}>
     <div style={{fontSize:13,color:CLR.muted,marginBottom:8}}>הדבק הודעה, הקלד, או לחץ 🎤 ודבר. אפשר לסיים ב: <b>"הכנס ליומן של {me?me.name:"..."}"</b> — וזה נכנס לבד.</div>
     <textarea value={txt} onChange={e=>{voice.current=false;setTxt(e.target.value);}} rows={5} placeholder={"למשל:\nפרעושים, נחמני 54 תל אביב קומת קרקע, 500 שח, 0528285665, מחר בין 10 ל12\n— או —\nמחר ב-9 לקחת צ'ק מוועד הבית בהרצל"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,margin:"8px 0 12px",flexWrap:"wrap"}}>
@@ -4073,7 +4254,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       </div>
       <Btn sm onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
       <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
-      <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>⚡ מהיר 🎤</Btn>
+      <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>✨ מילוי חכם</Btn>
     </div>
     {/* שורה 2: ניווט — החצים מצביעים החוצה */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
@@ -4678,10 +4859,10 @@ function WAPasteBox({onApply,cityNames}){
   const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [res,setRes]=useState(null);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ setTxt(t); setRes(waParse(t,cityNames)); } }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
   const LBL={name:"שם",phone:"טלפון",city:"עיר",street:"רחוב",buildingNum:"מספר",aptNum:"דירה",entrance:"כניסה",propertyType:"סוג נכס",rooms:"חדרים",floor:"קומה",hasYard:"חצר",pests:"מזיק",price:"מחיר",prefDate:"תאריך",timeFrom:"משעה",timeTo:"עד שעה"};
-  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>📋 הדבק הודעה מוואטסאפ — מילוי אוטומטי</button>;
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>✨ מילוי חכם — הדבק הודעה, הקלד או דבר 🎤</button>;
   return <div style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <b style={{color:"#166534",fontSize:15}}>📋 הדבק את ההודעה</b>
+      <b style={{color:"#166534",fontSize:15}}>✨ מילוי חכם — הדבק, הקלד או דבר</b>
       <button type="button" onClick={()=>{setOpen(false);setTxt("");setRes(null);}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>
     </div>
     <textarea value={txt} onChange={e=>{setTxt(e.target.value);setRes(e.target.value.trim()?waParse(e.target.value,cityNames):null);}} rows={5} placeholder={"הדבק כאן את ההודעה, למשל:\nהדברת פרעושים, דירת 4 חדרים ללא חצר, קומת קרקע\n550 ש\"ח\nהרצל 12 רמת גן\n054-1234567\nמחר בין 8 ל-10"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #86efac",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
@@ -7568,7 +7749,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         </div>
       </div>
 
-      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>⚡ הוספה מהירה ליומן — 🎤 דיבור / 📋 הדבקה</button>}
+      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>✨ מילוי חכם ליומן — 🎤 דבר · 📋 הדבק · ⌨️ הקלד</button>}
       {/* משימות אישיות של היום */}
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
