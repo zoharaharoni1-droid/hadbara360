@@ -3997,7 +3997,12 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
       date,time:st,timeWindow:mode==="flex"?ALL_DAY_TW:st+"–"+en,allDay:mode!=="time",blockDay:mode==="block",notes,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),
       status:done===true?"בוצע":done===false?"ממתין":(task?.status||"ממתין"),updatedAt:new Date().toISOString()});
   };
+  const applyTask=r=>{ if(r.title) setTitle(r.title); if(r.date) setDate(r.date); if(r.mode) setMode(r.mode); if(r.from){ setFrom(r.from); setTo(r.to||addHour(r.from)); } if(r.workerId) setWid(String(r.workerId)); if(r.notes) setNotes(n=>mergeNotes(n,r.notes)); };
   return <div>
+    <SmartBox color="#7c3aed" bg="#f5f3ff" border="#c4b5fd" contacts parse={t=>parseTask(t,{workers,me})} onApply={applyTask}
+      hint='תגיד מה, מתי ולמי. למשל "מחר בעשר לקחת צ׳ק מוועד הבית" או "יום חמישי מילואים, חוסם את כל היום".'
+      placeholder={"למשל: מחר בעשר לקחת צ'ק מוועד הבית בהרצל 5"}
+      chips={r=>[spChip("משימה",r.title),spChip("תאריך",r.date&&fmtDate(r.date)),spChip("מתי",r.mode==="time"?"\u2066"+r.from+"–"+r.to+"\u2069":r.mode==="block"?"🚫 חוסם את כל היום":r.mode==="flex"?"☀️ במהלך היום":""),spChip("ביומן של",r.workerId&&((workers.find(w=>String(w.id)===String(r.workerId))||{}).name)),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <div style={{fontSize:12,color:"#5b21b6",background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
       📌 משימה אישית — לא נכנסת לדוחות ולכסף. "בשעה מסוימת" מסמנת את השעה כתפוסה; "במהלך היום" לא חוסמת כלום.
     </div>
@@ -4189,7 +4194,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
     if(!r||!clean) return;
     if(k==="personal"){
       const title=qaTitle(clean);
-      const t={kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+toT:ALL_DAY_TW,allDay:!hasTime,blockDay:false,notes:clean!==title?clean:"",workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
+      const t={kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+toT:ALL_DAY_TW,allDay:!hasTime,blockDay:false,notes:[...extractNotes(clean),r.phone?"📞 "+r.phone:""].filter(Boolean).join("\n"),workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
       const saved=onSaveTask(t); setDone({kind:"personal",label:"📌 "+title,date,ref:saved});
     } else {
       const PK=r.pests||[]; const known=PK.filter(p=>PEST_TYPES_CRM.includes(p));
@@ -4197,7 +4202,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       const pt=r.propertyType||"דירה";
       const shared=r.propertyType==="בניין משותף"; const cust={name:shared?("ועד הבית"+(street?" "+street:"")+(r.city&&!street?" "+r.city:"")):(r.name||"לא צוין"),contactName:shared?(r.name||""):"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
         propertyType:pt,rooms:pt==="בניין משותף"?"":(r.rooms||""),levels:"1",floors:"",sewers:"",floor:r.floor||"",hasYard:!!r.hasYard,buildingAreas:[],underground:"0",propertyNotes:"",
-        status:"פעיל",notes:[r.boxesNote,r.sewerNote,"📋 מההודעה: "+clean.replace(/\s*\n\s*/g," | ")].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
+        status:"פעיל",notes:[r.boxesNote,r.sewerNote,...(r.notes||[])].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
       const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
         pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
         buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||""};
@@ -5016,13 +5021,254 @@ function waParse(raw, cityNames){
     if(c) name=c.trim();
   }
   if(name){ out.name=name.replace(/[,.:]+$/,""); out.found.push("שם"); }
+  const nts=extractNotes(text); if(nts.length){ out.notes=nts; out.found.push("הערות"); }
   return out;
 }
+// ═══ מילוי חכם לכל הטפסים: פענוח טקסט חופשי / מוכתב ═══
+// הערות: רק משפטים שהם באמת הערה (כלב, אדם חולה, מפתח אצל השכן...) או שנאמר "הערה:"
+const NOTE_RE=/כלב|כלבה|כלבים|חתול|חתולה|חתולים|חיות|חיית מחמד|בעלי חיים|תוכי|ציפור|ציפורים|אקווריום|דגים|ארנב|שרקן|חולה|חולים|אסטמ|אלרג|רגיש|בהריון|הריון|תינוק|תינוקת|ילדים קטנים|ילד קטן|קשיש|קשישה|מבוגר|מבוגרת|נכה|כיסא גלגלים|כסא גלגלים|מפתח|אצל השכן|אצל השכנה|קוד\s*(?:כניסה|בניין|לשער|לדלת)|אינטרקום|להתקשר לפני|תתקשר לפני|לצלצל לפני|להודיע לפני|חניה|חנייה|לא לדפוק|לא לצלצל|ישנ?ה?\s+ב|שומר(?:ת|ים)? שבת|מעשן|ניתוח|אוטיסט|רגישות|לא נמצא בבית|לא נמצאת בבית|לא יהיה בבית|לא תהיה בבית|לא בבית|מנעול|דלת אחורית|כניסה מאחור|להיזהר|זהירות|חשמל|פרקט|ריח/;
+const NOTE_KEY=/(?:^|[\s,])(?:הערות|הערה|לציין|שים לב|תשים לב|חשוב לדעת|לידיעתך|נ\.?ב\.?)\s*(?:[:\-–]\s*|ש)?/;
+function extractNotes(raw){
+  const t=String(raw||"").replace(/\r/g,"").replace(QA_TRIGGER,"");
+  const out=[];
+  t.split(/[\n.!?;]+/).map(s=>s.trim()).filter(Boolean).forEach(s=>{
+    const k=s.match(NOTE_KEY);
+    if(k){ const rest=s.slice(k.index+k[0].length).replace(/^[\s,:\-–]+/,"").trim(); if(rest) out.push(rest); return; }
+    s.split(/,|(?:\s|^)וגם\s/).map(c=>c.trim()).filter(Boolean).forEach(c=>{ if(NOTE_RE.test(c)) out.push(c.replace(/^(?:ו|ש)(?=[א-ת]{2})/,"").replace(/^(?:יש לו|יש לה|יש להם)\s+/,m=>m)); });
+  });
+  return [...new Set(out.map(x=>x.replace(/\s+/g," ").trim().slice(0,160)).filter(x=>x.length>2))];
+}
+const mergeNotes=(old,add)=>{ const have=String(old||"").split("\n").map(s=>s.trim()).filter(Boolean); (add||[]).filter(Boolean).forEach(a=>{ if(!have.some(h=>h===a||h.includes(a))) have.push(a); }); return have.join("\n"); };
+const SP_NUM=w=>{ if(w==null) return 0; const n=parseInt(w); if(!isNaN(n)) return n; return WA_NUM_WORDS[String(w).trim()]||0; };
+const SP_NUMW="(\\d{1,3}|אחת|אחד|שתי|שתיים|שניים|שני|שלוש|שלושה|ארבע|ארבעה|חמש|חמישה|שש|שישה|שבע|שבעה|שמונה|תשע|תשעה|עשר|עשרה)";
+const spMoney=/(\d{1,3}(?:,\d{3})+|\d{2,6})(?:\.\d{1,2})?\s*(?:₪|שקלים|שקל|ש["״'׳]?ח|nis)/gi;
+const spDate=text=>{ const now=new Date(); const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; const add=n=>{const d=new Date(now);d.setDate(d.getDate()+n);return iso(d);};
+  if(/שלשום/.test(text)) return add(-2); if(/(?<![א-ת])אתמול(?![א-ת])/.test(text)) return add(-1); return ""; };
+const spWorker=(text,workers)=>{ const ws=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל"); let best=null,score=0;
+  ws.forEach(w=>{ [w.name,w.fullName,w.docName].filter(Boolean).forEach(n=>{ const nn=String(n).replace(/["׳']/g,"").trim(); if(nn.length<2) return; const re=new RegExp("(?:^|[\\s,.:])(?:ל|של |עם |ב|ה)?"+nn.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"(?=$|[\\s,.])"); if(re.test(text.replace(/["׳']/g,""))&&nn.length>score){ score=nn.length; best=w; } }); });
+  return best; };
+const spCustomer=(text,customers)=>{ const t=String(text||""); const digits=t.replace(/\D/g,""); let best=null,score=0;
+  (customers||[]).filter(c=>!c.deleted).forEach(c=>{ const n=String(c.name||"").trim(); if(n.length>=3&&t.includes(n)&&n.length>score){ score=n.length; best=c; }
+    const p=String(c.phone||"").replace(/\D/g,"").replace(/^972/,"0"); if(p.length>=9&&digits.includes(p)&&score<100){ score=100; best=c; } });
+  return best; };
+const SP_STOPW=/^(?:על|עבור|הדברת|הדברה|ריסוס|טיפול|של|ב|ל|מ|ו|ש|שילם|שילמה|שולם|במזומן|בביט|בצ'ק|באשראי|בהעברה|סך|בסך|סכום|מחיר|טלפון|כתובת|ברחוב|רחוב|בכתובת|מספר|היום|מחר|אתמול|הוא|היא|זה|ועד|פרויקט|חוזה|אחזקה|לחודש|כל|פעם|עם|איש|קשר|ח\.?פ|ע\.?מ|כולל|לפני|פלוס|מע"?מ)$/;
+const spName=(m)=>{ if(!m) return ""; const w=m.trim().split(/\s+/); const keep=[]; for(const x of w){ if(SP_STOPW.test(x)||/\d/.test(x)||WA_PEST_WORD.test(x)){ WA_PEST_WORD.lastIndex=0; break; } WA_PEST_WORD.lastIndex=0; keep.push(x); if(keep.length>=3) break; } return keep.join(" ").replace(/[,.:]+$/,""); };
+const spPestsLog=ps=>[...new Set((ps||[]).map(p=>p==="ג'וקים"?"תיקן אמריקאי":p==="נחש"?"נחשים":p))];
+
+// ── אחזקה חדשה
+const MAINT_TYPE_MAP=[[/מסעד|פיצרי|בית קפה|קפה|בר(?![א-ת])|מזנון|שווארמ|פלאפל|סושי|קייטרינג/,"עסק - מסעדה"],[/מאפי|קונדיטור|לחמני/,"עסק - מאפייה"],[/מפעל|ייצור מזון|מזון/,"עסק - מפעל מזון"],[/בית מרקחת|פארם/,"עסק - בית מרקחת"],[/גן ילדים|גנון|מעון/,"עסק - גן ילדים"],[/מלון|אכסני|צימר/,"עסק - מלון"],[/בניין משותף|בנין משותף|ועד בית|ועד הבית/,"בניין משותף"],[/וילה|דירת גן|בית פרטי/,"דירת גן/וילה"],[/מוסד|ממסד|בית ספר|בית אבות|עירי|מועצה|ישיבה|בית כנסת|מתנ"?ס/,"ממסד/מוסד"]];
+const MAINT_FREQ_MAP=[[/פעמיים\s*(?:ב|ל)שבוע/,"פעמיים בשבוע"],[/פעם\s*(?:ב|ל)שבוע|שבועי|כל שבוע/,"פעם בשבוע"],[/כל\s*חודשיים|דו[\s\-]?חודשי|פעם בחודשיים/,"כל חודשיים"],[/רבעוני|כל\s*(?:3|שלושה)\s*חודשים|פעם ברבעון/,"רבעוני (כל 3 חודשים)"],[/חצי\s*שנ|כל\s*(?:6|שישה)\s*חודשים/,"כל 6 חודשים"],[/שנתי|פעם\s*בשנה/,"שנתי"],[/חודשי|כל\s*חודש|פעם\s*(?:ב|ל)חודש/,"אחזקה חודשית"]];
+const BIZ_WORD="מסעדת|מסעדה|מאפיית|מאפייה|פיצריית|פיצריה|קונדיטוריית|מפעל|מלון|גן ילדים|גן|בית מרקחת|בית ספר|בית אבות|סופר|מרכול|חנות|מחסן|משרדי|משרד|בית קפה|קפה|מעדניית|מזנון|חברת|עיריית|מועצת|ישיבת|בית כנסת|מתנ\"ס";
+function parseMaint(raw,{workers=[],cityNames=[]}={}){
+  const text=String(raw||"").replace(QA_TRIGGER,"").trim(); const out={found:[]}; if(!text) return out;
+  const w=waParse(text,cityNames);
+  // שם המקום
+  let nm=""; const lab=text.match(/(?:שם\s*(?:ה)?(?:מקום|עסק|לקוח|חברה))\s*[:\-]?\s*([^,.\n]{2,40})/);
+  if(lab) nm=spName(lab[1]);
+  if(!nm){ const b=text.match(new RegExp("(?:^|[\\s,.])(?:ל|ב|של\\s|עבור\\s)?((?:"+BIZ_WORD+")\\s+[^,.\\n]{2,40})")); if(b){ const ws=b[1].trim().split(/\s+/); const head=ws.shift(); const rest=spName(ws.join(" ").replace(/^(?:ה)?(?=[א-ת])/,m=>m)); if(rest&&!/^ב[א-ת]/.test(rest)) nm=head+" "+rest; } }
+  if(!nm&&w.name&&!/איש\s*קשר/.test(text)) nm=w.name;
+  if(nm){ out.customerName=nm; out.found.push("שם המקום"); }
+  // כתובת
+  if(w.street||w.city){ out.address=[[w.street,w.buildingNum].filter(Boolean).join(" "),w.city].filter(Boolean).join(", "); out.found.push("כתובת"); }
+  // סוג
+  for(const [re,v] of MAINT_TYPE_MAP){ if(re.test(text)){ out.type=v; out.found.push("סוג"); break; } }
+  // איש קשר
+  const ik=text.match(/(?:איש|אשת)\s*(?:ה)?קשר\s*(?:הוא|היא)?\s*[:\-]?\s*([^,.\n]{2,30})/);
+  let cname=ik?spName(ik[1]):(w.name&&w.name!==nm?w.name:"");
+  const role=(text.match(/(?<![א-ת])(מנהל(?:ת)?\s*(?:ה)?(?:מסעדה|מקום|אחזקה|משמרת|סניף|מטבח|העסק)?|אחראי(?:ת)?\s*(?:ה)?אחזקה|בעל(?:ת)?\s*(?:ה)?(?:עסק|מקום|בית)|הבעלים|שף|מזכיר(?:ה)?|אב(?:\s*ה)?בית|יו"?ר\s*(?:ה)?ועד)/)||[])[1]||"";
+  if(cname&&role) cname=cname.replace(new RegExp("\\s*"+role.split(/\s+/)[0]+".*$"),"").trim();
+  if(cname||w.phone){ out.contact={name:cname,phone:w.phone||"",role:role.trim()}; out.found.push("איש קשר"); }
+  // מזיקים (+ לא כלולים)
+  const exM=text.match(/(?:לא\s*כולל(?:ים)?|לא\s*כלול(?:ים)?|חוץ\s*מ|ללא|בלי)\s*([^.\n]+)/);
+  const exTxt=exM?exM[1]:""; const inTxt=exM?text.replace(exM[0]," "):text;
+  const pestsIn=spPestsLog((waParse(inTxt,cityNames).pests)||[]); const pestsEx=exTxt?spPestsLog(waParse(exTxt,cityNames).pests||[]):[];
+  if(pestsIn.length){ out.pests=pestsIn.filter(p=>!pestsEx.includes(p)); if(out.pests.length) out.found.push("מזיקים"); }
+  if(pestsEx.length){ out.excludedPests=pestsEx; out.found.push("לא כלול"); }
+  // תדירות
+  for(const [re,v] of MAINT_FREQ_MAP){ if(re.test(text)){ out.frequency=v; out.found.push("תדירות"); break; } }
+  // מחיר
+  const ex=text.match(/ביקור\s*(?:נוסף|חוזר|תוספת)[^\d]{0,20}(\d{2,5})/); if(ex){ out.extraVisitPrice=ex[1]; out.found.push("ביקור נוסף"); }
+  const pm=text.replace(ex?ex[0]:"@@"," ").match(/(\d{2,5})\s*(?:₪|שקלים|שקל|ש["״']?ח)?\s*(?:\+\s*מע"?מ\s*)?(?:לביקור|לכל ביקור|לחודש|בחודש|לטיפול|לפעם)/)||text.replace(ex?ex[0]:"@@"," ").match(/(?:מחיר|עלות|סכום|תשלום)[^\d]{0,12}(\d{2,5})/);
+  const price=pm?pm[1]:(w.price&&w.price!==(ex&&ex[1])?w.price:""); if(price){ out.price=price; out.found.push("מחיר"); }
+  // תאריכים
+  if(w.prefDate){ out.startDate=w.prefDate; out.found.push("התחלה"); }
+  const cm=text.match(/(?:חוזה|הסכם|התחייבות)\s*(?:ל|של|למשך)?\s*-?\s*(שנה|שנתיים|חצי\s*שנה|(\d{1,2}|שלושה|שישה|תשעה)\s*(?:חודשים|שנים))/);
+  if(cm){ const base=new Date((out.startDate||todayStr())+"T12:00"); let months=/שנתיים/.test(cm[1])?24:/חצי/.test(cm[1])?6:/^שנה/.test(cm[1])?12:0; if(!months&&cm[2]){ const n=SP_NUM(cm[2])||({"שלושה":3,"שישה":6,"תשעה":9})[cm[2]]||0; months=/שנים/.test(cm[1])?n*12:n; }
+    if(months){ base.setMonth(base.getMonth()+months); out.endDate=base.toISOString().slice(0,10); out.found.push("סיום חוזה"); } }
+  // תחנות
+  const st=text.match(new RegExp(SP_NUMW+"\\s*(?:תחנות|תיבות|קופסאות|מלכודות)")); if(st){ out.stations=SP_NUM(st[1]); if(out.stations) out.found.push("תחנות"); }
+  // מדביר קבוע + שעה
+  const wk=spWorker(text,workers); if(wk){ out.workerId=String(wk.id); out.autoSchedule=true; out.found.push("מדביר"); }
+  else if(/שבץ|שיבוץ|ביומן/.test(text)) out.autoSchedule=true;
+  if(w.timeFrom){ const [h,m]=w.timeFrom.split(":").map(Number); out.visitTime=String(h).padStart(2,"0")+":"+(m>=30?"30":"00"); out.found.push("שעה"); }
+  const notes=extractNotes(text); if(notes.length){ out.notes=notes; out.found.push("הערות"); }
+  return out;
+}
+
+// ── חשבונית / קבלה
+function parseDoc(raw,{customers=[],cityNames=[]}={}){
+  const text=String(raw||"").replace(QA_TRIGGER,"").trim(); const out={found:[]}; if(!text) return out;
+  const paidWord=/(?:שילם|שילמה|שילמו|שולם|קיבלתי|התקבל|התקבלו|תשלום של|קיבלנו)/;
+  const methods=[[/מזומן/,"מזומן"],[/(?<![א-ת])ב?ביט(?![א-ת])/,"ביט"],[/פייבוקס|פיי\s*בוקס|paybox/i,"פייבוקס"],[/העברה(?:\s*בנקאית)?/,"העברה בנקאית"],[/צ['׳]ק|שיק|המחאה/,"צ׳ק"],[/אשראי|כרטיס/,"כרטיס אשראי"]];
+  const method=(methods.find(([re])=>re.test(text))||[])[1]||"";
+  // סוג מסמך
+  if(/חשבונית\s*זיכוי/.test(text)) out.docType="";
+  else if(/חשבונית\s*(?:מס\s*)?\/?\s*ו?קבלה|חשבונית\s*וקבלה/.test(text)) out.docType="חשבונית מס/קבלה";
+  else if(/חשבון\s*עסקה|דרישת\s*תשלום/.test(text)) out.docType="חשבון עסקה";
+  else if(/קבלה/.test(text)&&!/חשבונית/.test(text)) out.docType="קבלה";
+  else if(/חשבונית/.test(text)) out.docType=(method||paidWord.test(text))?"חשבונית מס/קבלה":"חשבונית מס";
+  if(out.docType) out.found.push("סוג מסמך");
+  // לקוח
+  const kc=spCustomer(text,customers);
+  if(kc){ out.customerId=String(kc.id); out.customerName=kc.name; out.found.push("לקוח"); }
+  else { const m=text.match(/(?:חשבונית(?:\s*מס)?(?:\s*\/?\s*ו?קבלה)?|קבלה|חשבון\s*עסקה|מסמך|תוציא|תפיק|תעשה)\s+(?:ל|עבור\s+|על\s*שם\s+)([^,.\n]{2,40})/)||text.match(/(?:לקוח(?:ה)?|שם\s*(?:ה)?לקוח|על\s*שם)\s*[:\-]?\s*([^,.\n]{2,40})/);
+    let n=m?spName(m[1]):""; if(!n){ const w=waParse(text,cityNames); n=w.name||""; }
+    if(n){ out.customerName=n; out.found.push("לקוח"); } }
+  const tx=text.match(/(?:ח\.?\s?פ\.?|ע\.?\s?מ\.?|ח"פ|ע"מ|עוסק(?:\s*מורשה)?|מספר\s*עוסק)\s*[:\-]?\s*(\d[\d\-\s]{7,11}\d)/); if(tx){ out.taxId=tx[1].replace(/\D/g,""); out.found.push("ח.פ"); }
+  const ph=waParse(text,cityNames); if(ph.phone) out.phone=ph.phone;
+  // מע"מ
+  if(/לפני\s*מע"?מ|פלוס\s*מע"?מ|\+\s*מע"?מ|לא\s*כולל\s*מע"?מ|בלי\s*מע"?מ/.test(text)){ out.inclVat=false; out.found.push("מע״מ"); } else if(/כולל\s*מע"?מ/.test(text)) out.inclVat=true;
+  // שורות + תשלום
+  const lines=[]; let paid=0; let lastEnd=0; const ms=[...text.matchAll(spMoney)];
+  ms.forEach(m=>{ const amt=parseFloat(m[1].replace(/,/g,"")); const before=text.slice(Math.max(lastEnd,0),m.index); const after=text.slice(m.index+m[0].length,m.index+m[0].length+18);
+    const isPaid=paidWord.test(before.slice(-22))||/^\s*(?:שולם|שולמו|במזומן|בביט|באשראי|בצ['׳]ק|בהעברה)/.test(after)&&!/על|עבור|הדבר/.test(before.slice(-25));
+    if(isPaid){ paid+=amt; lastEnd=m.index+m[0].length; return; }
+    let seg=before; const bi=Math.max(seg.lastIndexOf(","),seg.lastIndexOf("."),seg.lastIndexOf("\n"),seg.lastIndexOf(";")); if(bi>=0) seg=seg.slice(bi+1);
+    const fw=seg.match(/(?:^|\s)(?:על|עבור)\s+(.+)$/); if(fw) seg=fw[1];
+    seg=seg.replace(out.customerName||"@@"," ").replace(/(?:חשבונית(?:\s*מס)?(?:\s*\/?\s*ו?קבלה)?|קבלה|חשבון\s*עסקה)\s*(?:ל|עבור)?\S*/g," ").replace(out.customerName||"@@"," ").replace(/(?:^|\s)(?:ב-?|בסך|סך|של|מחיר|סכום|עלות|ו?עוד|וגם|ב)\s*$/,"").replace(/[\s:\-–]+$/,"").replace(/(?:^|\s)(?:על|עבור)\s*$/,"").replace(/^[\s,:\-–]+/,"").replace(/^(?:ו?עוד|וגם|ו)\s+/,"").replace(/\s+/g," ").trim();
+    let qty=1, price=amt; const per=/^\s*(?:ליחידה|ליח['׳]?|כל\s*אחת|כל\s*אחד|לתיבה|לתחנה|לביקור|ליחידות)/.test(after); const q=seg.match(new RegExp(SP_NUMW+"\\s*(?:תיבות|יחידות|יח['׳]?|ביקורים|מלכודות|תחנות|קופסאות|בקבוקים|פחיות)"));
+    if(q&&per){ qty=SP_NUM(q[1])||1; } else if(q&&!per&&SP_NUM(q[1])>1&&/כל\s*אחת|ליחידה/.test(after)){ qty=SP_NUM(q[1]); }
+    if(seg&&!/^הדבר/.test(seg)&&WA_PEST_WORD.test(seg)&&!/תיבות|מלכודות|תחנות/.test(seg)) seg="הדברת "+seg; WA_PEST_WORD.lastIndex=0;
+    if(!seg){ const ps=(waParse(text,cityNames).pests||[]); seg=ps.length?"הדברת "+ps.join(", "):"שירותי הדברה"; }
+    lines.push({desc:seg,qty:String(qty),unit:"יח׳",price:String(price)}); lastEnd=m.index+m[0].length; });
+  if(!lines.length&&paid&&out.docType!=="קבלה"){ const ps=(waParse(text,cityNames).pests||[]); lines.push({desc:ps.length?"הדברת "+ps.join(", "):"שירותי הדברה",qty:"1",unit:"יח׳",price:String(paid)}); }
+  if(lines.length&&out.docType!=="קבלה"){ out.lines=lines; out.found.push("שורות"); }
+  const total=lines.reduce((s,l)=>s+(parseFloat(l.price)||0)*(parseFloat(l.qty)||1),0);
+  if(method||paid){ const tp=text.match(/(\d{1,2}|שלושה|ארבעה|חמישה|שישה|עשרה)\s*תשלומים/); out.payment={method:method||"מזומן",amount:paid?String(paid):"",payments:tp?String(SP_NUM(tp[1])||({"שלושה":3,"ארבעה":4,"חמישה":5,"שישה":6,"עשרה":10})[tp[1]]||""):""}; out.found.push("תשלום"); }
+  const d=spDate(text)||(()=>{ const m=text.match(/\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/); if(!m) return ""; let y=m[3]?+m[3]:new Date().getFullYear(); if(y<100) y+=2000; return `${y}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`; })();
+  if(d){ out.date=d; out.found.push("תאריך"); }
+  const pt=text.match(/(?:שוטף\s*\+?\s*(30|45|60|90)|שוטף(?!\s*\+))/); if(pt){ out.payTerms=pt[1]?"שוטף + "+pt[1]:"שוטף"; out.found.push("תנאי תשלום"); }
+  const notes=extractNotes(text); if(notes.length){ out.notes=notes; out.found.push("הערות"); }
+  return out;
+}
+
+// ── פרויקט חדש
+const SP_ADDR_STOP=new Set(["של","הוא","היא","ועד","בית","הבית","רחוב","ברחוב","רח'","רח׳","ברח'","כתובת","בכתובת","לקוח","שם","זה","נמצא","גר","ממוקם","באזור","ליד","את","עם","אנחנו","יש","בניין","בבניין","בניינים","הבניינים","דירה","משותף","ב","מ","ו","גם","פרויקט","פרוייקט","ברחובות","רחובות","בכתובות","כתובות","הם","הן","עוד","ועוד","וגם","שני","שלושה","ארבעה","קומות","קומה","מספר","מספרים","בתים","הכולל","כולל","לבניין","כל","עד","בין","שעה","בשעה","מחיר","הדברה","הדברת","ריסוס","טיפול","תיבות","תחנות","קוד","קומות","בקוד"]);
+function spAddresses(text,cities){
+  const res=[]; const re=/([א-ת'"׳\-]{2,}(?:\s+[א-ת'"׳\-]{2,}){0,4})\s+(\d{1,4}[א-ת]?)((?:\s*(?:,|ו-?|וגם|ועוד)\s*\d{1,4}[א-ת]?(?![\d:]))*)(?!\s*(?:קומות|קומה|חדרים|₪|שקל|ש"ח|ש״ח|בניינים|בתים|תחנות|תיבות|יחידות|דירות|:|\d))/g;
+  let m; while((m=re.exec(text))){
+    const parts=m[1].trim().split(/\s+/); const keep=[];
+    for(let i=parts.length-1;i>=0;i--){ const w=parts[i]; if(SP_ADDR_STOP.has(w)||WA_PEST_WORD.test(w)||cities.includes(w)||cities.includes(w.replace(/^ב/,""))||/^(?:ב|ל|מ|ו)?(?:הדבר|ריסוס|טיפול|מחיר)/.test(w)){ WA_PEST_WORD.lastIndex=0; break; } WA_PEST_WORD.lastIndex=0; keep.unshift(w); if(keep.length>=3) break; }
+    if(!keep.length) continue;
+    if(/^ו[א-ת]/.test(keep[0])&&/\d\s*,?\s*$/.test(text.slice(Math.max(0,m.index-8),m.index+m[1].indexOf(keep[0])).replace(/ו?\S*$/,"").trim()+" ")) keep[0]=keep[0].slice(1);
+    const street=keep.join(" "); const nums=[m[2],...(m[3]||"").split(/,|ו-?|וגם|ועוד/).map(s=>s.trim()).filter(Boolean)];
+    nums.forEach(n=>res.push(street+" "+n));
+  }
+  return [...new Set(res)];
+}
+function parseProject(raw,{workers=[],cityNames=[]}={}){
+  const text=String(raw||"").replace(QA_TRIGGER,"").trim(); const out={found:[]}; if(!text) return out;
+  const w=waParse(text,cityNames);
+  const cities=[...new Set([...(cityNames||[]),...WA_CITIES])].filter(c=>c&&c.length>1).sort((a,b)=>b.length-a.length);
+  const city=w.city||(cities.find(c=>text.includes(c))?(WA_CITY_NORM[cities.find(c=>text.includes(c))]||cities.find(c=>text.includes(c))):"");
+  const nm=text.match(/(?:שם\s*(?:ה)?פרו?יקט|פרו?יקט(?:\s*חדש)?(?:\s*בשם)?)\s*[:\-]?\s*([^,.\n]{2,40})/);
+  if(nm){ const n=nm[1].replace(/^(?:של|ב|ל)\s+/,"").trim().split(/\s+/).slice(0,5).join(" "); if(n&&!/^(?:חדש|בשם)$/.test(n)&&!/^(?:ל|עבור\s)(?:חברת|עיריית|מועצת|ועד)/.test(n)){ out.name=n; out.found.push("שם"); } }
+  const cl=text.match(/(?:^|[\s,.])(?:ל|עבור\s)?((?:חברת|עיריית|מועצת|חברה\s*לבניה|קבלן)\s+[^,.\n]{2,30})/)||text.match(/(?:לקוח(?:ה)?|הלקוח\s*הוא|עבור|ועד\s*הבית\s*של|ועד)\s*[:\-]?\s*([^,.\n]{2,30})/);
+  if(cl){ const c=/^(?:חברת|עיריית|מועצת|קבלן)/.test(cl[1].trim())?cl[1].trim().split(/\s+/).slice(0,3).join(" ").replace(/\s+(?:ב|ל|של)$/,""):spName(cl[1]); if(c){ out.clientName=c; out.found.push("לקוח"); } }
+  if(!out.clientName&&w.name){ out.clientName=w.name; out.found.push("לקוח"); }
+  if(w.phone){ out.phone=w.phone; out.found.push("טלפון"); }
+  const ps=w.pests||[]; const grp=new Set(ps.map(p=>/ג'וק|תיקן/.test(p)?"תיקנים":/עכבר|חולד|מכרסמ/.test(p)?"מכרסמים":/נמל/.test(p)?"נמלים":/פרעוש/.test(p)?"פרעושים":/יתוש/.test(p)?"יתושים":"אחר"));
+  if(grp.size){ out.pestType=grp.size>1?"מעורב":[...grp][0]==="אחר"?"כללי":[...grp][0]; out.found.push("מזיק"); }
+  if(/(?<![א-ת])(?:פעיל|בביצוע|התחלנו)(?![א-ת])/.test(text)) out.status="פעיל"; else if(/מושהה|הקפאה/.test(text)) out.status="מושהה";
+  if(w.prefDate){ out.startDate=w.prefDate; out.found.push("התחלה"); }
+  const addrs=spAddresses(text,cities);
+  const nb=text.match(new RegExp(SP_NUMW+"\\s*(?:בניינים|בנינים|בתים|מבנים)"));
+  const floors=(text.match(/(\d{1,2})\s*קומות/)||[])[1]||"";
+  const code=(text.match(/קוד\s*(?:כניסה|בניין|לבניין)?\s*[:\-]?\s*(\d{3,6})/)||[])[1]||"";
+  const perB=text.match(/(\d{2,6})\s*(?:₪|שקלים|שקל|ש["״']?ח)?\s*(?:לבניין|לכל\s*בניין|לבית|כל\s*בניין)|כל\s*בניין\s*(\d{2,6})/);
+  const wk=spWorker(text,workers);
+  let list=addrs.map(a=>a+(city?", "+city:""));
+  const n=nb?SP_NUM(nb[1]):0; while(list.length<n) list.push("");
+  if(list.length){ out.buildings=list.map(a=>({address:a,buildingCode:code,floors,workerId:wk?wk.id:"",workerName:wk?wk.name:"",date:out.startDate||"",price:perB?(perB[1]||perB[2]):"",status:wk&&out.startDate?"שובץ":"ממתין"})); out.found.push(list.length+" בניינים"); }
+  if(!perB&&w.price){ out.totalPrice=w.price; out.found.push("מחיר"); }
+  if(!out.name){ const base=out.clientName||(addrs[0]?addrs[0]:""); if(base){ out.name=base+(city&&!base.includes(city)?" "+city:""); } }
+  const notes=extractNotes(text); if(notes.length){ out.notes=notes; out.found.push("הערות"); }
+  return out;
+}
+
+// ── משימה אישית
+function parseTask(raw,{workers=[],me=null}={}){
+  const text0=String(raw||"").trim(); const out={found:[]}; if(!text0) return out;
+  const trig=text0.match(QA_TRIGGER); const text=text0.replace(QA_TRIGGER,"").replace(/^(?:משימה\s*חדשה|משימה|תזכורת)\s*[:\-]?\s*/,"").trim();
+  const r=waParse(text.replace(/כל\s*היום|במהלך\s*היום|יום\s*שלם/g," "),[]);
+  const wk=trig&&trig[1]?qaWorker(trig[1],workers,me):(()=>{ const m=text.match(/(?:ביומן|ליומן)\s*של\s+([א-ת'׳"]+(?:\s+[א-ת'׳"]+)?)/); return m?qaWorker(m[1],workers,me):null; })();
+  if(wk){ out.workerId=String(wk.id); out.found.push("יומן של "+wk.name); }
+  let t=qaTitle(text.replace(/(?:ביומן|ליומן)\s*של\s+[א-ת'׳"]+(?:\s+[א-ת'׳"]+)?/,"").replace(/(?:חוסם|חוסמת)\s*(?:את)?\s*כל\s*היום|כל\s*היום|במהלך\s*היום|יום\s*שלם|בלי\s*שעה(?:\s*קבועה)?|(?:ב)?בוקר|(?:ב)?ערב|(?:ב)?צהריים/g," "));
+  t=t.replace(/(?:טלפון|נייד)?\s*(?:\+?972|0)5\d[\s-]?\d{3}[\s-]?\d{4}/g," ").replace(/(?:בשעה\s*|(?<![א-ת])ב)(?:אחת[ -]עשרה|שתי?ים[ -]עשרה|שבע|שמונה|תשע|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש)(?![א-ת])/g," ").replace(/\s+/g," ").replace(/[\s,]+$/,"").replace(/(?:^|\s)(?:ב|ל)?(?:שעה|בשעה)\s*$/,"").replace(/^(?:ש|ל)?(?:צריך|צריכה)\s+/,"").trim();
+  if(t&&t!=="משימה"){ out.title=t; out.found.push("משימה"); }
+  if(r.prefDate){ out.date=r.prefDate; out.found.push("תאריך"); }
+  if(/חוסם|חוסמת|יום\s*שלם|חופש|מילואים|יום\s*סגור|לא\s*עובד(?:ים)?/.test(text)){ out.mode="block"; out.found.push("חוסם את היום"); }
+  else if(r.timeFrom&&!/במהלך\s*היום/.test(text)){ out.mode="time"; out.from=r.timeFrom; const isRange=/(?:בין|משעה|מ-?)\s*\d{1,2}(?::\d{2})?\s*(?:ל-?|עד|-|–)\s*\d{1,2}|\d{1,2}(?::\d{2})?\s*[-–]\s*\d{1,2}|בין\s*(?:ה)?[א-ת]+\s*(?:ל|עד)/.test(text); out.to=isRange?r.timeTo:String(Math.min(23,parseInt(r.timeFrom)+1)).padStart(2,"0")+r.timeFrom.slice(2); out.found.push("שעה"); }
+  else if(/במהלך\s*היום|מתי\s*ש|בלי\s*שעה|לא\s*משנה\s*מתי|גמיש|כל\s*היום/.test(text)){ out.mode="flex"; out.found.push("במהלך היום"); }
+  const extra=[...extractNotes(text)]; if(r.phone) extra.push("📞 "+r.phone); if(r.street) extra.push("📍 "+[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", "));
+  if(extra.length){ out.notes=extra; out.found.push("פרטים"); }
+  return out;
+}
+
+// ── הכנסה / הוצאה
+function parseFin(raw,{customers=[]}={}){
+  const text=String(raw||"").trim(); const out={found:[]}; if(!text) return out;
+  if(/הכנסה|קיבלתי|התקבל|לקוח\s*שילם|שילם\s*לי/.test(text)) out.type="הכנסה"; else if(/הוצאה|קניתי|שילמתי|תדלקתי|רכשתי|הזמנתי|קנינו|דלק|סולר|ספק/.test(text)) out.type="הוצאה";
+  if(out.type) out.found.push(out.type);
+  const C=[[/דלק|סולר|בנזין|תדלוק|תדלקתי|תחנת\s*דלק/,"דלק"],[/חומר|חומרים|רעל|ג['׳]ל|פיתיון|קוטל|ריסוס|אנטי|גרנול|תכשיר/,"חומרי הדברה"],[/ציוד|מרסס|מרסס|מלכודות|תיבות|כלים|מסכה|מסכות|כפפות|סולם|פנס/,"ציוד"],[/שכר|משכורת|תשלום\s*לעובד|לעובד/,"שכר"]];
+  const cat=(C.find(([re])=>re.test(text))||[])[1]; if(cat&&out.type!=="הכנסה"){ out.category=cat; out.found.push(cat); } else if(out.type==="הוצאה"){ out.category="אחר"; }
+  if(out.type==="הכנסה"){ if(/קבלה/.test(text)) out.category="קבלה"; else if(/הצעת\s*מחיר/.test(text)) out.category="הצעת מחיר"; }
+  const m=[...text.matchAll(spMoney)][0]||text.match(/(?:סכום|עלה|עלו|עלות|שילמתי|קיבלתי|ב-?)\s*(\d{2,6})/)||text.match(/(?<![\d./])(\d{2,6})(?![\d./:])/);
+  if(m){ out.amount=String(m[1]).replace(/,/g,""); out.found.push("סכום"); }
+  const d=spDate(text)||waParse(text,[]).prefDate; if(d){ out.date=d; out.found.push("תאריך"); }
+  if(/חוב|לא\s*שולם|לא\s*שילמתי|עוד\s*לא\s*שילמ|בהקפה|אשלם/.test(text)) out.status="חוב"; else if(/ממתין|מחכה/.test(text)) out.status="ממתין";
+  const c=spCustomer(text,customers); if(c){ out.customerId=c.id; out.customer=c.name; out.found.push("לקוח"); }
+  const inv=text.match(/(?:חשבונית|קבלה)\s*(?:מספר|מס['׳]?)\s*([A-Za-z]*-?\d{2,8})/); if(inv){ out.invoiceNum=inv[1]; out.found.push("מס׳ מסמך"); }
+  return out;
+}
+
+// ── תיבת "מילוי חכם" כללית לכל טופס: מדברים / מקלידים / מדביקים → בודקים → ממלאים. אפשר לחזור ולהשלים.
+function SmartBox({parse,chips,onApply,hint,placeholder,contacts=false,color="#16a34a",bg="#f0fdf4",border="#86efac"}){
+  const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [n,setN]=useState(0);
+  const r=React.useMemo(()=>{ try{ return txt.trim()?parse(txt):null; }catch(e){ console.error(e); return null; } },[txt]);
+  const add=t=>setTxt(x=>(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":" "):"")+t);
+  const pill={border:"1.5px solid "+border,background:"#fff",color,borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"};
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid "+color,background:bg,color,fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{n?"✨ השלם / הוסף פרטים — דבר או הקלד 🎤":"✨ מילוי חכם — דבר, הקלד או הדבק 🎤"}</button>;
+  const list=r?(chips(r)||[]).filter(Boolean):[];
+  return <div style={{border:"2px solid "+color,background:bg,borderRadius:12,padding:12,marginBottom:14}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <b style={{color,fontSize:15}}>✨ {n?"השלמה במילוי חכם":"מילוי חכם"}</b>
+      <button type="button" onClick={()=>{setOpen(false);setTxt("");}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>
+    </div>
+    {hint&&<div style={{fontSize:12,color:"#475569",marginBottom:6}}>{n?"תגיד רק מה להוסיף או לשנות — מה שכבר מילאת נשאר.":hint}</div>}
+    <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder={placeholder} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+border,fontSize:15,fontFamily:"inherit",resize:"vertical",direction:"rtl"}}/>
+    <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+      <MicButton label="🎤 דבר" onText={add}/>
+      {contacts&&<ContactPickBtn onPick={c=>add(contactLine(c))}/>}
+      {!txt&&<button type="button" onClick={async()=>{try{const t=await navigator.clipboard.readText();if(t)setTxt(t);}catch(e){alert("הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)");}}} style={pill}>📥 הדבק</button>}
+      {txt&&<button type="button" onClick={()=>setTxt("")} style={{...pill,color:"#64748b",borderColor:"#e2e8f0"}}>נקה</button>}
+    </div>
+    {r&&<div style={{marginTop:8}}>
+      <div style={{fontSize:13,color,fontWeight:700,marginBottom:6}}>{r.found.length?"זיהיתי — בדוק ולחץ מלא:":"עוד לא זיהיתי פרטים — נסה לפרט יותר"}</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+        {list.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid "+border,borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}
+      </div>
+      {r.found.length>0&&<button type="button" onClick={()=>{ onApply(r,txt); setTxt(""); setOpen(false); setN(k=>k+1); setTimeout(()=>showToast("✅ מולא: "+r.found.join(", ")),30); }} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:color,color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את הטופס</button>}
+    </div>}
+  </div>;
+}
+const spChip=(k,v)=>v?<span><span style={{color:"#64748b"}}>{k}:</span> <b>{v}</b></span>:null;
+
 function WAPasteBox({onApply,cityNames}){
-  const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [res,setRes]=useState(null);
+  const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [res,setRes]=useState(null); const [nApplied,setNApplied]=useState(0);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ setTxt(t); setRes(waParse(t,cityNames)); } }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
   const LBL={name:"שם",phone:"טלפון",city:"עיר",street:"רחוב",buildingNum:"מספר",aptNum:"דירה",entrance:"כניסה",propertyType:"סוג נכס",rooms:"חדרים",floor:"קומה",hasYard:"חצר",pests:"מזיק",price:"מחיר",prefDate:"תאריך",timeFrom:"משעה",timeTo:"עד שעה"};
-  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>✨ מילוי חכם — הדבק הודעה, הקלד או דבר 🎤</button>;
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{nApplied?"✨ השלם / הוסף פרטים להזמנה — דבר או הקלד 🎤":"✨ מילוי חכם — הדבק הודעה, הקלד או דבר 🎤"}</button>;
   return <div style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
       <b style={{color:"#166534",fontSize:15}}>✨ מילוי חכם — הדבק, הקלד או דבר</b>
@@ -5038,10 +5284,11 @@ function WAPasteBox({onApply,cityNames}){
         {res.brand&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:20,padding:"4px 10px",fontSize:13}}>🏢 נשלח מ: <b>{res.brand}</b> (לא מזיק)</span>}
         {Object.keys(LBL).filter(k=>res[k]!==undefined&&res[k]!==""&&!(Array.isArray(res[k])&&!res[k].length)).map(k=><span key={k} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}><span style={{color:"#64748b"}}>{LBL[k]}:</span> <b>{Array.isArray(res[k])?res[k].join(", "):typeof res[k]==="boolean"?(res[k]?"יש":"אין"):res[k]}</b></span>)}
         {res.boxesNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.boxesNote}</span>}
+        {(res.notes||[]).map((n,i)=><span key={"n"+i} style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>📝 {n}</span>)}
         {res.sewerNote&&<span style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{res.sewerNote}</span>}
         {!res.name&&<span style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:20,padding:"4px 10px",fontSize:13}}>שם: לא צוין</span>}
       </div>
-      {res.found.length>0&&<button type="button" onClick={()=>{onApply(res,txt);setOpen(false);setTxt("");setRes(null);}} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את ההזמנה</button>}
+      {res.found.length>0&&<button type="button" onClick={()=>{onApply(res,txt);setOpen(false);setTxt("");setRes(null);setNApplied(k=>k+1);}} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ מלא את ההזמנה</button>}
     </div>}
   </div>;
 }
@@ -5161,7 +5408,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       if(known.length) nx.pests=[...new Set([...x.pests,...known])];
       if(other.length) nx.customPest=[x.customPest,...other].filter(Boolean).join(", ");
       if(r.timeFrom) nx.allDay=false;
-      nx.notes=[x.notes,r.boxesNote,r.sewerNote,"📋 מההודעה: "+raw.trim().replace(/\s*\n\s*/g," | ")].filter(Boolean).join("\n");
+      nx.notes=mergeNotes(x.notes,[r.boxesNote,r.sewerNote,...(r.notes||[])]);
       return nx; });
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
@@ -5702,7 +5949,14 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
 function NewFinanceModal({customers,onClose,onSave,initialType="הכנסה"}){
   const [f,setF]=useState({type:initialType,category:initialType==="הוצאה"?"חומרי הדברה":"חשבונית",customer:"",customerId:null,amount:"",date:todayStr(),status:"שולם",invoiceNum:""});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
+  const applyFin=r=>setF(x=>{ const type=r.type||x.type; const cats=type==="הכנסה"?["חשבונית","קבלה","הצעת מחיר"]:["חומרי הדברה","דלק","ציוד","שכר","אחר"];
+    let category=r.category&&cats.includes(r.category)?r.category:(type!==x.type?cats[0]:x.category);
+    return {...x,type,category,...(r.amount?{amount:r.amount}:{}),...(r.date?{date:r.date}:{}),...(r.status?{status:r.status}:{}),...(r.customerId?{customerId:r.customerId,customer:r.customer}:{}),...(r.invoiceNum?{invoiceNum:r.invoiceNum}:{})}; });
   return <Modal title="💰 רשומה כספית" onClose={onClose} width={480}>
+    <SmartBox parse={t=>parseFin(t,{customers})} onApply={applyFin}
+      hint='למשל "תדלקתי ב-300 שקל היום" או "קניתי חומרי הדברה ב-1,250, עוד לא שילמתי".'
+      placeholder={"למשל: קניתי חומרי הדברה 1,250 ש\"ח אתמול"}
+      chips={r=>[spChip("סוג",r.type),spChip("קטגוריה",r.category),spChip("סכום",r.amount&&"₪"+r.amount),spChip("תאריך",r.date&&fmtDate(r.date)),spChip("סטטוס",r.status),spChip("לקוח",r.customer),spChip("מס׳ מסמך",r.invoiceNum)]}/>
     <G2><Sel label="סוג" value={f.type} onChange={v=>setF(x=>({...x,type:v,category:v==="הוצאה"?"חומרי הדברה":"חשבונית"}))} options={["הכנסה","הוצאה"]}/><Sel label="קטגוריה" value={f.category} onChange={v=>set("category",v)} options={f.type==="הכנסה"?["חשבונית","קבלה","הצעת מחיר"]:["חומרי הדברה","דלק","ציוד","שכר","אחר"]}/>{f.type==="הכנסה"&&<div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>לקוח</label><select value={f.customerId||""} onChange={e=>{const c=customers.find(x=>x.id===parseInt(e.target.value));set("customerId",c?.id||null);set("customer",c?.name||"");}} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:14,boxSizing:"border-box"}}><option value="">-- בחר --</option>{customers.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}<Inp label="סכום (₪)" type="number" value={f.amount} onChange={v=>set("amount",v)}/><Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/><Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["שולם","חוב","ממתין"]}/>{f.type==="הכנסה"&&<Inp label="מס׳ חשבונית" value={f.invoiceNum} onChange={v=>set("invoiceNum",v)} placeholder="INV-XXX"/>}</G2>
     <div style={{display:"flex",gap:10}}><Btn full onClick={()=>{if(!f.amount)return alert("סכום חובה");onSave({...f,amount:parseInt(f.amount)});onClose();}}>✅ שמור</Btn><Btn v="ghost" full onClick={onClose}>ביטול</Btn></div>
   </Modal>;
@@ -6586,7 +6840,26 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const inp={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,boxSizing:"border-box",background:"#f9fafb",fontFamily:"inherit"};
   const card={border:"1px solid #e2e8f0",borderRadius:12,padding:"12px",marginBottom:12,background:"#fff"};
   const h={fontWeight:800,color:"#0f172a",fontSize:15,marginBottom:8};
+  const applyDoc=r=>{
+    const nt=r.docType&&!P.lockType&&DOC_TYPES[r.docType]?r.docType:type; if(nt!==type) setType(nt);
+    if(r.customerId){ setCustId(String(r.customerId)); if(r.taxId) setTimeout(()=>setCx(x=>({...x,taxId:r.taxId})),60); }
+    else if(r.customerName){ setCustId(""); setCustQ(r.customerName); setCx(x=>({...x,name:r.customerName,...(r.taxId?{taxId:r.taxId}:{}),...(r.phone?{phone:r.phone}:{})})); }
+    else if(r.taxId) setCx(x=>({...x,taxId:r.taxId}));
+    if(r.date) setDate(r.date);
+    const iv=r.inclVat!=null?r.inclVat:inclVat; if(r.inclVat!=null) setInclVat(r.inclVat);
+    const keep=lines.filter(l=>l.desc||parseFloat(l.price)); const nl=r.lines?[...keep,...r.lines]:keep;
+    if(r.lines) setLines(nl.length?nl:[{desc:"",qty:"1",unit:"יח׳",price:""}]);
+    if(r.payTerms) setPayTerms(r.payTerms);
+    if(r.payment&&DOC_TYPES[nt].receipt){ const tt=nt==="קבלה"?0:docTotals(nl,iv,showDisc?discount:null,roundTotal).total; const amt=r.payment.amount||String(r2(Math.max(0,tt-paidSum))||"");
+      const method=PAY_METHODS_DOC.includes(r.payment.method)?r.payment.method:"אחר";
+      setPayments(ps=>[...ps,{method,amount:amt,date:r.date||date,details:r.payment.payments&&method==="כרטיס אשראי"?{payments:r.payment.payments}:{}}]); }
+    if(r.notes) setNotes(n=>mergeNotes(n,r.notes));
+  };
   return <Modal title={"🧾 "+type+" (טיוטה)"} onClose={onClose} width={720}>
+    <SmartBox color="#2563eb" bg="#eff6ff" border="#93c5fd" contacts parse={t=>parseDoc(t,{customers})} onApply={applyDoc}
+      hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת ג׳וקים 350 שקל, שילם במזומן".'
+      placeholder={"למשל: חשבונית ליוסי כהן על הדברת ג'וקים 350 שקל, שילם בביט"}
+      chips={r=>[spChip("מסמך",r.docType),spChip("לקוח",r.customerName&&r.customerName+(r.customerId?" ✓":" (לקוח מזדמן)")),spChip("ח.פ",r.taxId),spChip("מע״מ",r.inclVat===false?"לפני מע״מ":""),...(r.lines||[]).map(l=>spChip("שורה",l.desc+" · "+(+l.qty>1?l.qty+" × ":"")+"₪"+l.price)),r.payment&&spChip("תשלום",r.payment.method+(r.payment.amount?" ₪"+r.payment.amount:"")+(r.payment.payments?" · "+r.payment.payments+" תשלומים":"")),spChip("תאריך",r.date&&fmtDate(r.date)),spChip("תנאים",r.payTerms),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     {!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
     </div>}
@@ -6977,7 +7250,19 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
     onClose();
   };
   const chip=on=>({padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
+  const applyMaint=r=>{ setF(x=>{ const nx={...x};
+      ["customerName","address","type","frequency","price","extraVisitPrice","startDate","endDate","visitTime","workerId"].forEach(k=>{ if(r[k]) nx[k]=r[k]; });
+      if(r.autoSchedule) nx.autoSchedule=true;
+      if(r.contact){ const cs=x.contacts.filter(c=>c.name||c.phone); const nz=Object.fromEntries(Object.entries(r.contact).filter(([,v])=>v)); const i=cs.findIndex(c=>(nz.phone&&c.phone===nz.phone)||(nz.name&&c.name===nz.name)); nx.contacts=i>=0?cs.map((c,j)=>j===i?{...c,...nz}:c):[...cs,{name:"",phone:"",role:"",...nz}]; }
+      const ex=[...new Set([...x.excludedPests,...(r.excludedPests||[])])]; nx.excludedPests=ex; nx.pests=[...new Set([...x.pests,...(r.pests||[])])].filter(p=>!ex.includes(p));
+      if(r.stations){ const st=x.stations||[]; if(st.length<r.stations){ const start=st.reduce((mx,s0)=>Math.max(mx,parseInt(s0.num)||0),0); nx.stations=[...st,...Array.from({length:r.stations-st.length},(_,i)=>({num:start+i+1,location:""}))]; } }
+      if(r.notes) nx.notes=mergeNotes(x.notes,r.notes);
+      return nx; }); if(r.type) setOtherOpen(false); };
   return <Modal title={init.id?"✏️ עריכת אחזקה":"+ אחזקה חדשה"} onClose={onClose} width={620}>
+    <SmartBox contacts parse={t=>parseMaint(t,{workers})} onApply={applyMaint}
+      hint="ספר על האחזקה: שם המקום, כתובת, איש קשר, מזיקים (ומה לא כלול), כל כמה זמן, מחיר לביקור, תחנות, מדביר קבוע."
+      placeholder={"למשל: מסעדת השף הלבן, הרצל 20 תל אביב, איש קשר רונן מנהל המסעדה 054-1112233. ג'וקים ומכרסמים, לא כולל נמלים. פעם בחודש, 450 שקל לביקור. חוזה לשנה, 6 תחנות, משה מדביר קבוע בשעה 7. יש חתול במחסן"}
+      chips={r=>[spChip("מקום",r.customerName),spChip("כתובת",r.address),spChip("סוג",r.type),r.contact&&spChip("איש קשר",[r.contact.name,r.contact.role,r.contact.phone].filter(Boolean).join(" · ")),r.pests&&r.pests.length&&spChip("מזיקים",r.pests.join(", ")),r.excludedPests&&spChip("🚫 לא כולל",r.excludedPests.join(", ")),spChip("תדירות",r.frequency),spChip("מחיר לביקור",r.price&&"₪"+r.price),spChip("ביקור נוסף",r.extraVisitPrice&&"₪"+r.extraVisitPrice),spChip("התחלה",r.startDate&&fmtDate(r.startDate)),spChip("סיום חוזה",r.endDate&&fmtDate(r.endDate)),spChip("תחנות",r.stations),spChip("מדביר",r.workerId&&((workers.find(w=>String(w.id)===String(r.workerId))||{}).name)),spChip("שעה",r.visitTime),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <FieldCard title="📍 המקום">
       <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מאפיית השכונה"/>
       <Inp label="כתובת המקום" value={f.address} onChange={v=>set("address",v)} placeholder="רחוב, מספר, עיר"/>
@@ -7247,8 +7532,14 @@ function NewProjectModal({onClose,onSave,workers}){
   const updateB=(id,data)=>setBuildings(bs=>bs.map(b=>b.id===id?data:b));
   const removeB=(id)=>setBuildings(bs=>bs.filter(b=>b.id!==id));
   const totalCalc=buildings.reduce((s,b)=>s+(parseInt(b.price)||0),0);
+  const applyProj=r=>{ setF(x=>{ const nx={...x}; ["name","clientName","phone","pestType","status","startDate","totalPrice"].forEach(k=>{ if(r[k]) nx[k]=r[k]; }); if(r.notes) nx.notes=mergeNotes(x.notes,r.notes); return nx; });
+    if(r.buildings&&r.buildings.length) setBuildings(bs=>{ const keep=bs.filter(b=>b.address||b.price||b.date||b.buildingCode); let id=keep.reduce((m,b)=>Math.max(m,b.id),0); return [...keep,...r.buildings.map(b=>({...b,id:++id}))]; }); };
 
   return <Modal title="🏗️ פרויקט חדש" onClose={onClose} width={720}>
+    <SmartBox contacts parse={t=>parseProject(t,{workers})} onApply={applyProj}
+      hint="ספר על הפרויקט: שם, לקוח, טלפון, מזיק, כתובות הבניינים, קומות, קוד, מחיר לבניין, מתי מתחילים ומי מבצע."
+      placeholder={"למשל: פרויקט לחברת אלון, הדברת מכרסמים ברחוב הרצל 5, 7 ו-9 ובן גוריון 12 ברמת גן, 4 קומות, קוד 1234, 800 שקל לבניין, מתחילים ביום ראשון, משה מבצע"}
+      chips={r=>[spChip("פרויקט",r.name),spChip("לקוח",r.clientName),spChip("טלפון",r.phone),spChip("מזיק",r.pestType),spChip("סטטוס",r.status),spChip("התחלה",r.startDate&&fmtDate(r.startDate)),r.buildings&&spChip("בניינים",r.buildings.map(b=>b.address||"בניין").join(" · ")+(r.buildings[0].floors?" · "+r.buildings[0].floors+" קומות":"")+(r.buildings[0].price?" · ₪"+r.buildings[0].price+" לבניין":"")+(r.buildings[0].workerName?" · "+r.buildings[0].workerName:"")),spChip("מחיר כולל",r.totalPrice&&"₪"+r.totalPrice),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <FieldCard title="פרטי הפרויקט">
       <G2><Inp label="שם הפרויקט *" value={f.name} onChange={v=>set("name",v)} placeholder="פרויקט ברחוב הרצל..."/><Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={PROJECT_STATUSES}/></G2>
       <G2><Inp label="שם לקוח / ועד" value={f.clientName} onChange={v=>set("clientName",v)}/><Inp label="טלפון" value={f.phone} onChange={v=>set("phone",v)}/></G2>
