@@ -1996,33 +1996,56 @@ function ExecSec({id,icon,title,summary,state,open,onToggle,onNext,children,flat
   </div>;
 }
 // ── הקלטה קולית: מדברים במקום להקליד (זיהוי דיבור של הדפדפן, בעברית, בחינם)
-// ממשיך להקשיב עד שלוחצים עצירה — גם אחרי הפסקה בדיבור, וחוזר להקשיב כשחוזרים לאפליקציה
+// ממשיך להקשיב עד שלוחצים עצירה. מגן מלולאת "נעצר-ממשיך", מונע כפילויות (באג אנדרואיד) ומציג מה נשמע בזמן אמת
 function MicButton({onText,label="🎤 דבר"}){
-  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false);
+  const [on,setOn]=useState(false); const [paused,setPaused]=useState(false); const [live,setLive]=useState(""); const [warn,setWarn]=useState("");
   const rec=React.useRef(null); const want=React.useRef(false); const running=React.useRef(false);
+  const sess=React.useRef({sent:"",start:0,got:false}); const fails=React.useRef(0); const timer=React.useRef(null);
   const SR=typeof window!=="undefined"&&(window.SpeechRecognition||window.webkitSpeechRecognition);
   const cb=React.useRef(onText); cb.current=onText;
   const startRec=()=>{
-    if(!SR||running.current) return;
-    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=false;
-    r.onresult=e=>{ let t=""; for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) t+=e.results[i][0].transcript; } t=t.trim(); if(t) cb.current(t); };
-    r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want.current=false; setOn(false); alert("צריך לאשר גישה למיקרופון בדפדפן."); } };
-    r.onend=()=>{ running.current=false; if(want.current){ if(document.visibilityState==="visible") setTimeout(()=>{ if(want.current) startRec(); },250); else setPaused(true); } else setOn(false); };
+    if(!SR||running.current||!want.current) return;
+    const r=new SR(); r.lang="he-IL"; r.continuous=true; r.interimResults=true; r.maxAlternatives=1;
+    sess.current={sent:"",start:Date.now(),got:false};
+    r.onresult=e=>{
+      // בונים את כל הטקסט הסופי של הסשן מההתחלה, ושולחים רק מה שעוד לא נשלח (אנדרואיד שולח שוב את מה שכבר נשלח)
+      let fin="", intr="";
+      for(let i=0;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=(fin&&!/\s$/.test(fin)?" ":"")+t.trim(); else intr+=t; }
+      fin=fin.replace(/\s+/g," ").trim(); sess.current.got=true;
+      const prev=sess.current.sent;
+      if(fin&&fin!==prev){ let add=fin.startsWith(prev)?fin.slice(prev.length).trim():fin; if(prev&&!fin.startsWith(prev)&&prev.includes(fin)) add=""; if(add) cb.current(add); sess.current.sent=fin; }
+      setLive(intr.trim());
+    };
+    r.onerror=e=>{ if(e.error==="not-allowed"||e.error==="service-not-allowed"){ want.current=false; setOn(false); setWarn(""); alert("צריך לאשר גישה למיקרופון בדפדפן."); } };
+    r.onend=()=>{ running.current=false; setLive("");
+      if(!want.current){ setOn(false); return; }
+      if(document.visibilityState!=="visible"){ setPaused(true); return; }
+      // הגנה מלולאה: אם נעצר מהר בלי שנשמע כלום — מחכים יותר, ואחרי כמה פעמים עוצרים
+      const quick=Date.now()-sess.current.start<1500&&!sess.current.got;
+      fails.current=quick?fails.current+1:0;
+      if(fails.current>=4){ want.current=false; setOn(false); setWarn("המיקרופון לא מצליח להקשיב ברצף בטלפון הזה. אפשר ללחוץ שוב, או להשתמש במיקרופון של המקלדת 🎙️"); return; }
+      clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); }, quick?900*fails.current:120);
+    };
     rec.current=r; try{ r.start(); running.current=true; setPaused(false); }catch(e){ running.current=false; }
   };
   React.useEffect(()=>{
-    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current){ setTimeout(()=>{ if(want.current) startRec(); },300); } };
-    document.addEventListener("visibilitychange",vis); window.addEventListener("focus",vis);
-    return()=>{ document.removeEventListener("visibilitychange",vis); window.removeEventListener("focus",vis); want.current=false; try{rec.current&&rec.current.stop();}catch(e){} };
+    const vis=()=>{ if(document.visibilityState==="visible"&&want.current&&!running.current){ clearTimeout(timer.current); timer.current=setTimeout(()=>{ if(want.current) startRec(); },400); } };
+    document.addEventListener("visibilitychange",vis);
+    return()=>{ document.removeEventListener("visibilitychange",vis); want.current=false; clearTimeout(timer.current); try{rec.current&&rec.current.abort();}catch(e){} };
   },[]);
   const toggle=()=>{
     if(!SR){ alert("הדפדפן הזה לא תומך בהקלטה. אפשר ללחוץ על סמל המיקרופון במקלדת של הטלפון ולדבר."); return; }
-    if(want.current){ want.current=false; setOn(false); setPaused(false); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
-    want.current=true; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
+    setWarn("");
+    if(want.current){ want.current=false; clearTimeout(timer.current); setOn(false); setPaused(false); setLive(""); try{rec.current&&rec.current.stop();}catch(e){} try{navigator.vibrate&&navigator.vibrate(20);}catch(_){} return; }
+    want.current=true; fails.current=0; setOn(true); startRec(); try{navigator.vibrate&&navigator.vibrate(20);}catch(_){}
   };
-  return <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused?"h360pulse 1.2s infinite":"none"}}>
-    <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
-    {on?(paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label}</button>;
+  return <span style={{display:"inline-flex",flexDirection:"column",gap:4,maxWidth:"100%"}}>
+    <button type="button" onClick={toggle} style={{display:"inline-flex",alignItems:"center",gap:6,border:"1.5px solid "+(on?"#dc2626":"#93c5fd"),background:on?"#fee2e2":"#fff",color:on?"#b91c1c":"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",animation:on&&!paused?"h360pulse 1.2s infinite":"none",alignSelf:"flex-start"}}>
+      <style>{"@keyframes h360pulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 8px rgba(220,38,38,0)}}"}</style>
+      {on?(paused?"⏸ ממתין — חזור לאפליקציה":"⏺ מקשיב… לחץ לעצירה"):label}</button>
+    {on&&live&&<span style={{fontSize:13,color:"#64748b",fontStyle:"italic"}}>… {live}</span>}
+    {warn&&<span style={{fontSize:12,color:"#b45309"}}>{warn}</span>}
+  </span>;
 }
 // ═══ מילוי חכם של יומן ביצוע: מדברים / מקלידים / מדביקים → היומן מתמלא ═══
 const EL_NUM={"אחת":1,"אחד":1,"שתיים":2,"שניים":2,"שתי":2,"שני":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10,"שתים עשרה":12,"שנים עשר":12};
