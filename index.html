@@ -4039,7 +4039,7 @@ const PERSONAL_CLR="#2563eb";
 const CAL_JOB={bg:"#dcfce7",bd:"#16a34a"}, CAL_TASK={bg:"#dbeafe",bd:"#2563eb"};
 function calCardStyle(a,pr,bw=1.5,wc){ const pers=isPersonal(a); const c=pers?CAL_TASK:CAL_JOB; const p=pr||{};
   const cancelled=a.status==="בוטל"; const done=pers?a.status==="בוצע":(!!p.closed||p.stage==="בוצע"||p.stage==="הושלם"||a.status==="בוצע");
-  return {background:cancelled?"#f1f5f9":c.bg,border:`${bw}px ${done&&!cancelled?"solid":"dashed"} ${cancelled?"#94a3b8":c.bd}`,boxShadow:!pers&&a.workerId!=null&&wc?`inset -4px 0 0 ${wc(a.workerId)}`:"none"}; }
+  return {background:cancelled?"#f8fafc":"#fff",color:"#0f172a",border:`${Math.max(bw,2)}px ${done&&!cancelled?"solid":"dashed"} ${cancelled?"#94a3b8":c.bd}`,boxShadow:"0 1px 3px rgba(15,23,42,.08)"}; }
 function personalTitle(a){ return a.title||String(a.customerName||"").replace(/^📌\s*/,"")||"משימה"; }
 function myWorkerFor(currentUser,workers){
   const ws=(workers||[]).filter(w=>!w.deleted);
@@ -4146,7 +4146,8 @@ function useTouchDrag(onDrop){
   return {drag,ghost,cardProps,justDragged,start};
 }
 // ═══ תצוגת יומן בסגנון גוגל: ימים בעמודות זה לצד זה, שעות כלפי מטה ═══
-function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,draggedId,setDraggedId,onMove,narrow,onSwipe}){
+function TimeGrid({days,items,workers,customers=[],execLogs,finance,onOpen,onNew,tdrag,draggedId,setDraggedId,onMove,narrow,onSwipe}){
+  const custById=React.useMemo(()=>{const m={};(customers||[]).forEach(c=>{m[String(c.id)]=c;});return m;},[customers]);
   const H0=7,H1=21, HH=narrow?46:50;
   const toISO=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   const DN=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"], DNF=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
@@ -4169,8 +4170,22 @@ function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,dragge
   const hours=[]; for(let h=H0;h<=H1;h++) hours.push(h);
   const half=[]; for(let m=H0*60;m<(H1+1)*60;m+=30) half.push(m);
   const tStr=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
-  const sw=React.useRef(null);
   const gutter=narrow?34:48;
+  // החלקה עם האצבע: הימים זזים יחד עם האצבע, ובשחרור עוברים (ב-3 ימים — יום אחד בכל פעם)
+  const box=React.useRef(null); const swRef=React.useRef(onSwipe); swRef.current=onSwipe; const tdRef=React.useRef(tdrag); tdRef.current=tdrag;
+  React.useEffect(()=>{ const el=box.current; if(!el) return; let s=null;
+    const setX=(x,anim,op)=>{ el.querySelectorAll(".tg-day").forEach(c=>{ c.style.transition=anim?"transform .22s ease-out, opacity .22s ease-out":"none"; c.style.transform=x?`translateX(${x}px)`:""; c.style.opacity=op==null?"":String(op); }); };
+    const ts=e=>{ if(e.touches.length!==1||!swRef.current) return; s={x:e.touches[0].clientX,y:e.touches[0].clientY,lock:null,dx:0}; };
+    const tm=e=>{ if(!s) return; if(tdRef.current&&tdRef.current.drag){ s=null; setX(0,false); return; } const t=e.touches[0]; const dx=t.clientX-s.x, dy=t.clientY-s.y;
+      if(s.lock==null&&(Math.abs(dx)>10||Math.abs(dy)>10)) s.lock=Math.abs(dx)>Math.abs(dy)*1.2?"h":"v";
+      if(s.lock==="h"){ if(e.cancelable) e.preventDefault(); s.dx=dx; setX(dx,false); } };
+    const te=()=>{ if(!s) return; const st=s; s=null; if(st.lock!=="h") return;
+      const nn=el.querySelectorAll("[data-drop-date].tg-day").length||1; const colW=(el.clientWidth-gutter)/nn; const step=nn===3?1:nn; const W=colW*step; const dir=st.dx>0?1:-1;
+      if(Math.abs(st.dx)>Math.min(60,W*0.22)){ setX(dir*W,true); setTimeout(()=>{ swRef.current&&swRef.current(dir); requestAnimationFrame(()=>{ if(step===nn){ setX(-dir*W*0.35,false,0.3); requestAnimationFrame(()=>requestAnimationFrame(()=>setX(0,true,1))); } else setX(0,false); }); },220); }
+      else setX(0,true); };
+    el.addEventListener("touchstart",ts,{passive:true}); el.addEventListener("touchmove",tm,{passive:false}); el.addEventListener("touchend",te); el.addEventListener("touchcancel",te);
+    return ()=>{ el.removeEventListener("touchstart",ts); el.removeEventListener("touchmove",tm); el.removeEventListener("touchend",te); el.removeEventListener("touchcancel",te); };
+  },[gutter]);
   const evCard=(e,iso)=>{ const a=e.a; const pr=jobProgress(a,execLogs,finance); const pers=isPersonal(a); const col=pers?PERSONAL_CLR:wColor(a.workerId);
     const top=(e.st-H0*60)/60*HH, h=Math.max(20,(e.en-e.st)/60*HH-2); const w=100/e.ncol;
     const cp=tdrag?tdrag.cardProps(a,a.customerName):{};
@@ -4178,37 +4193,39 @@ function TimeGrid({days,items,workers,execLogs,finance,onOpen,onNew,tdrag,dragge
     return <div key={a.id} {...cp} draggable={!narrow} onDragStart={ev=>{setDraggedId&&setDraggedId(a.id);ev.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId&&setDraggedId(null);setDropKey(null);}}
       onClick={ev=>{ev.stopPropagation();onOpen(a);}} title={(a.timeWindow||a.time)+" · "+a.customerName+(a.pestType&&!pers?" · "+a.pestType:"")}
       style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:small?"1px 3px":"3px 5px",fontSize:narrow&&n>3?9:11,lineHeight:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a",textDecoration:pers&&a.status==="בוצע"?"line-through":"none"}}>
-      <div style={{fontWeight:700,whiteSpace:small?"nowrap":"normal",overflow:"hidden",textOverflow:"ellipsis"}}>{a.customerName||"—"}</div>
-      {!small&&<div style={{color:"#475569",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} dir="ltr">{a.timeWindow||a.time}</div>}
-      {!small&&h>=58&&!pers&&<div style={{color:"#64748b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.pestType}</div>}
-      {!small&&h>=74&&!pers&&a.address&&<div style={{color:"#64748b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>📍 {a.address}</div>}
+      {(()=>{ const cu=custById[String(a.customerId)]||{}; const who=pers?a.customerName:(a.contactName||cu.contactName||a.customerName||"—"); const ph=pers?"":(cu.phone||a.phone||""); const L={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
+        return <>
+          <div style={{...L,fontWeight:800,whiteSpace:small?"nowrap":"normal"}}>{who}</div>
+          {!small&&ph&&<div style={{...L,color:"#0f172a",direction:"ltr",textAlign:"right"}}>{ph}</div>}
+          {!small&&h>=52&&!pers&&a.pestType&&<div style={{...L,color:"#334155"}}>🐛 {(Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType)}</div>}
+          {!small&&h>=66&&!pers&&a.address&&<div style={{...L,color:"#334155"}}>📍 {a.address}</div>}
+          {!small&&h>=84&&<div style={{...L,color:"#64748b"}} dir="ltr">{a.timeWindow||a.time}</div>}
+        </>; })()}
       {!small&&h>=44&&<div style={{color:pr.color,fontWeight:700,fontSize:9,whiteSpace:"nowrap",overflow:"hidden"}}>{pr.label}</div>}
     </div>; };
-  return <div style={{direction:"rtl",background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}
-    onTouchStart={e=>{ if(e.touches.length===1) sw.current={x:e.touches[0].clientX,y:e.touches[0].clientY,t:Date.now()}; }}
-    onTouchEnd={e=>{ const s0=sw.current; sw.current=null; if(!s0||!onSwipe||(tdrag&&tdrag.drag)) return; const t=e.changedTouches[0]; const dx=t.clientX-s0.x, dy=t.clientY-s0.y; if(Math.abs(dx)>70&&Math.abs(dy)<45&&Date.now()-s0.t<700) onSwipe(dx>0?1:-1); }}>
+  return <div ref={box} style={{direction:"rtl",background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"hidden",userSelect:"none"}}>
     {/* כותרות ימים */}
-    <div style={{display:"flex",borderBottom:`1px solid ${CLR.border}`,position:"sticky",top:0,background:"#fff",zIndex:5}}>
-      <div style={{width:gutter,flexShrink:0}}/>
-      {days.map((d,i)=>{const iso=toISO(d);const td=iso===today;return <div key={i} onClick={()=>onNew(iso,"")} style={{flex:1,minWidth:0,textAlign:"center",padding:"6px 0 5px",cursor:"pointer",borderRight:`1px solid ${CLR.border}`}}>
+    <div style={{display:"flex",borderBottom:`1px solid ${CLR.border}`,position:"sticky",top:0,background:"#fff",zIndex:5,overflow:"hidden"}}>
+      <div style={{width:gutter,flexShrink:0,position:"relative",zIndex:6,background:"#fff"}}/>
+      {days.map((d,i)=>{const iso=toISO(d);const td=iso===today;return <div key={i} className="tg-day" onClick={()=>onNew(iso,"")} style={{flex:1,minWidth:0,textAlign:"center",padding:"6px 0 5px",cursor:"pointer",borderRight:`1px solid ${CLR.border}`}}>
         <div style={{fontSize:narrow?11:12,color:td?CLR.primary:"#64748b",fontWeight:600}}>{n<=3&&!narrow?DNF[d.getDay()]:DN[d.getDay()]}</div>
         <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:narrow?28:32,height:narrow?28:32,borderRadius:"50%",background:td?CLR.primary:"transparent",color:td?"#fff":"#0f172a",fontWeight:800,fontSize:narrow?15:17}}>{d.getDate()}</div>
       </div>;})}
     </div>
     {/* במהלך היום */}
-    {hasAllDay&&<div style={{display:"flex",borderBottom:"2px solid #fcd34d",background:"#fffbeb"}}>
-      <div style={{width:gutter,flexShrink:0,fontSize:9,color:"#92400e",fontWeight:700,textAlign:"center",paddingTop:4}}>☀️</div>
-      {allDayBy.map((l,i)=><div key={i} style={{flex:1,minWidth:0,padding:2,borderRight:`1px solid ${CLR.border}`}}>
+    {hasAllDay&&<div style={{display:"flex",borderBottom:"2px solid #fcd34d",background:"#fffbeb",overflow:"hidden"}}>
+      <div style={{width:gutter,flexShrink:0,fontSize:9,color:"#92400e",fontWeight:700,textAlign:"center",paddingTop:4,position:"relative",zIndex:6,background:"#fffbeb"}}>☀️</div>
+      {allDayBy.map((l,i)=><div key={i} className="tg-day" style={{flex:1,minWidth:0,padding:2,borderRight:`1px solid ${CLR.border}`}}>
         {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),textDecoration:pers&&a.status==="בוצע"?"line-through":"none",borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{a.customerName}</div>;})}
       </div>)}
     </div>}
     {/* גוף: שעות × ימים */}
     <div style={{display:"flex",position:"relative"}}>
-      <div style={{width:gutter,flexShrink:0,position:"relative",height:(H1-H0+1)*HH}}>
+      <div style={{width:gutter,flexShrink:0,position:"relative",height:(H1-H0+1)*HH,zIndex:6,background:"#fff"}}>
         {hours.map(h=><div key={h} style={{position:"absolute",top:(h-H0)*HH-6,left:0,right:4,textAlign:"left",fontSize:narrow?10:11,color:"#94a3b8",direction:"ltr"}}>{h>H0?String(h).padStart(2,"0")+":00":""}</div>)}
       </div>
       {days.map((d,i)=>{const iso=toISO(d);const ev=layout(items.filter(a=>a.date===iso&&!isAllDay(a)));const td=iso===today;
-        return <div key={i} data-drop-date={iso} style={{flex:1,minWidth:0,position:"relative",height:(H1-H0+1)*HH,borderRight:`1px solid ${CLR.border}`,background:td?"#f7fdf9":"#fff",
+        return <div key={i} className="tg-day" data-drop-date={iso} style={{flex:1,minWidth:0,position:"relative",height:(H1-H0+1)*HH,borderRight:`1px solid ${CLR.border}`,background:td?"#f7fdf9":"#fff",
           backgroundImage:`repeating-linear-gradient(to bottom, #eef2f6 0, #eef2f6 1px, transparent 1px, transparent ${HH}px)`}}>
           {half.map(m=>{const k=iso+"|"+tStr(m);const on=dkey===k;return <div key={m} data-drop-date={iso} data-drop-time={tStr(m)}
             onClick={()=>onNew(iso,tStr(m))}
@@ -4491,10 +4508,10 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {/* Slot load map — for color coding */}
     {(()=>{ window._slotLoad={}; days.forEach(d=>{const iso=toISO(d);filtered.filter(a=>a.date===iso).forEach(a=>{const key=iso+"_"+slotHour(a.time);window._slotLoad[key]=(window._slotLoad[key]||0)+1;});}); return null; })()}
     {tdrag.ghost}
-    {["day","3day","week"].includes(calMode)&&<TimeGrid days={calMode==="day"?[dayDate]:calMode==="3day"?days3:days} items={filtered} workers={workers} execLogs={execLogs} finance={finance}
+    {["day","3day","week"].includes(calMode)&&<TimeGrid days={calMode==="day"?[dayDate]:calMode==="3day"?days3:days} items={filtered} workers={workers} customers={customers} execLogs={execLogs} finance={finance}
       onOpen={openItem} onNew={(iso,time)=>{setPrefill({date:iso,time});setNewKind("job");setShowNew(true);}} tdrag={tdrag}
       draggedId={draggedId} setDraggedId={setDraggedId} onMove={(id,iso,time)=>{const wId=viewWk!=="all"?parseInt(viewWk):null;moveAppt(id,iso,time,wId);}}
-      narrow={narrow} onSwipe={d=>d>0?goNext():goPrev()}/>}
+      narrow={narrow} onSwipe={d=>calMode==="3day"?shiftDay(d>0?1:-1):(d>0?goNext():goPrev())}/>}
     {calMode==="dayold"&&<DayView tdrag={tdrag} date={dayDate} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onApptClick={openItem} onNewAppt={(iso,time)=>{setPrefill({date:iso,time});setNewKind("job");setShowNew(true);}}/>}
     {calMode==="month"&&<MonthView year={monthYear.y} month={monthYear.m} appointments={filtered} workers={workers} finance={finance} execLogs={execLogs} currentUser={currentUser} onDayClick={d=>{setDayDate(d);setCalMode("day");}}/>}
     {calMode==="list"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
