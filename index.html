@@ -331,7 +331,7 @@ const ALL_TABS = [
   {id:"dashboard",label:"📊 דשבורד",perm:null},
   {id:"neworder",label:"📝 הזמנת עבודה",perm:null},
   {id:"customers",label:"👤 לקוחות",perm:null},
-  {id:"calendar",label:"📅 יומן תורים",perm:null},
+  {id:"calendar",label:"📅 יומן עבודה",perm:null},
   {id:"execlog",label:"📋 יומן ביצוע",perm:null},
   {id:"invoices",label:"🧾 חשבוניות",perm:"invoices"},
   {id:"maintenance",label:"🔁 אחזקות",perm:"maintenance"},
@@ -932,7 +932,8 @@ const initScheduledMsgs = [
 // ═══════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════
-const nextId  = arr => arr.length ? Math.max(...arr.map(x=>x.id))+1 : 1;
+// מזהה ייחודי גם כשכמה מכשירים יוצרים רשומות באותו זמן (לא רק "הגדול ביותר + 1" — זה גרם לדריסה בין מכשירים)
+const nextId  = arr => { let mx=0; (arr||[]).forEach(x=>{ const n=Number(x&&x.id); if(isFinite(n)&&n>mx) mx=n; }); const stamp=(Math.floor(Date.now()/1000)-1700000000)*100+Math.floor(Math.random()*100); return Math.max(mx+1,stamp); };
 const todayStr= () => new Date().toISOString().split("T")[0];
 const fmtDate = d => { if(!d) return ""; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 
@@ -4566,16 +4567,19 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     : `${MONTHS_HE[monthYear.m]} ${monthYear.y}`;
   const navBtn={display:"inline-flex",direction:"rtl",alignItems:"center",gap:6,padding:"9px 12px",borderRadius:10,border:`1px solid ${CLR.border}`,background:"#fff",cursor:"pointer",fontSize:14,fontWeight:600,color:CLR.primary,fontFamily:"inherit",whiteSpace:"nowrap"};
   return <div>
-    {/* שורה 1: תצוגה (יומי · שבועי · חודשי) + תור חדש */}
+    {/* שורה 1: פעולות — תור חדש, משימה, מילוי חכם, סינון, ייצוא והדפסה */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
-      <div style={{display:"flex",gap:2,background:"#e8f5ee",borderRadius:10,padding:3,flex:"1 1 100%",maxWidth:460}}>
-        {[["day","יום"],["3day","3 ימים"],["week","שבוע"],["month","חודש"],["list","רשימה"]].map(([m,l])=>(
-          <button key={m} onClick={()=>setCalMode(m)} style={{flex:1,padding:"8px 4px",whiteSpace:"nowrap",borderRadius:8,border:"none",cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:calMode===m?700:500,background:calMode===m?"#fff":"transparent",color:calMode===m?"#1a5c3a":"#6b7280"}}>{l}</button>
-        ))}
-      </div>
       <Btn sm onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
       <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
       <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>✨ מילוי חכם</Btn>
+      {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
+        <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
+      <Btn sm v="secondary" onClick={()=>exportAppointments(appointments.filter(a=>!isPersonal(a)))}>📥 ייצא</Btn>
+      <Btn sm v="ghost" onClick={()=>{
+        if(calMode==="day"||calMode==="3day") printDaySchedule(dayDate,appointments,workers);
+        else if(calMode==="week"||calMode==="list") printDaySchedule(days[0],appointments,workers);
+        else { const d=new Date(monthYear.y,monthYear.m,1); printDaySchedule(d,appointments,workers); }
+      }}>🖨️ הדפס רשימה</Btn>
     </div>
     {/* שורה 2: ניווט — החצים מצביעים החוצה */}
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
@@ -4587,17 +4591,6 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
       <div style={{fontWeight:800,color:CLR.primary,fontSize:16,whiteSpace:"nowrap"}}>{periodLabel}</div>
       {(calMode==="day"||calMode==="3day")&&<input type="date" value={toISO(dayDate)} onChange={e=>{const d=new Date(e.target.value+"T12:00:00");if(!isNaN(d))setDayDate(d);}} style={{padding:"5px 8px",borderRadius:8,border:"1px solid #e5e7eb",fontSize:13}}/>}
-    </div>
-    {/* שורה 4: כלים */}
-    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
-      {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
-        <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
-      <Btn sm v="secondary" onClick={()=>exportAppointments(appointments.filter(a=>!isPersonal(a)))}>📥 ייצא</Btn>
-      <Btn sm v="ghost" onClick={()=>{
-        if(calMode==="day"||calMode==="3day") printDaySchedule(dayDate,appointments,workers);
-        else if(calMode==="week"||calMode==="list") printDaySchedule(days[0],appointments,workers);
-        else { const d=new Date(monthYear.y,monthYear.m,1); printDaySchedule(d,appointments,workers); }
-      }}>🖨️ הדפס רשימה</Btn>
     </div>
     <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>
       {calMode==="weektable"&&<span>
@@ -4611,6 +4604,12 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       {["day","3day","week"].includes(calMode)&&<span>📅 לחיצה על משבצת ריקה — תור חדש · {narrow?"✋ לחיצה ארוכה על תור וגרירה — להזזה · החלקה הצידה — ימים הבאים/קודמים":"גרירת תור — להזזה"}</span>}
       {calMode==="list"&&<span>✋ לחיצה ארוכה על תור וגרירה ליום אחר — להזזה</span>}
       {calMode==="month"&&<span>📅 לחץ על יום לעבור לתצוגה יומית</span>}
+    </div>
+    {/* מעל היומן: החלפת תצוגה — יום · 3 ימים · שבוע · חודש · רשימה */}
+    <div style={{display:"flex",gap:2,background:"#e8f5ee",borderRadius:10,padding:3,marginBottom:8}}>
+      {[["day","יום"],["3day","3 ימים"],["week","שבוע"],["month","חודש"],["list","רשימה"]].map(([m,l])=>(
+          <button key={m} onClick={()=>setCalMode(m)} style={{flex:1,padding:"8px 4px",whiteSpace:"nowrap",borderRadius:8,border:"none",cursor:"pointer",fontSize:14,fontFamily:"inherit",fontWeight:calMode===m?700:500,background:calMode===m?"#fff":"transparent",color:calMode===m?"#1a5c3a":"#6b7280"}}>{l}</button>
+        ))}
     </div>
     {/* Slot load map — for color coding */}
     {(()=>{ window._slotLoad={}; days.forEach(d=>{const iso=toISO(d);filtered.filter(a=>a.date===iso).forEach(a=>{const key=iso+"_"+slotHour(a.time);window._slotLoad[key]=(window._slotLoad[key]||0)+1;});}); return null; })()}
@@ -6234,7 +6233,7 @@ function NewFinanceModal({customers,onClose,onSave,initialType="הכנסה"}){
 // ═══ 🔐 הרשאות: כל לשונית בתפריט + ברירות מחדל לפי תפקיד ═══
 const PERM_GROUPS=[
   {g:"ראשי",items:[["fieldview","📋 המשימות שלי"],["dashboard","📊 דשבורד"],["neworder","📝 הזמנת עבודה"],["customers","👤 לקוחות"],["leads","🌐 לידים מהאתר"]]},
-  {g:"עבודה",items:[["calendar","📅 יומן תורים"],["execlog","📋 יומן ביצוע"],["mychems","🧪 החומרים שלי"],["maintenance","🔁 אחזקות"],["projects","🏗️ פרויקטים"]]},
+  {g:"עבודה",items:[["calendar","📅 יומן עבודה"],["execlog","📋 יומן ביצוע"],["mychems","🧪 החומרים שלי"],["maintenance","🔁 אחזקות"],["projects","🏗️ פרויקטים"]]},
   {g:"כספים",items:[["invoices","🧾 חשבוניות",true],["expenses","💸 הוצאות"],["finance","💰 כספים"]]},
   {g:"תקשורת",items:[["templates","💬 תבניות הודעה"],["scheduler","⏰ הודעות מתוזמנות"],["collabs","🤝 שיתופי פעולה"]]},
   {g:"ניהול",items:[["notes","📓 הערות"],["regional","🗺️ ניתוח אזורי"],["workers","👥 עובדים"],["trash","🗑️ סל מחזור"]]},
@@ -8710,9 +8709,10 @@ function TrashBin({items, currentUser}){
   </div>;
 }
 
-function Workers({workers,setWorkers,appointments}){
+function Workers({workers,setWorkers,appointments,execLogs=[],finance=[]}){
   const [showNew,setShowNew]=useState(false);
   const [editW,setEditW]=useState(null);
+  const [profW,setProfW]=useState(null);
   const cnt=wid=>appointments.filter(a=>a.workerId===wid).length;
   const done=wid=>appointments.filter(a=>a.workerId===wid&&a.status==="בוצע").length;
   return <div>
@@ -8723,7 +8723,7 @@ function Workers({workers,setWorkers,appointments}){
     <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
       {workers.map(w=><div key={w.id} style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:"18px 22px",width:255}}>
         <div style={{width:48,height:48,borderRadius:"50%",background:w.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:w.color,marginBottom:10,border:`2px solid ${w.color}44`}}>{w.name.charAt(0)}</div>
-        <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>{w.name}</div>
+        <div onClick={()=>setProfW(w)} style={{fontWeight:700,fontSize:15,marginBottom:6,cursor:"pointer",color:CLR.primary,textDecoration:"underline",textUnderlineOffset:3}}>{w.name}</div>
         <div style={{display:"flex",gap:6,marginBottom:10}}><span style={{background:w.color+"22",color:w.color,padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600}}>{w.role}</span>{w.role!=="מדביר"&&w.alsoTech&&<span style={{background:"#dcfce7",color:"#166534",padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600}}>👷 גם מדביר</span>}<Badge status={w.status}/></div>
         {w.crmUserId!=null&&<div style={{fontSize:11,color:CLR.muted,marginBottom:6}}>🔗 משתמש מערכת</div>}
         <div style={{fontSize:12,color:CLR.muted,lineHeight:2}}>
@@ -8744,6 +8744,7 @@ function Workers({workers,setWorkers,appointments}){
         {w.docPreview==="pdf"&&<div style={{fontSize:11,color:CLR.info,marginTop:6}}>📄 {w.docName}</div>}
         {w.role!=="מדביר"&&<button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,alsoTech:!x.alsoTech}:x))} style={{marginTop:10,width:"100%",background:w.alsoTech?"#16a34a":CLR.surface,color:w.alsoTech?"#fff":CLR.text||"#0f172a",border:`1px solid ${w.alsoTech?"#16a34a":CLR.border}`,borderRadius:6,padding:"7px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>{w.alsoTech?"✓ משובץ גם כמדביר":"👷 אפשר שיבוץ כמדביר"}</button>}
         <div style={{marginTop:12,display:"flex",gap:6}}>
+          <button onClick={()=>setProfW(w)} style={{flex:1,background:"#0f766e",color:"#fff",border:"none",borderRadius:6,padding:"6px 0",fontSize:11,fontWeight:700,cursor:"pointer"}}>📊 דשבורד</button>
           <button onClick={()=>setEditW(w)} style={{flex:1,background:CLR.primaryLight,color:CLR.primary,border:"none",borderRadius:6,padding:"6px 0",fontSize:11,fontWeight:700,cursor:"pointer"}}>✏️ ערוך</button>
           <button onClick={()=>setWorkers(ws=>ws.map(x=>x.id===w.id?{...x,status:x.status==="פעיל"?"לא פעיל":"פעיל"}:x))} style={{flex:1,background:CLR.surface,color:CLR.muted,border:`1px solid ${CLR.border}`,borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>{w.status==="פעיל"?"⏸ השהה":"▶ הפעל"}</button>
           <button onClick={()=>{if(window.confirm(`להעביר את ${w.name} לארכיון?`))softDelete(setWorkers,w.id);}} style={{flex:1,background:"#fee2e2",color:CLR.danger,border:"none",borderRadius:6,padding:"6px 0",fontSize:11,cursor:"pointer"}}>🗑 ארכב</button>
@@ -8751,8 +8752,64 @@ function Workers({workers,setWorkers,appointments}){
       </div>)}
     </div>
     {showNew&&<NewWorkerModal onClose={()=>setShowNew(false)} onSave={w=>setWorkers(ws=>[...ws,{...w,id:nextId(ws)}])}/>}
+    {profW&&<WorkerProfile w={workers.find(x=>x.id===profW.id)||profW} appointments={appointments} execLogs={execLogs} finance={finance} onClose={()=>setProfW(null)} onEdit={()=>{setEditW(workers.find(x=>x.id===profW.id)||profW);setProfW(null);}}/>}
     {editW&&<NewWorkerModal initial={editW} onClose={()=>setEditW(null)} onSave={w=>setWorkers(ws=>ws.map(x=>x.id===editW.id?{...x,...w,id:x.id,crmUserId:w.crmUserId??x.crmUserId}:x))}/>}
   </div>;
+}
+
+// ═══ 📊 דשבורד עובד: תורים, יומני ביצוע, חשבוניות וסיכומים — לחיצה על עובד ברשימת העובדים ═══
+function WorkerProfile({w,appointments=[],execLogs=[],finance=[],onClose,onEdit}){
+  const [sec,setSec]=useState("sum");
+  const today=todayStr();
+  const mine=a=>String(a.workerId)===String(w.id)||(!a.workerId&&a.workerName===w.name);
+  const appts=appointments.filter(a=>!a.deleted&&mine(a));
+  const upcoming=appts.filter(a=>a.date>=today&&a.status!=="בוצע"&&a.status!=="בוטל").sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  const past=appts.filter(a=>a.date<today||a.status==="בוצע").sort((a,b)=>(b.date+(b.time||"")).localeCompare(a.date+(a.time||"")));
+  const logs=(execLogs||[]).filter(l=>!l.deleted&&(String(l.workerId)===String(w.id)||l.workerName===w.name)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const docs=(finance||[]).filter(f=>isDocRec(f)&&(f.workerName===w.name||(w.crmUserId!=null&&String(f.createdById)===String(w.crmUserId)))).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const ym=today.slice(0,7);
+  const monthDone=appts.filter(a=>a.status==="בוצע"&&String(a.date||"").startsWith(ym));
+  const monthRev=monthDone.reduce((t,a)=>t+(parseFloat(a.price)||0),0);
+  const docsSum=docs.filter(f=>String(f.date||"").startsWith(ym)).reduce((t,f)=>t+(parseFloat(f.total!=null?f.total:f.amount)||0),0);
+  const noLog=appts.filter(a=>a.status==="בוצע"&&!a.executionLog&&!logs.some(l=>String(l.apptId)===String(a.id)));
+  const card=(n,l,c)=><div style={{flex:"1 1 120px",background:"#fff",border:`1px solid ${CLR.border}`,borderRadius:10,padding:"10px 12px"}}><div style={{fontSize:20,fontWeight:800,color:c||CLR.primary}}>{n}</div><div style={{fontSize:12,color:CLR.muted}}>{l}</div></div>;
+  const row={display:"flex",justifyContent:"space-between",gap:8,padding:"9px 10px",borderBottom:`1px solid ${CLR.border}`,fontSize:13,alignItems:"center"};
+  const apRow=a=><div key={a.id} style={row}><div><b>{fmtDate(a.date)}</b> {a.time&&a.timeWindow!==ALL_DAY_TW?a.time:""} · {a.customerName}<div style={{fontSize:11,color:CLR.muted}}>{[a.pestType,a.address].filter(Boolean).join(" · ")}</div></div><span style={{fontSize:11,whiteSpace:"nowrap",color:a.status==="בוצע"?"#16a34a":"#64748b"}}>{a.status==="בוצע"?"✓ בוצע":a.status}</span></div>;
+  const empty=t=><div style={{padding:16,textAlign:"center",color:CLR.muted,fontSize:13}}>{t}</div>;
+  const tabs=[["sum","סיכום"],["up","תורים קרובים ("+upcoming.length+")"],["past","היסטוריה"],["logs","יומני ביצוע ("+logs.length+")"],["docs","חשבוניות ("+docs.length+")"]];
+  return <Modal title={"📊 "+w.name} onClose={onClose} width={680}>
+    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+      <div style={{width:44,height:44,borderRadius:"50%",background:(w.color||"#16a34a")+"22",color:w.color||"#16a34a",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:18}}>{(w.name||"?")[0]}</div>
+      <div style={{flex:1,fontSize:13,color:CLR.muted}}>{w.role}{w.phone?" · 📞 "+w.phone:""}{w.license?" · 🪪 "+w.license:""}</div>
+      {w.phone&&<a href={"tel:"+w.phone} style={{textDecoration:"none"}}><Btn sm v="secondary">📞 חייג</Btn></a>}
+      <Btn sm onClick={onEdit}>✏️ ערוך עובד והרשאות</Btn>
+    </div>
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:12}}>
+      {tabs.map(([k,l])=><button key={k} onClick={()=>setSec(k)} style={{flex:"1 1 auto",padding:"7px 8px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:sec===k?800:500,background:sec===k?"#fff":"transparent",color:sec===k?CLR.primary:"#64748b"}}>{l}</button>)}
+    </div>
+    {sec==="sum"&&<div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+        {card(upcoming.length,"תורים פתוחים")}
+        {card(monthDone.length,"בוצעו החודש","#16a34a")}
+        {card("₪"+Math.round(monthRev).toLocaleString(),"הכנסה מתורים החודש")}
+        {card("₪"+Math.round(docsSum).toLocaleString(),"חשבוניות החודש","#0f766e")}
+        {card(logs.length,"יומני ביצוע")}
+        {card(noLog.length,"בוצעו בלי יומן",noLog.length?"#dc2626":"#16a34a")}
+      </div>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>הבאים בתור</div>
+      {upcoming.slice(0,5).map(apRow)}{!upcoming.length&&empty("אין תורים קרובים")}
+      {noLog.length>0&&<><div style={{fontWeight:700,fontSize:14,margin:"12px 0 4px",color:"#dc2626"}}>⚠️ בוצעו ועדיין אין יומן ביצוע</div>{noLog.slice(0,5).map(apRow)}</>}
+    </div>}
+    {sec==="up"&&<div>{upcoming.map(apRow)}{!upcoming.length&&empty("אין תורים קרובים")}</div>}
+    {sec==="past"&&<div>{past.slice(0,60).map(apRow)}{!past.length&&empty("אין היסטוריה עדיין")}</div>}
+    {sec==="logs"&&<div>{logs.map(l=><div key={l.id} style={row}><div><b>{fmtDate(l.date)}</b> · {l.clientName||"—"}{l.docNum?" · מס׳ "+l.docNum:""}<div style={{fontSize:11,color:CLR.muted}}>{[(l.pest||[]).join(", "),l.address].filter(Boolean).join(" · ")}</div></div>
+      <button onClick={async()=>{ try{ const b=await execLogPdfBlob(l); const u=URL.createObjectURL(b); window.open(u,"_blank"); }catch(e){ alert("לא הצלחתי לפתוח PDF"); } }} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>📄 PDF</button></div>)}
+      {!logs.length&&empty("אין יומני ביצוע")}
+      <div style={{marginTop:10}}><Btn sm v="ghost" onClick={()=>{onClose();window.__h360Nav&&window.__h360Nav("execlog");}}>לכל יומני הביצוע ←</Btn></div></div>}
+    {sec==="docs"&&<div>{docs.map(f=><div key={f.id} style={row}><div><b>{fmtDate(f.date)}</b> · {f.customer||"—"}<div style={{fontSize:11,color:CLR.muted}}>{docTypeOf(f)}{f.invoiceNum?" · מס׳ "+f.invoiceNum:""}</div></div><b>₪{Math.round(parseFloat(f.total!=null?f.total:f.amount)||0).toLocaleString()}</b></div>)}
+      {!docs.length&&empty("אין חשבוניות שהעובד הוציא")}
+      <div style={{marginTop:10}}><Btn sm v="ghost" onClick={()=>{onClose();window.__h360Nav&&window.__h360Nav("invoices");}}>לכל החשבוניות ←</Btn></div></div>}
+  </Modal>;
 }
 
 // ─── בנר תזכורות חכם ─────────────────────────────────────────────────────
@@ -9817,7 +9874,7 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
   </div>;
 }
 
-function SettingsPage(){
+function SettingsPage({isAdmin,onReset}){
   const [theme,setTheme]=useState(()=>{ try{ return localStorage.getItem('h360_theme')||'light'; }catch(e){ return 'light'; } });
   const pick=t=>{ setTheme(t); try{ localStorage.setItem('h360_theme',t); }catch(e){} try{ window.h360ApplyTheme&&window.h360ApplyTheme(); }catch(e){} };
   const opt=(k,icon,title,sub)=><button key={k} type="button" onClick={()=>pick(k)} style={{flex:"1 1 150px",textAlign:"right",padding:"14px",borderRadius:14,border:"2px solid "+(theme===k?CLR.primary:"#e2e8f0"),background:theme===k?"#f0fdf4":"#fff",cursor:"pointer",fontFamily:"inherit"}}>
@@ -9833,6 +9890,11 @@ function SettingsPage(){
         {opt("auto","🌗","אוטומטי","לפי הגדרת הטלפון")}
       </div>
     </div>
+    {isAdmin&&<details style={{background:"#fff",border:"1px solid #fecaca",borderRadius:14,padding:14}}>
+      <summary style={{cursor:"pointer",fontWeight:800,color:"#b91c1c"}}>⚠️ אזור מסוכן</summary>
+      <div style={{fontSize:13,color:"#64748b",margin:"8px 0"}}>איפוס מוחק את הנתונים מהמכשיר הזה. עשה גיבוי לפני (כפתור 💾 גיבוי במחשב).</div>
+      <button type="button" onClick={onReset} style={{border:"1px solid #fca5a5",background:"#fef2f2",color:"#dc2626",borderRadius:10,padding:"8px 14px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>↺ איפוס נתונים</button>
+    </details>}
   </div>;
 }
 function App(){
@@ -10013,7 +10075,7 @@ function App(){
 
     {id:"customers",label:"👤 לקוחות",short:"👤"},
     {id:"leads",label:"🌐 לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),short:"🌐",hideFor:"מדביר"},
-    {id:"calendar",label:"📅 יומן תורים",short:"📅"},
+    {id:"calendar",label:"📅 יומן עבודה",short:"📅"},
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
     {id:"mychems",label:"🧪 החומרים שלי",short:"🧪"},
     {id:"invoices",label:"🧾 חשבוניות",short:"🧾",hideFor:"מדביר"},
@@ -10052,7 +10114,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן תורים",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -10074,7 +10136,7 @@ function App(){
         <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות",hide:null}]},
@@ -10131,7 +10193,7 @@ function App(){
           <button onClick={()=>setShowSearch(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>🔍 חיפוש</button>
           <button onClick={exportBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>💾 גיבוי</button>
           <button onClick={importBackup} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontFamily:"inherit"}}>📂 שחזר</button>
-          <button onClick={resetAllData} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #fca5a5",background:"#fef2f2",color:"#dc2626",fontFamily:"inherit"}}>↺ איפוס</button>
+          <button title="רענון נתונים מכל המכשירים" onClick={e=>{window.dispatchEvent(new Event('h360-refresh'));reloadLeads();try{navigator.serviceWorker&&navigator.serviceWorker.getRegistration().then(r=>r&&r.update());}catch(_){} const b=e.currentTarget;b.style.opacity=0.4;setTimeout(()=>{b.style.opacity=1;},700);showToast("🔄 הנתונים רועננו");}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:8,fontSize:12.5,fontWeight:600,cursor:"pointer",border:"1px solid #bbf7d0",background:"#f0fdf4",color:"#166534",fontFamily:"inherit"}}>🔄 רענון</button>
         </div>}
 
         {/* Topbar (mobile) */}
@@ -10173,7 +10235,7 @@ function App(){
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן תורים"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
@@ -10211,7 +10273,7 @@ function App(){
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={calAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
-              {tab==="settings"&&<SettingsPage/>}
+              {tab==="settings"&&<SettingsPage isAdmin={user.role==="מנהל"} onReset={resetAllData}/>}
               {tab==="mychems"&&<MyChemicals currentUser={user} workers={activeWorkers} setWorkers={setWorkers} execLogs={execLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
@@ -10230,7 +10292,7 @@ function App(){
             {tab==="finance"&&<Finance finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
             {tab==="expenses"&&<Finance key="expenses" initialType="הוצאה" finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
-            {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments}/>}
+            {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments} execLogs={execLogs} finance={activeFinance}/>}
             {tab==="trash"&&<TrashBin items={deletedItems} currentUser={user}/>}
             </div>
 
