@@ -4456,6 +4456,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
 }
 
 function WeekCalendar({appointments,setAppointments,customers,setCustomers,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser,maintenance=[],openReq=null,onOpenDone}){
+  const [showRoute,setShowRoute]=useState(false);
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
   const [newKind,setNewKind]=useState("job");
@@ -4572,6 +4573,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       <Btn sm onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
       <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
       <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>✨ מילוי חכם</Btn>
+      <Btn sm v="secondary" onClick={()=>setShowRoute(true)}>🗺️ מסלול</Btn>
       {currentUser.role!=="מדביר"&&<select value={viewWk} onChange={e=>setViewWk(e.target.value)} style={{padding:"6px 10px",borderRadius:8,border:`1px solid ${CLR.border}`,fontSize:13}}>
         <option value="all">כל המדבירים</option>{workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
       <Btn sm v="secondary" onClick={()=>exportAppointments(appointments.filter(a=>!isPersonal(a)))}>📥 ייצא</Btn>
@@ -4727,6 +4729,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         }}
         onCancel={()=>setShowNew(false)}/></>}
     </Modal>}
+    {showRoute&&<RoutePlanner appointments={appointments} setAppointments={setAppointments} workers={workers} currentUser={currentUser} initialDate={calMode==="day"||calMode==="3day"?toISO(dayDate):todayStr()} onClose={()=>setShowRoute(false)}/>}
     {showQuick&&<QuickAddModal workers={workers} currentUser={currentUser} customers={customers} cityNames={[]}
       onClose={()=>{setShowQuick(false);backIfReq();}}
       onSaveTask={t=>{let id;setAppointments(as=>{id=nextId(as);return [...as,{...t,id}];});setDayDate(new Date(t.date+"T12:00:00"));return {apptId:()=>id};}}
@@ -7360,6 +7363,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
 function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs,mineOnly=null}){
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
+  const [acctRep,setAcctRep]=useState(false);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
   const custOf=l=>customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
@@ -7428,6 +7432,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
       {["חשבונית מס/קבלה","חשבונית מס","חשבון עסקה","קבלה"].map(t=><Btn key={t} sm onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{background:DOC_TYPES[t].color,color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ {t}</Btn>)}
       <Btn sm onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{background:"#7c3aed",color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ חשבונית מרכזת</Btn>
+      {!mineOnly&&<Btn sm onClick={()=>setAcctRep(true)} style={{background:"#0f172a",color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>📤 דוח לרואה חשבון</Btn>}
     </div>
     {pendingInv.length>0&&<div style={{background:"#fff7ed",border:"1.5px solid #fdba74",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
       <div style={{fontWeight:800,fontSize:15,color:"#9a3412",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית מס/קבלה ({pendingInv.length})</div>
@@ -7482,6 +7487,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       </table>
     </div>
     <div style={{fontSize:12,color:CLR.muted,marginTop:8}}>מסמך חשבונאי לא מוחקים — מבטלים אותו בחשבונית זיכוי. חשבון עסקה אפשר להעביר לארכיון.</div>
+    {acctRep&&<AccountantReport finance={finance} onClose={()=>setAcctRep(false)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -8500,6 +8506,7 @@ function RegionalStats({appointments,customers,workers,finance}){
 }
 // ─── תצוגת מדביר ─────────────────────────────────────────────────────────
 function WorkerFieldView({currentUser, appointments, setAppointments, customers, execLogs, setExecLogs, workers=[], finance=[], onOpenAppt, onQuickAdd}){
+  const [fvRoute,setFvRoute]=useState(false);
   const today = todayStr();
   const [expandedId, setExpandedId] = React.useState(null);
   const [note, setNote] = React.useState({});
@@ -8574,6 +8581,8 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
         </div>
       </div>
 
+      <button onClick={()=>setFvRoute(true)} style={{width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid #cbd5e1",background:"#fff",color:"#0f172a",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>🗺️ המסלול שלי היום — ניווט לכל העצירות</button>
+      {fvRoute&&<RoutePlanner appointments={appointments} setAppointments={setAppointments} workers={workers} currentUser={currentUser} onClose={()=>setFvRoute(false)}/>}
       {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>✨ מילוי חכם ליומן — 🎤 דבר · 📋 הדבק · ⌨️ הקלד</button>}
       {/* משימות אישיות של היום */}
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
@@ -9874,7 +9883,455 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
   </div>;
 }
 
-function SettingsPage({isAdmin,onReset}){
+
+// ═══════════════════════════════════════════════════════════════════════
+// 📦 דוח לרואה חשבון · 🗺️ מסלול יומי · 💾 גיבוי אוטומטי · 📅 סנכרון מגוגל יומן
+// ═══════════════════════════════════════════════════════════════════════
+let __jszip=null;
+function loadJsZip(){
+  if(window.JSZip) return Promise.resolve(window.JSZip);
+  if(__jszip) return __jszip;
+  __jszip=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    sc.onload=()=>res(window.JSZip); sc.onerror=()=>{__jszip=null; rej(new Error('טעינת כלי הכיווץ נכשלה'));}; document.head.appendChild(sc); });
+  return __jszip;
+}
+const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} };
+const isoOf=d=>{ const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); };
+function saveBlobAs(blob,name){ const a=Object.assign(document.createElement("a"),{href:URL.createObjectURL(blob),download:name}); document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+
+// ─── 📦 דוח לרואה חשבון ────────────────────────────────────────────────
+// מסמך מלא להדפסה (גם לרשומות ישנות שאין בהן שורות)
+function docForPdf(f){
+  const t=docTypeOf(f); const legacy=!f.lines;
+  if(!legacy) return f;
+  const tot=f.total!=null?f.total:r2((f.amount||0)*(1+VAT_RATE/100));
+  return {...f,docType:t||"חשבונית מס/קבלה",docSeq:f.invoiceNum,draft:true,cust:{name:f.customer,phone:f.phone,address:f.address},lines:[{desc:"הדברת "+(f.pestType||""),qty:"1",unit:"יח׳",price:String(f.amount)}],inclVat:false,before:f.amount,vat:r2((f.amount||0)*VAT_RATE/100),total:tot,payments:[{method:f.payMethod||"",amount:tot,date:f.date}]};
+}
+function docNums(f){
+  const total=f.total!=null?Number(f.total):r2((f.amount||0)*(1+VAT_RATE/100));
+  const before=f.before!=null?Number(f.before):(f.lines?r2(total/(1+VAT_RATE/100)):Number(f.amount||0));
+  const vat=f.vat!=null?Number(f.vat):r2(total-before);
+  const t=docTypeOf(f); const sign=t==="חשבונית זיכוי"?-1:1;
+  return {before:sign*before,vat:sign*vat,total:sign*total};
+}
+function periodPresets(){
+  const now=new Date(); const y=now.getFullYear(), m=now.getMonth();
+  const range=(y1,m1,y2,m2)=>[isoOf(new Date(y1,m1,1)),isoOf(new Date(y2,m2+1,0))];
+  // תקופת דיווח מע"מ דו-חודשית: ינו-פבר, מרץ-אפר...
+  const bi=m-(m%2); const pbStart=new Date(y,bi-2,1);
+  return [
+    ["prevBi","תקופת מע״מ קודמת (חודשיים)",range(pbStart.getFullYear(),pbStart.getMonth(),pbStart.getFullYear(),pbStart.getMonth()+1)],
+    ["prev1","חודש קודם",range(y,m-1,y,m-1)],
+    ["last2","חודשיים אחרונים",range(y,m-2,y,m-1)],
+    ["prevQ","3 חודשים אחרונים",range(y,m-3,y,m-1)],
+    ["cur","החודש (עד היום)",[isoOf(new Date(y,m,1)),isoOf(now)]],
+    ["year","השנה (עד היום)",[y+"-01-01",isoOf(now)]],
+  ];
+}
+function AccountantReport({finance,onClose}){
+  const presets=periodPresets();
+  const [preset,setPreset]=useState("prevBi");
+  const [from,setFrom]=useState(presets[0][2][0]); const [to,setTo]=useState(presets[0][2][1]);
+  const [busy,setBusy]=useState(""); const [email,setEmail]=useState(()=>lsGet("h360_acct_email",""));
+  const pick=k=>{ setPreset(k); const p=presets.find(x=>x[0]===k); if(p){ setFrom(p[2][0]); setTo(p[2][1]); } };
+  const docs=(finance||[]).filter(isDocRec).filter(f=>(f.date||"")>=from&&(f.date||"")<=to&&f.status!=="בוטל"&&!f.draftOnly)
+    .sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.invoiceNum||"").localeCompare(String(b.invoiceNum||"")));
+  const byType={}; docs.forEach(f=>{ const t=docTypeOf(f)||"אחר"; const n=docNums(f); const o=byType[t]=byType[t]||{n:0,before:0,vat:0,total:0}; o.n++; o.before+=n.before; o.vat+=n.vat; o.total+=n.total; });
+  const inv=docs.filter(f=>DOC_TYPES[docTypeOf(f)]?.invoice);
+  const S=inv.reduce((s,f)=>{const n=docNums(f); s.before+=n.before; s.vat+=n.vat; s.total+=n.total; return s;},{before:0,vat:0,total:0});
+  const pays={}; docs.filter(f=>DOC_TYPES[docTypeOf(f)]?.receipt).forEach(f=>{ const ps=(f.payments&&f.payments.length)?f.payments:[{method:f.payMethod||"לא צוין",amount:docNums(f).total}]; ps.forEach(p=>{ pays[p.method||"לא צוין"]=(pays[p.method||"לא צוין"]||0)+(parseFloat(p.amount)||0); }); });
+  const missingAlloc=docs.filter(f=>f.needsAllocation&&!f.allocationNum);
+  const label=fmtDate(from)+" – "+fmtDate(to);
+  const fileBase="דוח לרואה חשבון "+from+" עד "+to;
+  const csv=()=>{
+    const head=["תאריך","סוג מסמך","מספר","לקוח","ח.פ / ת.ז לקוח","לפני מע״מ","מע״מ","סה״כ","אמצעי תשלום","מספר הקצאה","סטטוס","הופק ע״י"];
+    const rows=docs.map(f=>{const n=docNums(f); return [fmtDate(f.date),docTypeOf(f),f.invoiceNum||"",f.customer||"",(f.cust||{}).taxId||"",n.before.toFixed(2),n.vat.toFixed(2),n.total.toFixed(2),((f.payments||[]).map(p=>p.method).filter(Boolean).join(" + "))||f.payMethod||"",f.allocationNum||"",f.status||"",f.createdBy||f.workerName||""];});
+    rows.push([]); rows.push(["סיכום חשבוניות","","","","",S.before.toFixed(2),S.vat.toFixed(2),S.total.toFixed(2)]);
+    Object.entries(pays).forEach(([m,v])=>rows.push(["תקבולים — "+m,"","","","","","",v.toFixed(2)]));
+    const esc=v=>{ const s=String(v==null?"":v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+    return "﻿"+[head,...rows].map(r=>r.map(esc).join(",")).join("\r\n");
+  };
+  const summaryHtml=()=>`<div dir="rtl" style="font-family:Arial;padding:24px"><h2>${COMPANY.name} — דוח מסמכים לרואה חשבון</h2><div>תקופה: ${label} · ${docs.length} מסמכים</div>
+    <table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:12px;width:100%"><tr style="background:#f1f5f9"><th>סוג</th><th>כמות</th><th>לפני מע״מ</th><th>מע״מ</th><th>סה״כ</th></tr>
+    ${Object.entries(byType).map(([t,o])=>`<tr><td>${t}</td><td>${o.n}</td><td>${money(o.before)}</td><td>${money(o.vat)}</td><td>${money(o.total)}</td></tr>`).join("")}
+    <tr style="font-weight:bold;background:#ecfdf5"><td>סה״כ חשבוניות (אחרי זיכויים)</td><td>${inv.length}</td><td>${money(S.before)}</td><td>${money(S.vat)}</td><td>${money(S.total)}</td></tr></table>
+    <h3>תקבולים לפי אמצעי תשלום</h3><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%">${Object.entries(pays).map(([m,v])=>`<tr><td>${m}</td><td>${money(v)}</td></tr>`).join("")||"<tr><td>אין</td></tr>"}</table>
+    ${missingAlloc.length?`<p style="color:#b91c1c">⚠️ ${missingAlloc.length} חשבוניות בלי מספר הקצאה: ${missingAlloc.map(f=>f.invoiceNum).join(", ")}</p>`:""}
+    <p style="color:#64748b;font-size:12px">הופק ב-${new Date().toLocaleString("he-IL")} ממערכת ${COMPANY.name}</p></div>`;
+  const makeZip=async()=>{
+    const JSZip=await loadJsZip(); const zip=new JSZip();
+    zip.file("טבלת מסמכים.csv",csv());
+    zip.file("סיכום.html","<!doctype html><meta charset='utf-8'>"+summaryHtml());
+    const dir=zip.folder("מסמכים");
+    for(let i=0;i<docs.length;i++){ const f=docs[i]; setBusy("מכין PDF "+(i+1)+" מתוך "+docs.length+"…");
+      try{ const b=await docPdfBlob(docForPdf(f)); dir.file((f.date||"")+" "+String(docTypeOf(f)).replace(/[\\/:*?"<>|]/g,"-")+" "+String(f.invoiceNum||f.id).replace(/[\\/:*?"<>|]/g,"-")+" - "+String(f.customer||"").replace(/[\\/:*?"<>|]/g,"").slice(0,30)+".pdf",b); }
+      catch(e){ dir.file("שגיאה "+(f.invoiceNum||f.id)+".txt","לא הצלחתי ליצור PDF: "+(e.message||e)); } }
+    setBusy("מכווץ…");
+    return zip.generateAsync({type:"blob"});
+  };
+  const run=async mode=>{
+    if(!docs.length) return alert("אין מסמכים בתקופה הזו");
+    try{
+      if(mode==="csv"){ saveBlobAs(new Blob([csv()],{type:"text/csv;charset=utf-8"}),fileBase+".csv"); return; }
+      setBusy("מתחיל…"); const blob=await makeZip(); const name=fileBase+".zip";
+      if(mode==="share"){ const file=new File([blob],name,{type:"application/zip"});
+        if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file],title:fileBase,text:COMPANY.name+" — מסמכים לתקופה "+label}); }
+        else { saveBlobAs(blob,name); alert("המכשיר לא תומך בשיתוף קובץ — הקובץ ירד, צרף אותו למייל."); } }
+      else saveBlobAs(blob,name);
+    }catch(e){ if(e&&e.name!=="AbortError") alert("שגיאה: "+(e.message||e)); }
+    finally{ setBusy(""); }
+  };
+  const mail=()=>{ lsSet("h360_acct_email",email);
+    const body=`שלום,\nמצורף דוח המסמכים של ${COMPANY.name} לתקופה ${label}.\n\n${docs.length} מסמכים.\nסה״כ חשבוניות לפני מע״מ: ${money(S.before)}\nמע״מ: ${money(S.vat)}\nסה״כ כולל מע״מ: ${money(S.total)}\n\n(קובץ ה-ZIP עם כל המסמכים מצורף)\n`;
+    location.href="mailto:"+encodeURIComponent(email)+"?subject="+encodeURIComponent("דוח מסמכים "+label+" — "+COMPANY.name)+"&body="+encodeURIComponent(body); };
+  const chip=on=>({padding:"7px 11px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:"#d1d5db"}`,background:on?CLR.primaryLight:"#fff",color:on?CLR.primary:"#475569",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:on?700:500});
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit"};
+  return <Modal title="📤 דוח לרואה חשבון" onClose={busy?()=>{}:onClose} width={620}>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{presets.map(([k,l])=><button key={k} type="button" onClick={()=>pick(k)} style={chip(preset===k)}>{l}</button>)}</div>
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>מ-<input type="date" value={from} onChange={e=>{setFrom(e.target.value);setPreset("");}} style={fld}/> עד <input type="date" value={to} onChange={e=>{setTo(e.target.value);setPreset("");}} style={fld}/></div>
+    <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:12,fontSize:14}}>
+      <div style={{fontWeight:800,marginBottom:6}}>{label} · {docs.length} מסמכים</div>
+      {Object.entries(byType).map(([t,o])=><div key={t} style={{display:"flex",justifyContent:"space-between"}}><span>{t} ({o.n})</span><b>{money(o.total)}</b></div>)}
+      <div style={{borderTop:"1px solid #e2e8f0",marginTop:6,paddingTop:6}}>חשבוניות: לפני מע״מ <b>{money(S.before)}</b> · מע״מ <b>{money(S.vat)}</b> · סה״כ <b>{money(S.total)}</b></div>
+      {Object.keys(pays).length>0&&<div style={{fontSize:12,color:"#475569",marginTop:4}}>תקבולים: {Object.entries(pays).map(([m,v])=>m+" "+money(v)).join(" · ")}</div>}
+      {missingAlloc.length>0&&<div style={{color:"#b91c1c",fontSize:13,marginTop:6}}>⚠️ {missingAlloc.length} חשבוניות בלי מספר הקצאה — כדאי להשלים לפני ששולחים</div>}
+    </div>
+    {busy?<div style={{textAlign:"center",padding:14,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <Btn style={{flex:"1 1 180px"}} onClick={()=>run("share")}>📤 שלח (וואטסאפ / מייל)</Btn>
+      <Btn v="secondary" style={{flex:"1 1 150px"}} onClick={()=>run("zip")}>📦 הורד ZIP עם כל ה-PDF</Btn>
+      <Btn v="ghost" style={{flex:"1 1 120px"}} onClick={()=>run("csv")}>📊 רק טבלה (Excel)</Btn>
+    </div>}
+    <div style={{marginTop:14,borderTop:"1px solid #e2e8f0",paddingTop:10}}>
+      <div style={{fontSize:13,color:CLR.muted,marginBottom:6}}>מייל של רואה החשבון (נשמר לפעם הבאה). פותח מייל מוכן עם הסיכום — מצרפים את קובץ ה-ZIP שירד.</div>
+      <div style={{display:"flex",gap:8}}><input type="email" dir="ltr" value={email} onChange={e=>setEmail(e.target.value)} placeholder="accountant@example.com" style={{...fld,flex:1}}/><Btn sm v="secondary" onClick={mail}>✉️ פתח מייל</Btn></div>
+    </div>
+    <div style={{fontSize:12,color:"#64748b",marginTop:10}}>ב-ZIP: PDF של כל מסמך, טבלת Excel של כל המסמכים (תאריך, סוג, מספר, לקוח, לפני מע״מ, מע״מ, סה״כ, אמצעי תשלום, מספר הקצאה) ודף סיכום.</div>
+  </Modal>;
+}
+
+// ─── 🗺️ מסלול יומי ─────────────────────────────────────────────────────
+async function geocodeAddr(addr){
+  const key=String(addr||"").trim(); if(!key) return null;
+  const cache=lsGet("h360_geo",{}); if(cache[key]!==undefined) return cache[key];
+  const q=async s=>{ try{ const r=await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=il&accept-language=he&q="+encodeURIComponent(s)); const j=await r.json(); return j&&j[0]?{lat:+j[0].lat,lon:+j[0].lon}:null; }catch(e){ return undefined; } };
+  let g=await q(key);
+  if(g===null){ const city=key.split(",").pop().trim(); if(city&&city!==key){ await new Promise(r=>setTimeout(r,1100)); const c=await q(city); if(c) g={...c,approx:true}; } }
+  if(g!==undefined){ cache[key]=g; lsSet("h360_geo",cache); }
+  return g||null;
+}
+const kmBetween=(a,b)=>{ if(!a||!b) return 0; const R=6371,t=x=>x*Math.PI/180; const dLa=t(b.lat-a.lat),dLo=t(b.lon-a.lon); const h=Math.sin(dLa/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dLo/2)**2; return 2*R*Math.asin(Math.sqrt(h))*1.3; };
+const routeKm=(pts,start)=>{ let s=0,prev=start||null; pts.forEach(p=>{ if(prev&&p.g) s+=kmBetween(prev,p.g); if(p.g) prev=p.g; }); return s; };
+function bestOrder(stops,start){
+  const withG=stops.filter(s=>s.g), noG=stops.filter(s=>!s.g);
+  if(withG.length<3&&!start) return [...withG,...noG];
+  const left=[...withG]; const out=[]; let cur=start||left.shift().g; if(!start) out.push(withG[0]);
+  while(left.length){ let bi=0,bd=1e9; left.forEach((s,i)=>{ const d=kmBetween(cur,s.g); if(d<bd){bd=d;bi=i;} }); const n=left.splice(bi,1)[0]; out.push(n); cur=n.g; }
+  // שיפור 2-opt
+  let improved=true, it=0;
+  while(improved&&it++<50){ improved=false;
+    for(let i=0;i<out.length-1;i++) for(let k=i+1;k<out.length;k++){ const cand=[...out.slice(0,i),...out.slice(i,k+1).reverse(),...out.slice(k+1)]; if(routeKm(cand,start)+0.01<routeKm(out,start)){ out.splice(0,out.length,...cand); improved=true; } } }
+  return [...out,...noG];
+}
+function RoutePlanner({appointments,setAppointments,workers,currentUser,initialDate,onClose}){
+  const me=myWorkerFor(currentUser,workers);
+  const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל"&&(w.role==="מדביר"||w.alsoTech||w.role==="מנהל"));
+  const [date,setDate]=useState(initialDate||todayStr());
+  const [wid,setWid]=useState(String(me?me.id:(techs[0]||{}).id||""));
+  const [startAddr,setStartAddr]=useState(()=>lsGet("h360_route_start_"+(me?me.id:""),""));
+  const [geo,setGeo]=useState({}); const [busy,setBusy]=useState(false); const [order,setOrder]=useState(null);
+  const isTechView=currentUser&&currentUser.role==="מדביר";
+  const stops=(appointments||[]).filter(a=>!a.deleted&&a.date===date&&a.status!=="בוטל"&&!isPersonal(a)&&(String(a.workerId)===String(wid)||(!a.workerId&&techs.find(w=>String(w.id)===String(wid))?.name===a.workerName)))
+    .sort((a,b)=>String(a.time||"").localeCompare(String(b.time||"")));
+  const addrOf=a=>String(a.address||"").trim();
+  const withG=s=>s.map(a=>({a,g:geo[addrOf(a)]||null}));
+  const locate=async()=>{
+    setBusy(true); const g={...geo};
+    const list=[...new Set([...stops.map(addrOf),startAddr.trim()].filter(Boolean))];
+    for(const ad of list){ if(g[ad]!==undefined) continue; const cached=lsGet("h360_geo",{})[ad]; g[ad]=cached!==undefined?cached:await geocodeAddr(ad); if(cached===undefined) await new Promise(r=>setTimeout(r,1100)); setGeo({...g}); }
+    setBusy(false); return g;
+  };
+  const optimize=async()=>{ lsSet("h360_route_start_"+wid,startAddr); const g=await locate(); const st=startAddr.trim()?g[startAddr.trim()]:null;
+    setOrder(bestOrder(stops.map(a=>({a,g:g[addrOf(a)]||null})),st).map(x=>x.a)); };
+  const cur=order||stops;
+  const st=startAddr.trim()?geo[startAddr.trim()]:null;
+  const kmNow=routeKm(withG(stops),st), kmNew=order?routeKm(withG(order),st):0;
+  const gmaps=list=>{ const ads=list.map(addrOf).filter(Boolean); if(!ads.length) return alert("אין כתובות"); const dest=ads[ads.length-1]; const wp=ads.slice(0,-1).slice(0,9);
+    window.open("https://www.google.com/maps/dir/?api=1&travelmode=driving"+(startAddr.trim()?"&origin="+encodeURIComponent(startAddr.trim()):"")+"&destination="+encodeURIComponent(dest)+(wp.length?"&waypoints="+encodeURIComponent(wp.join("|")):""),"_blank"); };
+  const applyTimes=()=>{ if(!order) return;
+    if(!confirm("לשנות את שעות התורים לפי הסדר החדש? (אותן שעות — רק מי מגיע מתי). כדאי לעדכן את הלקוחות.")) return;
+    const slots=stops.map(a=>({time:a.time,timeWindow:a.timeWindow}));
+    const upd={}; order.forEach((a,i)=>{ upd[a.id]=slots[i]; });
+    setAppointments(as=>as.map(x=>upd[x.id]&&(upd[x.id].time!==x.time)?{...x,...upd[x.id],updatedAt:new Date().toISOString()}:x)); setOrder(null); alert("✅ השעות עודכנו"); };
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  return <Modal title="🗺️ מסלול יומי" onClose={onClose} width={600}>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+      <input type="date" value={date} onChange={e=>{setDate(e.target.value);setOrder(null);}} style={fld}/>
+      {!isTechView&&techs.length>1&&<select value={wid} onChange={e=>{setWid(e.target.value);setOrder(null);}} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>}
+    </div>
+    <input value={startAddr} onChange={e=>setStartAddr(e.target.value)} placeholder="נקודת יציאה (לא חובה) — למשל הכתובת של הבית או המחסן" style={{...fld,width:"100%",marginBottom:10}}/>
+    {!stops.length?<div style={{padding:20,textAlign:"center",color:CLR.muted}}>אין תורים ביום הזה</div>:<>
+      {cur.map((a,i)=>{ const g=geo[addrOf(a)]; return <div key={a.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 6px",borderBottom:"1px solid #e2e8f0"}}>
+        <div style={{width:28,height:28,borderRadius:"50%",background:CLR.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,flexShrink:0}}>{i+1}</div>
+        <div style={{flex:1,minWidth:0,fontSize:14}}><b>{a.customerName}</b> <span style={{color:CLR.muted,fontSize:12}}>{a.timeWindow&&a.timeWindow!==ALL_DAY_TW?a.timeWindow:a.time||""}</span>
+          <div style={{fontSize:12,color:"#475569"}}>{addrOf(a)||"— אין כתובת"}{g===null&&addrOf(a)?" · ⚠️ לא נמצא במפה":g&&g.approx?" · (לפי עיר)":""}</div></div>
+        {addrOf(a)&&<a href={"https://waze.com/ul?navigate=yes&q="+encodeURIComponent(addrOf(a))} target="_blank" rel="noopener" style={{textDecoration:"none",fontSize:13,border:"1px solid #e2e8f0",borderRadius:8,padding:"5px 9px",color:"#0f172a"}}>🚗 Waze</a>}
+      </div>; })}
+      {order&&<div style={{background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:10,padding:"8px 12px",margin:"10px 0",fontSize:13}}>✨ סדר מוצע: בערך <b>{Math.round(kmNew)} ק״מ</b> במקום {Math.round(kmNow)} ק״מ לפי השעות הנוכחיות{kmNow>kmNew?" — חוסך כ-"+Math.round(kmNow-kmNew)+" ק״מ":""}.</div>}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:10}}>
+        <Btn style={{flex:"1 1 160px"}} onClick={()=>gmaps(cur)}>🧭 נווט לכל המסלול (גוגל מפות)</Btn>
+        {!order?<Btn v="secondary" style={{flex:"1 1 140px"}} onClick={optimize} disabled={busy}>{busy?"⏳ מאתר כתובות…":"✨ סדר לפי מרחק"}</Btn>
+          :<><Btn v="secondary" style={{flex:"1 1 140px"}} onClick={applyTimes}>🕐 עדכן שעות לפי הסדר</Btn><Btn v="ghost" onClick={()=>setOrder(null)}>בטל</Btn></>}
+      </div>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:8}}>המרחקים משוערים (קו אווירי × 1.3). הסדר המוצע לא משנה כלום עד שלוחצים "עדכן שעות".</div>
+    </>}
+  </Modal>;
+}
+
+// ─── 💾 גיבוי אוטומטי לענן (תיקייה פרטית) ──────────────────────────────
+const BACKUP_KEYS=["customers","workers","appointments","finance","notes","maintenance","projects","execLogs","collabs","h360_mykit"];
+async function collectBackup(){
+  const data={};
+  for(const k of BACKUP_KEYS){
+    const tbl=SB_TABLES[k];
+    if(sb&&tbl){ const {data:rows,error}=await sb.from(tbl).select('data'); if(!error&&rows){ data[k]=rows.map(r=>r.data); continue; } }
+    try{ const v=localStorage.getItem(k.startsWith("h360_")?k:"h360_"+k); data[k]=v?JSON.parse(v):[]; }catch(e){ data[k]=[]; }
+  }
+  return {version:2,exportedAt:new Date().toISOString(),data};
+}
+async function cloudBackupNow(force){
+  if(!sb) throw new Error("אין חיבור לשרת");
+  const b=await collectBackup();
+  const name="backups/hadbara360-"+todayStr()+(force?"-"+new Date().toTimeString().slice(0,5).replace(":",""):"")+".json";
+  const {error}=await sb.storage.from('contracts').upload(name,new Blob([JSON.stringify(b)],{type:"application/json"}),{contentType:"application/json",upsert:false});
+  if(error&&!/exist|duplicate/i.test(error.message||"")) throw error;
+  lsSet("h360_last_backup",todayStr());
+  return name;
+}
+async function listCloudBackups(){
+  if(!sb) return [];
+  const {data,error}=await sb.storage.from('contracts').list('backups',{limit:200,sortBy:{column:'name',order:'desc'}});
+  if(error) throw error; return (data||[]).filter(f=>/\.json$/.test(f.name));
+}
+// שחזור: מעלה את השורות מהגיבוי בחזרה לשרת (מוסיף/מחזיר — לא מוחק שום דבר שקיים)
+async function restoreBackupObj(b,onStep){
+  if(!b||!b.data) throw new Error("קובץ גיבוי לא תקין");
+  let n=0;
+  for(const [k,rows] of Object.entries(b.data)){
+    if(!Array.isArray(rows)) continue;
+    const tbl=SB_TABLES[k];
+    if(sb&&tbl){ for(let i=0;i<rows.length;i+=200){ const chunk=rows.slice(i,i+200).filter(r=>r&&r.id!=null).map(r=>({id:String(r.id),data:r,updated_at:new Date().toISOString()}));
+        if(!chunk.length) continue; const {error}=await sb.from(tbl).upsert(chunk,{onConflict:'id'}); if(error) throw error; n+=chunk.length; onStep&&onStep(k,n); } }
+    else lsSet(k.startsWith("h360_")?k:"h360_"+k,rows);
+  }
+  window.dispatchEvent(new Event('h360-refresh'));
+  return n;
+}
+function BackupSettings(){
+  const [list,setList]=useState(null); const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const load=()=>listCloudBackups().then(setList).catch(e=>{ setList([]); setMsg("לא הצלחתי לקרוא את רשימת הגיבויים: "+(e.message||e)); });
+  React.useEffect(()=>{ load(); },[]);
+  const now=async()=>{ setBusy(true); setMsg(""); try{ await cloudBackupNow(true); setMsg("✅ גיבוי נשמר"); load(); }catch(e){ setMsg("❌ "+(e.message||e)); } setBusy(false); };
+  const dl=async f=>{ const {data,error}=await sb.storage.from('contracts').download('backups/'+f.name); if(error) return alert(error.message); saveBlobAs(data,f.name); };
+  const restore=async f=>{ if(!confirm("לשחזר את הגיבוי "+f.name+"?\n\nרשומות מהגיבוי יחזרו למערכת (גם כאלה שנמחקו). רשומות חדשות שנוספו אחרי הגיבוי לא יימחקו.")) return;
+    setBusy(true); try{ const {data,error}=await sb.storage.from('contracts').download('backups/'+f.name); if(error) throw error; const n=await restoreBackupObj(JSON.parse(await data.text()),(k,c)=>setMsg("משחזר "+k+"… "+c)); setMsg("✅ שוחזרו "+n+" רשומות"); }catch(e){ setMsg("❌ "+(e.message||e)); } setBusy(false); };
+  const fromFile=()=>{ const inp=document.createElement("input"); inp.type="file"; inp.accept=".json,application/json"; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+    try{ const b=JSON.parse(await f.text()); if(!confirm("לשחזר מהקובץ "+f.name+"?\nרשומות מהגיבוי יחזרו למערכת; שום דבר קיים לא יימחק.")) return; setBusy(true); const n=await restoreBackupObj(b,(k,c)=>setMsg("משחזר "+k+"… "+c)); setMsg("✅ שוחזרו "+n+" רשומות"); }catch(err){ setMsg("❌ "+(err.message||err)); } setBusy(false); }; inp.click(); };
+  const last=lsGet("h360_last_backup","");
+  return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+    <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>💾 גיבויים</div>
+    <div style={{fontSize:13,color:"#64748b",marginBottom:10}}>המערכת שומרת גיבוי מלא פעם ביום, אוטומטית, בתיקייה פרטית בשרת (רק משתמשי המערכת יכולים לגשת). {last?"גיבוי אחרון מהמכשיר הזה: "+fmtDate(last):""}</div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+      <Btn sm onClick={now} disabled={busy}>💾 גבה עכשיו</Btn>
+      <Btn sm v="secondary" onClick={async()=>{ const b=await collectBackup(); saveBlobAs(new Blob([JSON.stringify(b,null,1)],{type:"application/json"}),"hadbara360-גיבוי-"+todayStr()+".json"); }}>⬇️ הורד גיבוי למכשיר</Btn>
+      <Btn sm v="ghost" onClick={fromFile} disabled={busy}>📂 שחזר מקובץ</Btn>
+    </div>
+    {msg&&<div style={{fontSize:13,marginBottom:8}}>{msg}</div>}
+    {list===null?<div style={{fontSize:13,color:CLR.muted}}>טוען…</div>:!list.length?<div style={{fontSize:13,color:CLR.muted}}>עדיין אין גיבויים בענן</div>:
+    <details><summary style={{cursor:"pointer",fontSize:13,fontWeight:700}}>גיבויים שמורים ({list.length})</summary>
+      {list.slice(0,40).map(f=><div key={f.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #f1f5f9",fontSize:13}}>
+        <span dir="ltr">{f.name.replace(/^hadbara360-|\.json$/g,"")}</span>
+        <span style={{display:"flex",gap:6}}><button type="button" onClick={()=>dl(f)} style={{border:"1px solid #e2e8f0",background:"#fff",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"inherit"}}>⬇️</button><button type="button" onClick={()=>restore(f)} disabled={busy} style={{border:"1px solid #e2e8f0",background:"#fff",borderRadius:8,padding:"4px 9px",cursor:"pointer",fontFamily:"inherit"}}>↺ שחזר</button></span></div>)}
+    </details>}
+  </div>;
+}
+
+// ─── 📅 סנכרון מגוגל יומן ──────────────────────────────────────────────
+const GCAL_FN=SUPA_URL+"/functions/v1/gcal";
+function icsParse(text){
+  const lines=String(text||"").replace(/\r\n/g,"\n").replace(/\n[ \t]/g,"").split("\n");
+  const evs=[]; let cur=null;
+  const unesc=s=>String(s||"").replace(/\\n/gi,"\n").replace(/\\([,;\\])/g,"$1");
+  for(const ln of lines){
+    if(ln==="BEGIN:VEVENT"){ cur={exdate:[]}; continue; }
+    if(ln==="END:VEVENT"){ if(cur) evs.push(cur); cur=null; continue; }
+    if(!cur) continue;
+    const i=ln.indexOf(":"); if(i<0) continue;
+    const head=ln.slice(0,i), val=ln.slice(i+1); const [name,...ps]=head.split(";"); const params={}; ps.forEach(p=>{ const [k,v]=p.split("="); params[k]=v; });
+    if(name==="UID") cur.uid=val;
+    else if(name==="SUMMARY") cur.summary=unesc(val);
+    else if(name==="DESCRIPTION") cur.desc=unesc(val);
+    else if(name==="LOCATION") cur.loc=unesc(val);
+    else if(name==="STATUS") cur.status=val;
+    else if(name==="RRULE") cur.rrule=val;
+    else if(name==="DTSTART") cur.start={v:val,p:params};
+    else if(name==="DTEND") cur.end={v:val,p:params};
+    else if(name==="RECURRENCE-ID") cur.recId={v:val,p:params};
+    else if(name==="EXDATE") val.split(",").forEach(x=>cur.exdate.push(x));
+  }
+  return evs;
+}
+// תאריך+שעה מקומיים (ישראל)
+function icsTime(t){
+  if(!t) return null; const v=t.v; const m=v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/); if(!m) return null;
+  if(!m[4]) return {date:m[1]+"-"+m[2]+"-"+m[3],time:"",allDay:true};
+  if(m[7]){ const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5]));
+    const p=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Jerusalem",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d).map(x=>[x.type,x.value]));
+    return {date:p.year+"-"+p.month+"-"+p.day,time:(p.hour==="24"?"00":p.hour)+":"+p.minute,allDay:false}; }
+  return {date:m[1]+"-"+m[2]+"-"+m[3],time:m[4]+":"+m[5],allDay:false};
+}
+// פריסת אירועים חוזרים (יומי/שבועי/חודשי/שנתי) בטווח
+function icsExpand(evs,fromIso,toIso){
+  const out=[]; const overrides={};
+  evs.filter(e=>e.recId).forEach(e=>{ const r=icsTime(e.recId); if(r) overrides[e.uid+"|"+r.date]=e; });
+  const DAYS=["SU","MO","TU","WE","TH","FR","SA"];
+  for(const e of evs){
+    if(e.recId) { const s=icsTime(e.start); if(s&&s.date>=fromIso&&s.date<=toIso) out.push({...e,iid:e.uid+"|"+icsTime(e.recId).date,s,en:icsTime(e.end)}); continue; }
+    const s=icsTime(e.start); if(!s) continue; const en=icsTime(e.end);
+    if(!e.rrule){ if(s.date>=fromIso&&s.date<=toIso) out.push({...e,iid:e.uid,s,en}); continue; }
+    const R=Object.fromEntries(e.rrule.split(";").map(x=>x.split("="))); const iv=parseInt(R.INTERVAL)||1; let count=parseInt(R.COUNT)||0;
+    const until=R.UNTIL?R.UNTIL.slice(0,4)+"-"+R.UNTIL.slice(4,6)+"-"+R.UNTIL.slice(6,8):"9999";
+    const ex=new Set(e.exdate.map(x=>x.slice(0,4)+"-"+x.slice(4,6)+"-"+x.slice(6,8)));
+    const byday=R.BYDAY?R.BYDAY.split(",").map(x=>DAYS.indexOf(x.replace(/[^A-Z]/g,""))).filter(x=>x>=0):null;
+    const d0=new Date(s.date+"T12:00:00"); const durDays=en&&s.allDay&&en.date?Math.round((new Date(en.date+"T12:00:00")-d0)/864e5):0;
+    let n=0;
+    for(let k=0;k<800;k++){
+      let cands=[];
+      if(R.FREQ==="DAILY"){ const d=new Date(d0); d.setDate(d.getDate()+k*iv); cands=[d]; }
+      else if(R.FREQ==="WEEKLY"){ const w=new Date(d0); w.setDate(w.getDate()-w.getDay()+k*7*iv); const days=byday||[d0.getDay()]; cands=days.sort().map(dd=>{ const d=new Date(w); d.setDate(w.getDate()+dd); return d; }).filter(d=>d>=d0); }
+      else if(R.FREQ==="MONTHLY"){ const d=new Date(d0); d.setMonth(d.getMonth()+k*iv); if(d.getDate()!==d0.getDate()) continue; cands=[d]; }
+      else if(R.FREQ==="YEARLY"){ const d=new Date(d0); d.setFullYear(d.getFullYear()+k*iv); cands=[d]; }
+      else break;
+      let stop=false;
+      for(const d of cands){ const iso=isoOf(d); if(iso>until||iso>toIso){ stop=true; break; } n++; if(count&&n>count){ stop=true; break; }
+        if(iso<fromIso||ex.has(iso)) continue; const key=e.uid+"|"+iso; if(overrides[key]) continue;
+        const enD=new Date(d); enD.setDate(enD.getDate()+durDays);
+        out.push({...e,iid:key,s:{...s,date:iso},en:en?{...en,date:s.allDay?isoOf(enD):iso}:null}); }
+      if(stop) break;
+    }
+  }
+  return out.filter(e=>e.status!=="CANCELLED");
+}
+function gcalCfgs(){ return lsGet("h360_gcal",[]); }
+// מחזיר רשימת שינויים לתורים לפי האירועים בגוגל
+function gcalPlan(evs,cfg,appointments,workers){
+  const w=(workers||[]).find(x=>String(x.id)===String(cfg.workerId));
+  const byUid={}; (appointments||[]).forEach(a=>{ if(a.gcalUid) byUid[a.gcalUid]=a; });
+  const adds=[], upds=[], dels=[];
+  const seen=new Set();
+  for(const e of evs){
+    const iid="g:"+cfg.id+":"+e.iid; seen.add(iid);
+    const s=e.s; if(!s||s.date<cfg.from) continue;
+    const endT=e.en&&!e.en.allDay?e.en.time:"";
+    const text=[e.summary,e.loc,e.desc].filter(Boolean).join("\n").replace(/<br\s*\/?>/gi,"\n").replace(/<[^>]+>/g,"").trim();
+    const sig=[e.summary,e.desc,e.loc,s.date,s.time,endT].join("|");
+    const tw=s.allDay?ALL_DAY_TW:(s.time+"–"+(endT||String(Math.min(23,parseInt(s.time)+2)).padStart(2,"0")+s.time.slice(2)));
+    const ex=byUid[iid];
+    if(ex){ if(ex.gcalSig!==sig&&!ex.deleted){
+        const base={date:s.date,time:s.allDay?"07:00":s.time,timeWindow:tw,allDay:!!s.allDay,gcalSig:sig};
+        upds.push(ex.kind==="free"||ex.kind==="personal"?{...ex,...base,freeText:ex.kind==="free"?text:ex.freeText,rawMsg:ex.kind==="free"?text:ex.rawMsg,notes:ex.kind==="personal"?text:ex.notes,title:ex.kind==="personal"?(e.summary||ex.title):ex.title,customerName:ex.kind==="personal"?"📌 "+(e.summary||""):ex.customerName}:{...ex,...base}); }
+      continue; }
+    const p=text?waParse(text,[]):{}; const street=[p.street,p.buildingNum].filter(Boolean).join(" ");
+    const addr=e.loc||[street,p.city].filter(Boolean).join(", ");
+    // אם כבר קיים במערכת אותו תור (אותו יום + אותו טלפון/שם) — רק מקשרים
+    const twin=(appointments||[]).find(a=>!a.deleted&&!a.gcalUid&&a.date===s.date&&((p.phone&&String(a.phone||"").replace(/\D/g,"").endsWith(String(p.phone).replace(/\D/g,"").slice(-9)))||(e.summary&&a.customerName&&String(e.summary).includes(a.customerName))));
+    if(twin){ upds.push({...twin,gcalUid:iid,gcalSig:sig}); continue; }
+    const title=(e.summary||text.split("\n")[0]||"אירוע מגוגל").slice(0,60);
+    const base={date:s.date,time:s.allDay?"07:00":s.time,timeWindow:tw,allDay:!!s.allDay,workerId:w?w.id:null,workerName:w?w.name:"",status:"ממתין",gcalUid:iid,gcalSig:sig,source:"google",updatedAt:new Date().toISOString()};
+    if(cfg.kind==="personal") adds.push({...base,kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:addr||"",customerId:null,blockDay:false,notes:text});
+    else adds.push({...base,kind:"free",freeText:text,rawMsg:text,customerName:p.name||title,customerId:null,phone:p.phone||"",address:addr,pestType:(p.pests||[]).join(", "),pests:(p.pests||[]).filter(x=>PEST_TYPES_CRM.includes(x)),price:parseInt(p.price)||0,notes:"",aptNum:p.aptNum||"",entrance:p.entrance||"",floor:p.floor||"",propertyType:p.propertyType||"",executionLog:null});
+  }
+  // אירועים שנמחקו בגוגל — רק רישומים שעדיין לא הפכו להזמנה, ורק מהיום והלאה
+  const today=todayStr();
+  (appointments||[]).forEach(a=>{ if(a.gcalUid&&String(a.gcalUid).startsWith("g:"+cfg.id+":")&&!a.deleted&&!seen.has(a.gcalUid)&&(a.kind==="free"||a.kind==="personal")&&a.date>=today&&a.date>=cfg.from&&a.status!=="בוצע") dels.push(a.id); });
+  return {adds,upds,dels};
+}
+async function gcalFetch(url){
+  const r=await fetch(GCAL_FN,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+SUPA_KEY,"apikey":SUPA_KEY},body:JSON.stringify({url})});
+  const t=await r.text(); if(!r.ok){ let m=t; try{ m=JSON.parse(t).error||t; }catch(e){} throw new Error(m); }
+  return t;
+}
+let __gcalBusy=false;
+async function gcalSyncAll(appointments,setAppointments,workers,onlyId){
+  if(__gcalBusy) return null; __gcalBusy=true;
+  const res={added:0,updated:0,removed:0,errors:[]};
+  try{
+    const cfgs=gcalCfgs().filter(c=>c.url&&(!onlyId||c.id===onlyId)); let appts=appointments;
+    for(const cfg of cfgs){
+      try{
+        const ics=await gcalFetch(cfg.url);
+        const to=new Date(); to.setDate(to.getDate()+60);
+        const evs=icsExpand(icsParse(ics),cfg.from,isoOf(to));
+        const {adds,upds,dels}=gcalPlan(evs,cfg,appts,workers);
+        if(adds.length||upds.length||dels.length){
+          let next=null;
+          setAppointments(as=>{ let out=as.map(a=>{ const u=upds.find(x=>x.id===a.id); if(u) return {...u,updatedAt:new Date().toISOString()}; if(dels.includes(a.id)) return {...a,deleted:true,deletedAt:new Date().toISOString()}; return a; });
+            adds.forEach(a=>{ out=[...out,{...a,id:nextId(out)}]; }); next=out; return out; });
+          if(next) appts=next;
+        }
+        res.added+=adds.length; res.updated+=upds.length; res.removed+=dels.length;
+        const all=gcalCfgs(); const i=all.findIndex(c=>c.id===cfg.id); if(i>=0){ all[i]={...all[i],lastSync:new Date().toISOString(),lastErr:"",lastCount:evs.length}; lsSet("h360_gcal",all); }
+      }catch(e){ res.errors.push(e.message||String(e)); const all=gcalCfgs(); const i=all.findIndex(c=>c.id===cfg.id); if(i>=0){ all[i]={...all[i],lastErr:e.message||String(e)}; lsSet("h360_gcal",all); } }
+    }
+  } finally { __gcalBusy=false; }
+  return res;
+}
+function GcalSettings({workers,appointments,setAppointments,currentUser}){
+  const [cfgs,setCfgs]=useState(gcalCfgs); const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const me=myWorkerFor(currentUser,workers);
+  const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
+  const save=list=>{ setCfgs(list); lsSet("h360_gcal",list); };
+  const [url,setUrl]=useState(""); const [wid,setWid]=useState(String(me?me.id:(techs[0]||{}).id||"")); const [kind,setKind]=useState("free"); const [from,setFrom]=useState(todayStr());
+  const OK=/^https:\/\/calendar\.google\.com\/calendar\/ical\/[^\s?#]+\/(private-[0-9a-f]+|public)\/basic\.ics$/i;
+  const add=async()=>{ const u=url.trim(); if(!OK.test(u)) return alert("זו לא הכתובת הנכונה.\nצריך את 'הכתובת הסודית בפורמט iCal' — מתחילה ב-https://calendar.google.com/calendar/ical/ ומסתיימת ב-basic.ics");
+    const c={id:Date.now().toString(36),url:u,workerId:wid,kind,from}; const list=[...cfgs,c]; save(list); setUrl(""); setBusy(true); setMsg("⏳ מתחבר לגוגל…");
+    const r=await gcalSyncAll(appointments,setAppointments,workers,c.id); setBusy(false); setCfgs(gcalCfgs());
+    setMsg(r&&r.errors.length?"❌ "+r.errors[0]:"✅ מחובר! נוספו "+(r?r.added:0)+" רישומים מגוגל ליומן"); };
+  const syncNow=async()=>{ setBusy(true); setMsg("⏳ מסנכרן…"); const r=await gcalSyncAll(appointments,setAppointments,workers); setBusy(false); setCfgs(gcalCfgs());
+    setMsg(!r?"סנכרון כבר רץ":r.errors.length?"❌ "+r.errors[0]:"✅ נוספו "+r.added+" · עודכנו "+r.updated+(r.removed?" · הוסרו "+r.removed:"")); };
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  const wName=id=>(techs.find(w=>String(w.id)===String(id))||{}).name||"—";
+  return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+    <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>📅 סנכרון מגוגל יומן</div>
+    <div style={{fontSize:13,color:"#64748b",marginBottom:10}}>כל מה שתרשום ביומן של גוגל ייכנס ליומן העבודה כ"רישום מהיר" — עם זיהוי שם, טלפון, כתובת ומזיק — ומשם לוחצים "השלם להזמנה". שינוי שעה או מחיקה בגוגל מתעדכנים גם כאן. הסנכרון רץ כל 5 דקות כשהמערכת פתוחה במכשיר הזה.</div>
+    {cfgs.map(c=><div key={c.id} style={{border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:8,fontSize:13}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b>🔗 יומן גוגל → {wName(c.workerId)} ({c.kind==="personal"?"משימות":"רישום מהיר / עבודה"})</b>
+        <button type="button" onClick={()=>{ if(confirm("לנתק את היומן הזה? (מה שכבר נכנס נשאר)")) save(cfgs.filter(x=>x.id!==c.id)); }} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer",fontFamily:"inherit"}}>נתק</button></div>
+      <div style={{color:"#64748b"}}>מתאריך {fmtDate(c.from)} · {c.lastSync?"סונכרן "+new Date(c.lastSync).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}):"עוד לא סונכרן"}{c.lastErr?" · ❌ "+c.lastErr:""}</div>
+    </div>)}
+    {cfgs.length>0&&<Btn sm onClick={syncNow} disabled={busy} style={{marginBottom:10}}>🔄 סנכרן עכשיו</Btn>}
+    <details open={!cfgs.length}><summary style={{cursor:"pointer",fontWeight:700,fontSize:14}}>➕ חבר יומן גוגל</summary>
+      <ol style={{fontSize:13,color:"#334155",paddingRight:18,margin:"8px 0",lineHeight:1.7}}>
+        <li>במחשב, פתח את <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">הגדרות גוגל יומן</a>.</li>
+        <li>בצד ימין, תחת "הגדרות של היומנים שלי", לחץ על היומן שלך.</li>
+        <li>גלול למטה עד <b>"כתובת סודית בפורמט iCal"</b>, לחץ על סמל ההעתקה.</li>
+        <li>הדבק כאן למטה ולחץ "חבר".</li>
+      </ol>
+      <input dir="ltr" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" style={{...fld,width:"100%",marginBottom:8}}/>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+        <span style={{fontSize:13}}>ייכנס ליומן של</span><select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
+        <select value={kind} onChange={e=>setKind(e.target.value)} style={fld}><option value="free">כרישום מהיר (עבודה)</option><option value="personal">כמשימה אישית</option></select>
+        <span style={{fontSize:13}}>מתאריך</span><input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={fld}/>
+      </div>
+      <Btn sm onClick={add} disabled={busy}>🔗 חבר</Btn>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>🔒 הכתובת הסודית נשמרת רק במכשיר הזה. אירועים מלפני "מתאריך" לא נכנסים — כדי לא לשכפל מה שכבר רשום במערכת.</div>
+    </details>
+    {msg&&<div style={{fontSize:13,marginTop:8}}>{msg}</div>}
+  </div>;
+}
+
+function SettingsPage({isAdmin,onReset,workers=[],appointments=[],setAppointments,currentUser}){
   const [theme,setTheme]=useState(()=>{ try{ return localStorage.getItem('h360_theme')||'light'; }catch(e){ return 'light'; } });
   const pick=t=>{ setTheme(t); try{ localStorage.setItem('h360_theme',t); }catch(e){} try{ window.h360ApplyTheme&&window.h360ApplyTheme(); }catch(e){} };
   const opt=(k,icon,title,sub)=><button key={k} type="button" onClick={()=>pick(k)} style={{flex:"1 1 150px",textAlign:"right",padding:"14px",borderRadius:14,border:"2px solid "+(theme===k?CLR.primary:"#e2e8f0"),background:theme===k?"#f0fdf4":"#fff",cursor:"pointer",fontFamily:"inherit"}}>
@@ -9890,6 +10347,8 @@ function SettingsPage({isAdmin,onReset}){
         {opt("auto","🌗","אוטומטי","לפי הגדרת הטלפון")}
       </div>
     </div>
+    {isAdmin&&setAppointments&&<GcalSettings workers={workers} appointments={appointments} setAppointments={setAppointments} currentUser={currentUser}/>}
+    {isAdmin&&<BackupSettings/>}
     {isAdmin&&<details style={{background:"#fff",border:"1px solid #fecaca",borderRadius:14,padding:14}}>
       <summary style={{cursor:"pointer",fontWeight:800,color:"#b91c1c"}}>⚠️ אזור מסוכן</summary>
       <div style={{fontSize:13,color:"#64748b",margin:"8px 0"}}>איפוס מוחק את הנתונים מהמכשיר הזה. עשה גיבוי לפני (כפתור 💾 גיבוי במחשב).</div>
@@ -10016,6 +10475,16 @@ function App(){
 
   // ── פריטים פעילים בלבד (מסנן deleted:true) ──
   const activeWorkers = React.useMemo(()=>activeOnly(workers),[workers]);
+  // 💾 גיבוי יומי אוטומטי (מנהל) + 📅 סנכרון מגוגל יומן כל 5 דקות
+  const gcalRef=React.useRef({}); gcalRef.current={appointments,setAppointments,workers:activeWorkers};
+  React.useEffect(()=>{
+    if(!authUser||authUser.role!=="מנהל") return;
+    const t1=setTimeout(()=>{ if(lsGet("h360_last_backup","")!==todayStr()) cloudBackupNow(false).catch(e=>console.warn("[backup]",e)); },25000);
+    const run=()=>{ if(!gcalCfgs().length) return; const c=gcalRef.current; gcalSyncAll(c.appointments,c.setAppointments,c.workers).then(r=>{ if(r&&r.added) showToast&&showToast("📅 נוספו "+r.added+" רישומים מגוגל יומן"); }).catch(()=>{}); };
+    const t2=setTimeout(run,12000); const iv=setInterval(run,5*60*1000);
+    const onRef=()=>setTimeout(run,1500); window.addEventListener('h360-refresh',onRef);
+    return ()=>{ clearTimeout(t1); clearTimeout(t2); clearInterval(iv); window.removeEventListener('h360-refresh',onRef); };
+  },[authUser&&authUser.id,authUser&&authUser.role]);
   const activeAppointments = React.useMemo(()=>{
     const live=activeOnly(appointments);
     if(!customers||!customers.length) return live;
@@ -10273,7 +10742,7 @@ function App(){
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={calAppointments} setAppointments={setAppointments} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
-              {tab==="settings"&&<SettingsPage isAdmin={user.role==="מנהל"} onReset={resetAllData}/>}
+              {tab==="settings"&&<SettingsPage isAdmin={user.role==="מנהל"} onReset={resetAllData} workers={activeWorkers} appointments={appointments} setAppointments={setAppointments} currentUser={user}/>}
               {tab==="mychems"&&<MyChemicals currentUser={user} workers={activeWorkers} setWorkers={setWorkers} execLogs={execLogs}/>}
               {tab==="execlog"&&<ExecLogTab currentUser={user} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} maintenance={activeMaintenance}/>}
             {tab==="leads"&&user.role!=="מדביר"&&<LeadsPage leads={leads} reload={reloadLeads} customers={customers} setCustomers={setCustomers} goToCustomers={()=>setTab("customers")}/>}
