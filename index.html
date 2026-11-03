@@ -414,7 +414,7 @@ function AdminPanel({authUser,onClose}){
   const [loading,setLoading]=React.useState(true);
   const [showAdd,setShowAdd]=React.useState(false);
   const [editUser,setEditUser]=React.useState(null);
-  const [newU,setNewU]=React.useState({name:'',username:'',password:'',role:'פקידה',permissions:{}});
+  const [newU,setNewU]=React.useState({name:'',username:'',password:'',role:'פקידה',permissions:rolePermsFull('פקידה')});
   const [msg,setMsg]=React.useState('');
 
   const PERM_LABELS=[
@@ -448,7 +448,7 @@ function AdminPanel({authUser,onClose}){
     });
     if(error){setMsg('שגיאה: '+error.message);return;}
     setMsg('✅ משתמש נוסף בהצלחה!');
-    setNewU({name:'',username:'',password:'',role:'פקידה',permissions:{}});
+    setNewU({name:'',username:'',password:'',role:'פקידה',permissions:rolePermsFull('פקידה')});
     setShowAdd(false);loadUsers();
   };
 
@@ -539,9 +539,9 @@ function AdminPanel({authUser,onClose}){
                 <div><label style={LB}>שם תצוגה</label><input value={newU.name} onChange={e=>setNewU({...newU,name:e.target.value})} style={IN}/></div>
                 <div><label style={LB}>שם משתמש לכניסה</label><input value={newU.username} autoComplete="off" onChange={e=>setNewU({...newU,username:e.target.value})} style={{...IN,direction:"ltr",textAlign:"right"}}/></div>
                 <div><label style={LB}>סיסמה</label><input type="password" autoComplete="new-password" value={newU.password} onChange={e=>setNewU({...newU,password:e.target.value})} style={{...IN,direction:"ltr"}}/></div>
-                <div><label style={LB}>תפקיד</label><select value={newU.role} onChange={e=>setNewU({...newU,role:e.target.value})} style={IN}><option>מנהל</option><option>פקידה</option><option>מדביר</option></select></div>
+                <div><label style={LB}>תפקיד</label><select value={newU.role} onChange={e=>setNewU({...newU,role:e.target.value,permissions:rolePermsFull(e.target.value)})} style={IN}><option>מנהל</option><option>פקידה</option><option>מדביר</option></select></div>
               </div>
-              {newU.role!=="מנהל"&&<div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermToggle perms={newU.permissions} setPerms={p=>setNewU({...newU,permissions:p})}/></div>}
+              <div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermEditor role={newU.role} perms={newU.permissions} onChange={p=>setNewU({...newU,permissions:p})}/></div>
               <div style={{marginTop:16,display:"flex",gap:8}}>
                 <button onClick={saveNew} style={{flex:1,padding:"11px 20px",background:CLR.primary,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15}}>✅ צור משתמש</button>
                 <button onClick={()=>setShowAdd(false)} style={{padding:"11px 20px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:15}}>ביטול</button>
@@ -568,7 +568,7 @@ function AdminPanel({authUser,onClose}){
                       </div>
                       {u.id!==authUser.id&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:14,marginBottom:12}}>
                         <input type="checkbox" checked={editUser.active} onChange={e=>setEditUser({...editUser,active:e.target.checked})} style={{width:18,height:18}}/> משתמש פעיל</label>}
-                      {editUser.role!=="מנהל"&&<div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermToggle perms={editUser.permissions||{}} setPerms={p=>setEditUser({...editUser,permissions:p})}/></div>}
+                      <div><label style={LB}>הרשאות — מה המשתמש רואה</label><PermEditor role={editUser.role} perms={editUser.permissions||{}} onChange={p=>setEditUser({...editUser,permissions:p})}/></div>
                       <div style={{marginTop:14,display:"flex",gap:8}}>
                         <button onClick={saveEdit} style={{flex:1,padding:"11px 18px",background:CLR.primary,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15}}>✅ שמור</button>
                         <button onClick={()=>setEditUser(null)} style={{padding:"11px 18px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:15}}>ביטול</button>
@@ -6231,7 +6231,62 @@ function NewFinanceModal({customers,onClose,onSave,initialType="הכנסה"}){
   </Modal>;
 }
 
+// ═══ 🔐 הרשאות: כל לשונית בתפריט + ברירות מחדל לפי תפקיד ═══
+const PERM_GROUPS=[
+  {g:"ראשי",items:[["fieldview","📋 המשימות שלי"],["dashboard","📊 דשבורד"],["neworder","📝 הזמנת עבודה"],["customers","👤 לקוחות"],["leads","🌐 לידים מהאתר"]]},
+  {g:"עבודה",items:[["calendar","📅 יומן תורים"],["execlog","📋 יומן ביצוע"],["mychems","🧪 החומרים שלי"],["maintenance","🔁 אחזקות"],["projects","🏗️ פרויקטים"]]},
+  {g:"כספים",items:[["invoices","🧾 חשבוניות",true],["expenses","💸 הוצאות"],["finance","💰 כספים"]]},
+  {g:"תקשורת",items:[["templates","💬 תבניות הודעה"],["scheduler","⏰ הודעות מתוזמנות"],["collabs","🤝 שיתופי פעולה"]]},
+  {g:"ניהול",items:[["notes","📓 הערות"],["regional","🗺️ ניתוח אזורי"],["workers","👥 עובדים"],["trash","🗑️ סל מחזור"]]},
+];
+// ברירת מחדל: מדביר — רק מה שצריך בשטח; פקידה — העבודה המשרדית (בלי כספים/עובדים/ניתוח עד שמסמנים)
+const ROLE_PERMS={
+  "מדביר":{fieldview:true,calendar:true,execlog:true,mychems:true,invoices:"own"},
+  "פקידה":{dashboard:true,neworder:true,customers:true,leads:true,calendar:true,execlog:true,maintenance:true,projects:true,invoices:true,expenses:true,templates:true,scheduler:true,collabs:true,notes:true},
+};
+const rolePermsFull=role=>{ const base=ROLE_PERMS[role]||ROLE_PERMS["פקידה"]; const o={}; PERM_GROUPS.forEach(g=>g.items.forEach(([k])=>{ o[k]=base[k]||false; })); return o; };
+// האם למשתמש יש גישה ללשונית (true / false / "own" = רק שלו)
+function permOf(u,id){
+  if(!u||!u.role) return true;
+  if(u.role==="מנהל"||id==="settings") return true;
+  const p=u.permissions||{};
+  if(p[id]!==undefined&&p[id]!==null) return p[id];
+  return (ROLE_PERMS[u.role]||ROLE_PERMS["פקידה"])[id]||false;
+}
+function PermEditor({role,perms,onChange}){
+  const eff=k=>{ const v=(perms||{})[k]; return v!==undefined&&v!==null?v:(ROLE_PERMS[role]||ROLE_PERMS["פקידה"])[k]||false; };
+  if(role==="מנהל") return <div style={{fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px"}}>👑 מנהל רואה ועושה הכל — אין צורך לסמן הרשאות.</div>;
+  const set=(k,v)=>onChange({...(perms||{}),[k]:v});
+  const chip=on=>({padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:"#d1d5db"}`,background:on?CLR.primaryLight:"#fff",color:on?CLR.primary:"#64748b",fontSize:13,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"});
+  return <div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+      <button type="button" onClick={()=>onChange(rolePermsFull(role))} style={{...chip(false),fontSize:12}}>↺ ברירת מחדל ל{roleLabel?roleLabel(role):role}</button>
+      <button type="button" onClick={()=>{ const o={}; PERM_GROUPS.forEach(g=>g.items.forEach(([k])=>{o[k]=true;})); onChange(o); }} style={{...chip(false),fontSize:12}}>סמן הכל</button>
+      <button type="button" onClick={()=>{ const o={}; PERM_GROUPS.forEach(g=>g.items.forEach(([k])=>{o[k]=false;})); onChange(o); }} style={{...chip(false),fontSize:12}}>נקה הכל</button>
+    </div>
+    {PERM_GROUPS.map(g=><div key={g.g} style={{marginBottom:8}}>
+      <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",marginBottom:4}}>{g.g}</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {g.items.map(([k,l,tri])=>{ const v=eff(k);
+          if(tri) return <div key={k} style={{display:"inline-flex",borderRadius:20,border:`1.5px solid ${v?CLR.primary:"#d1d5db"}`,overflow:"hidden"}}>
+            <span style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:v?CLR.primary:"#64748b",background:v?CLR.primaryLight:"#fff"}}>{l}</span>
+            {[[false,"ללא"],["own","רק שלו"],[true,"הכל"]].map(([val,t])=><button key={t} type="button" onClick={()=>set(k,val)} style={{border:"none",borderRight:"1px solid #e2e8f0",padding:"7px 9px",fontSize:12,cursor:"pointer",fontFamily:"inherit",background:v===val?CLR.primary:"#fff",color:v===val?"#fff":"#475569",fontWeight:v===val?700:500}}>{t}</button>)}
+          </div>;
+          return <button key={k} type="button" onClick={()=>set(k,!v)} style={chip(!!v)}>{v?"✓ ":""}{l}</button>; })}
+      </div>
+    </div>)}
+    <div style={{fontSize:11,color:"#64748b"}}>⚙️ הגדרות — תמיד פתוח לכולם. "רק שלו" בחשבוניות = המדביר מוציא חשבוניות ורואה רק את מה שהוא הוציא.</div>
+  </div>;
+}
+// סוגי רישיון מדביר (המשרד להגנת הסביבה)
+const LICENSE_TYPES=["מדביר דירות","מדביר במבנים ובשטח פתוח","מדביר באיוד"];
+
 function NewWorkerModal({onClose,onSave,initial}){
+  const isAdmin=!!(__h360User&&__h360User.role==="מנהל");
+  const linked=initial&&initial.crmUserId!=null?initial.crmUserId:null;
+  const [acc,setAcc]=useState({enabled:false,username:"",password:"",role:(initial&&initial.role)||"מדביר",permissions:rolePermsFull((initial&&initial.role)||"מדביר"),active:true,loaded:false,_newpwd:""});
+  const [accMsg,setAccMsg]=useState(""); const [busy,setBusy]=useState(false);
+  React.useEffect(()=>{ if(!linked||!sb||!isAdmin) return; sb.from('crm_users').select('*').eq('id',linked).maybeSingle().then(({data})=>{ if(data) setAcc(a=>({...a,enabled:true,loaded:true,username:data.username||"",role:data.role||a.role,permissions:{...rolePermsFull(data.role||a.role),...(data.permissions||{})},active:data.active!==false})); }); },[]);
   const [f,setF]=useState({name:"",role:"מדביר",phone:"",email:"",license:"",licenseNum:"",licenseExpiry:"",specialty:"",zone:"",status:"פעיל",color:"#2563eb",notes:"",docName:"",...(initial||{})});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const [docPreview,setDocPreview]=useState(initial?.docPreview||null);
@@ -6262,7 +6317,12 @@ function NewWorkerModal({onClose,onSave,initial}){
     </FieldCard>
     {(f.role==="מדביר"||f.alsoTech)&&<FieldCard title="פרטי רישיון">
       <G2>
-        <Sel label="סוג רישיון" value={f.license} onChange={v=>set("license",v)} options={[...new Set(["","מדביר דירות","מדביר שטחים פתוחים","מדביר דירות ושטח פתוח","מדביר חקלאי","אחר",f.license||""])]}/>
+        <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>סוג רישיון</label>
+          <select value={LICENSE_TYPES.includes(f.license)||!f.license?f.license:"__other"} onChange={e=>set("license",e.target.value==="__other"?(f.license&&!LICENSE_TYPES.includes(f.license)?f.license:" "):e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",marginBottom:6}}>
+            <option value="">— בחר —</option>{LICENSE_TYPES.map(t=><option key={t} value={t}>{t}</option>)}<option value="__other">✏️ אחר…</option>
+          </select>
+          {f.license&&!LICENSE_TYPES.includes(f.license)&&<input value={f.license.trim()?f.license:""} onChange={e=>set("license",e.target.value||" ")} placeholder="למשל: מדביר חקלאי" autoFocus style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",borderRadius:8,border:"1.5px solid "+CLR.primary,fontSize:14,fontFamily:"inherit",marginBottom:6}}/>}
+        </div>
         <Inp label="מספר רישיון" value={f.licenseNum} onChange={v=>set("licenseNum",v)} placeholder="12345678"/>
       </G2>
       <Inp label="שם המדביר במסמכים (יומן ביצוע, PDF)" value={f.fullName||""} onChange={v=>set("fullName",v)} placeholder={"למשל: זוהר אהרוני — ריק = "+(f.name||"שם המשתמש")}/>
@@ -6283,8 +6343,47 @@ function NewWorkerModal({onClose,onSave,initial}){
     <FieldCard title="הערות">
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder="הערות כלליות על העובד..."/>
     </FieldCard>
+    {isAdmin&&<FieldCard title="🔐 משתמש במערכת והרשאות">
+      {!acc.enabled?<label style={{display:"flex",alignItems:"center",gap:8,fontSize:15,cursor:"pointer"}}><input type="checkbox" checked={false} onChange={()=>setAcc(a=>({...a,enabled:true,role:f.role==="מנהל"?"מנהל":f.role==="פקידה"?"פקידה":"מדביר",permissions:rolePermsFull(f.role==="פקידה"?"פקידה":"מדביר")}))} style={{width:20,height:20}}/> לתת לעובד כניסה לאפליקציה (שם משתמש וסיסמה)</label>
+      :<div>
+        {linked&&!acc.loaded&&<div style={{fontSize:13,color:"#64748b"}}>טוען את המשתמש…</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10,marginBottom:10}}>
+          <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>שם משתמש לכניסה</label><input value={acc.username} disabled={!!linked} autoComplete="off" onChange={e=>setAcc(a=>({...a,username:e.target.value.trim()}))} placeholder="למשל: moshe" style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,direction:"ltr",textAlign:"right",background:linked?"#f1f5f9":"#fff"}}/></div>
+          <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>{linked?"סיסמה חדשה (ריק = בלי שינוי)":"סיסמה"}</label>
+            <div style={{display:"flex",gap:6}}><input type="text" value={linked?acc._newpwd:acc.password} autoComplete="new-password" onChange={e=>setAcc(a=>linked?{...a,_newpwd:e.target.value}:{...a,password:e.target.value})} style={{flex:1,minWidth:0,boxSizing:"border-box",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,direction:"ltr"}}/>
+            <button type="button" title="צור סיסמה" onClick={()=>{const g=genPassword(); setAcc(a=>linked?{...a,_newpwd:g}:{...a,password:g});}} style={{padding:"0 10px",borderRadius:8,border:"1px solid #d1d5db",background:"#f8fafc",cursor:"pointer"}}>🎲</button></div></div>
+        </div>
+        <div style={{marginBottom:10}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>תפקיד במערכת</label>
+          <div style={{display:"flex",gap:6}}>{["מדביר","פקידה","מנהל"].map(r=><button key={r} type="button" onClick={()=>setAcc(a=>({...a,role:r,permissions:rolePermsFull(r)}))} style={{flex:1,padding:"8px",borderRadius:10,border:"1.5px solid "+(acc.role===r?CLR.primary:"#e2e8f0"),background:acc.role===r?CLR.primaryLight:"#fff",color:acc.role===r?CLR.primary:"#475569",fontWeight:acc.role===r?800:500,cursor:"pointer",fontFamily:"inherit"}}>{roleLabel(r)}</button>)}</div></div>
+        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מה העובד רואה באפליקציה</label>
+        <PermEditor role={acc.role} perms={acc.permissions} onChange={p=>setAcc(a=>({...a,permissions:p}))}/>
+        {linked&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,marginTop:10,cursor:"pointer"}}><input type="checkbox" checked={acc.active} onChange={e=>setAcc(a=>({...a,active:e.target.checked}))} style={{width:18,height:18}}/> משתמש פעיל (אפשר להיכנס)</label>}
+        {!linked&&<button type="button" onClick={()=>setAcc(a=>({...a,enabled:false}))} style={{marginTop:8,border:"none",background:"none",color:"#64748b",fontSize:12,cursor:"pointer"}}>✕ בלי כניסה לאפליקציה</button>}
+        {(acc.password||acc._newpwd)&&<div style={{fontSize:12,color:"#92400e",marginTop:6}}>רשום ומסור לעובד את הסיסמה לפני השמירה — אחר כך היא לא מוצגת.</div>}
+        {accMsg&&<div style={{fontSize:13,color:accMsg.startsWith("✅")?"#166534":"#b91c1c",marginTop:6}}>{accMsg}</div>}
+      </div>}
+    </FieldCard>}
     <div style={{display:"flex",gap:10}}>
-      <Btn full onClick={()=>{if(!f.name)return alert("שם חובה");onSave({...f,licenseType:f.license||f.licenseType||"",docPreview});onClose();}}>✅ שמור עובד</Btn>
+      <Btn full disabled={busy} onClick={async()=>{if(!f.name)return alert("שם חובה");
+        let crmUserId=linked; setAccMsg("");
+        if(isAdmin&&acc.enabled&&sb){
+          try{ setBusy(true);
+            if(!linked){
+              const un=acc.username.trim(); if(!un||!acc.password){ setBusy(false); return setAccMsg("למשתמש חדש צריך שם משתמש וסיסמה"); }
+              const up=await tmpAuthClient().auth.signUp({email:authEmail(un),password:authPwd(acc.password)});
+              if(up.error||!up.data.user){ setBusy(false); return setAccMsg("שגיאה ביצירת המשתמש: "+(up.error?.message||"")); }
+              const ins=await sb.from('crm_users').insert({name:f.name,username:un,password_hash:'migrated',auth_id:up.data.user.id,role:acc.role,permissions:acc.permissions,active:true}).select('id').single();
+              if(ins.error){ setBusy(false); return setAccMsg("שגיאה: "+ins.error.message); }
+              crmUserId=ins.data.id;
+            } else {
+              const upd=await sb.from('crm_users').update({name:f.name,role:acc.role,permissions:acc.permissions,active:acc.active}).eq('id',linked);
+              if(upd.error){ setBusy(false); return setAccMsg("שגיאה: "+upd.error.message); }
+              if(acc._newpwd){ const pr=await sb.rpc('admin_set_password',{p_user_id:String(linked),p_password:acc._newpwd}); if(pr.error||!pr.data){ setBusy(false); return setAccMsg("שגיאה בעדכון הסיסמה"); } }
+            }
+          }catch(e){ setBusy(false); return setAccMsg("שגיאה: "+(e.message||e)); }
+          setBusy(false);
+        }
+        onSave({...f,license:String(f.license||"").trim(),licenseType:String(f.license||f.licenseType||"").trim(),docPreview,...(crmUserId!=null?{crmUserId}:{})});onClose();}}>{busy?"⏳ שומר…":"✅ שמור עובד"}</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
   </Modal>;
@@ -7091,7 +7190,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"",
       refDocId:P.refDocId||null, refText:P.refText||"", execLogIds:P.execLogIds||null,
       phone:cx.phone||"", address:(a&&a.address)||cx.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
-      notes, footer, privateNote, createdAt:new Date().toISOString(),
+      notes, footer, privateNote, createdAt:new Date().toISOString(), createdById:P.createdById!=null?P.createdById:((__h360User||{}).id??null), createdBy:P.createdBy||((__h360User||{}).name||""),
     };
   };
   const save=()=>{
@@ -7259,7 +7358,8 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     </div>
   </Modal>;
 }
-function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs}){
+function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs,mineOnly=null}){
+  const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
@@ -7274,7 +7374,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const [srch,setSrch]=useState("");
   const [dateFrom,setDateFrom]=useState("");
   const [dateTo,setDateTo]=useState("");
-  const docs=finance.filter(isDocRec);
+  const docs=finance.filter(isDocRec).filter(isMine);
   const filtered=docs.filter(f=>{
     if(typeF!=="הכל"&&docTypeOf(f)!==typeF) return false;
     if(statusF!=="הכל"&&f.status!==statusF) return false;
@@ -8651,7 +8751,7 @@ function Workers({workers,setWorkers,appointments}){
       </div>)}
     </div>
     {showNew&&<NewWorkerModal onClose={()=>setShowNew(false)} onSave={w=>setWorkers(ws=>[...ws,{...w,id:nextId(ws)}])}/>}
-    {editW&&<NewWorkerModal initial={editW} onClose={()=>setEditW(null)} onSave={w=>setWorkers(ws=>ws.map(x=>x.id===editW.id?{...x,...w,id:x.id,crmUserId:x.crmUserId,name:x.crmUserId!=null?x.name:w.name}:x))}/>}
+    {editW&&<NewWorkerModal initial={editW} onClose={()=>setEditW(null)} onSave={w=>setWorkers(ws=>ws.map(x=>x.id===editW.id?{...x,...w,id:x.id,crmUserId:w.crmUserId??x.crmUserId}:x))}/>}
   </div>;
 }
 
@@ -9828,7 +9928,7 @@ function App(){
           } else if(out[i].name!==u.name){ out=out.map((w,j)=>j===i?{...w,name:u.name}:w); changed=true; }
         });
         const mgr=us.filter(u=>u.role==="מנהל").sort((a,b)=>a.id-b.id)[0];
-        if(mgr){ out=out.map(w=>(String(w.crmUserId)===String(mgr.id)&&!w.licenseNum)?(changed=true,{...w,licenseNum:"2849",license:"מדביר שטחים פתוחים",licenseType:"מדביר שטחים פתוחים"}):w); }
+        if(mgr){ out=out.map(w=>(String(w.crmUserId)===String(mgr.id)&&!w.licenseNum)?(changed=true,{...w,licenseNum:"2849",license:"מדביר במבנים ובשטח פתוח",licenseType:"מדביר במבנים ובשטח פתוח"}):w); }
         return changed?out:ws;
       });
     })();
@@ -9929,19 +10029,19 @@ function App(){
     {id:"settings",label:"⚙️ הגדרות",short:"⚙️"},
   ].filter(t=>{
     if(!user || !user.role) return true;
-    if(t.hideFor===user.role) return false;
     if(t.workerOnly && user.role!=="מדביר" && !isAlsoWorker) return false;
-    if(t.adminOnly && user.role==="מדביר") return false;
-    // Check permissions from authUser
-    const permMap={"finance":"finance","invoices":"invoices","workers":"workers",
-      "collabs":"collabs","regional":"regional","projects":"projects",
-      "maintenance":"maintenance","scheduler":"scheduler","templates":"templates"};
-    if(permMap[t.id] && authUser && authUser.role!=="מנהל"){
-      return authUser.permissions?.[permMap[t.id]]===true;
-    }
-    return true;
+    return !!permOf(authUser,t.id);
   });
 
+  // הרשאות מתעדכנות בלי להתנתק: בכל פתיחה / חזרה לאפליקציה טוענים מחדש את המשתמש
+  React.useEffect(()=>{ if(!sb||!authUser) return; let dead=false;
+    const refresh=async()=>{ try{ const uid=(await sb.auth.getUser()).data.user?.id; if(!uid||dead) return; const {data}=await sb.from('crm_users').select('*').eq('auth_id',uid).maybeSingle(); if(!data||dead) return;
+      if(JSON.stringify(data.permissions||{})!==JSON.stringify(authUser.permissions||{})||data.role!==authUser.role||data.name!==authUser.name){ const nu={...authUser,role:data.role,name:data.name,permissions:data.permissions||{}}; setAuthUser(nu); __h360User=nu; try{localStorage.setItem('crm_auth',JSON.stringify(nu));}catch(e){} } }catch(e){} };
+    refresh(); const vis=()=>{ if(document.visibilityState==="visible") refresh(); }; document.addEventListener("visibilitychange",vis);
+    return ()=>{ dead=true; document.removeEventListener("visibilitychange",vis); }; },[authUser&&authUser.id]);
+  // לשונית שאין עליה הרשאה → עוברים ללשונית הראשונה שמותרת
+  React.useEffect(()=>{ if(!authUser||!user) return; const ok=id=>id==="settings"||(!!permOf(authUser,id)&&(id!=="fieldview"||user.role==="מדביר"||isAlsoWorker));
+    if(!ok(tab)){ const order=["fieldview","dashboard","calendar","execlog","neworder","customers","invoices","mychems","notes","settings"]; const nx=order.find(ok)||"settings"; setTab(nx); } },[tab,authUser&&authUser.id,authUser&&JSON.stringify(authUser.permissions),isAlsoWorker]);
   // exec log tab has its own dark bg – no padding wrapper
   const isFullTab=false; // exec log now uses sidebar like other tabs
 
@@ -9981,7 +10081,7 @@ function App(){
           ].map(group=>(
             <div key={group.lbl} style={{marginBottom:16}}>
               <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
-              {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)).map(t=>(
+              {group.items.filter(t=>(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)&&!!permOf(authUser,t.id)).map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:13,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:1,fontFamily:"inherit",transition:"all 0.15s"}}
                   onMouseEnter={e=>{if(tab!==t.id){e.currentTarget.style.background="#1e293b";e.currentTarget.style.color="#cbd5e1";}}}
                   onMouseLeave={e=>{if(tab!==t.id){e.currentTarget.style.background="transparent";e.currentTarget.style.color="#94a3b8";}}}>
@@ -10080,7 +10180,7 @@ function App(){
               ].map(group=>(
                 <div key={group.lbl} style={{marginBottom:16}}>
                   <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
-                  {group.items.filter(t=>(!t.hide||t.hide!==user.role)&&(!t.admin||user.role==="מנהל")&&(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)).map(t=>(
+                  {group.items.filter(t=>(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)&&!!permOf(authUser,t.id)).map(t=>(
                     <button key={t.id} onClick={()=>{setTab(t.id);setDrawerOpen(false);}}
                       style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:14,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:2,fontFamily:"inherit"}}>
                       <span style={{fontSize:16,width:20,textAlign:"center"}}>{t.icon}</span>{t.name}
@@ -10120,7 +10220,7 @@ function App(){
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={jobAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
             {tab==="calendar"&&<WeekCalendar appointments={calAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
-            {tab==="invoices"&&<Invoices finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={execLogs} setExecLogs={setExecLogs}/>}
+            {tab==="invoices"&&(()=>{ const own=permOf(authUser,"invoices")==="own"; const meW=myWorkerFor(user,activeWorkers); return <Invoices mineOnly={own?{id:authUser.id,workerName:meW?meW.name:authUser.name}:null} finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={own?execLogs.filter(l=>l.workerName===(meW?meW.name:authUser.name)):execLogs} setExecLogs={setExecLogs}/>; })()}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
