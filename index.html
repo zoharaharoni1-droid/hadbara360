@@ -7343,7 +7343,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
 
     {(alloc||allocationNum)&&<div style={{border:"2px solid "+(allocationNum?"#16a34a":"#f59e0b"),background:allocationNum?"#f0fdf4":"#fffbeb",borderRadius:12,padding:"12px",marginBottom:12}}>
       <div style={{fontWeight:800,color:allocationNum?"#166534":"#92400e"}}>{allocationNum?"✓ מספר הקצאה הוזן":"⚠️ דרוש מספר הקצאה"}</div>
-      {!allocationNum&&<div style={{fontSize:13,color:"#78350f",margin:"4px 0 8px",lineHeight:1.6}}>העסקה מעל {ALLOCATION_THRESHOLD.toLocaleString()} ₪ לפני מע״מ ללקוח עסקי. בלי מספר הקצאה הלקוח לא יוכל לקזז את המע״מ.<br/>כשנחבר תוכנה רשומה — המספר יתקבל אוטומטית. עד אז: מבקשים אותו באזור האישי ברשות המסים (שירות "חשבוניות ישראל") ומקלידים כאן.</div>}
+      {!allocationNum&&<div style={{fontSize:13,color:"#78350f",margin:"4px 0 8px",lineHeight:1.6}}>העסקה מעל {ALLOCATION_THRESHOLD.toLocaleString()} ₪ לפני מע״מ ללקוח עסקי. בלי מספר הקצאה הלקוח לא יוכל לקזז את המע״מ.<br/>כשנחבר תוכנה רשומה — המספר יתקבל אוטומטית. עד אז: מבקשים אותו באזור האישי ברשות המסים (שירות "חשבוניות ישראל") ומקלידים כאן.<br/><a href="https://www.gov.il/he/service/request-assignment-number-for-tax-invoice" target="_blank" rel="noopener" style={{fontWeight:700,color:"#1d4ed8"}}>🏛️ לבקשת מספר הקצאה ברשות המסים ←</a></div>}
       <Inp label="מספר הקצאה" value={allocationNum} onChange={setAllocationNum} placeholder="9 ספרות"/>
     </div>}
 
