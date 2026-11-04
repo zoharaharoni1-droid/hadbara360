@@ -10294,8 +10294,13 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   const save=list=>{ setCfgs(list); lsSet("h360_gcal",list); };
   const [url,setUrl]=useState(""); const [wid,setWid]=useState(String(me?me.id:(techs[0]||{}).id||"")); const [kind,setKind]=useState("free"); const [from,setFrom]=useState(todayStr());
   const OK=/^https:\/\/calendar\.google\.com\/calendar\/ical\/[^\s?#]+\/(private-[0-9a-f]+|public)\/basic\.ics$/i;
-  const add=async()=>{ const u=url.trim(); if(!OK.test(u)) return alert("זו לא הכתובת הנכונה.\nצריך את 'הכתובת הסודית בפורמט iCal' — מתחילה ב-https://calendar.google.com/calendar/ical/ ומסתיימת ב-basic.ics");
-    const c={id:Date.now().toString(36),url:u,workerId:wid,kind,from}; const list=[...cfgs,c]; save(list); setUrl(""); setBusy(true); setMsg("⏳ מתחבר לגוגל…");
+  const add=async()=>{ let u=url.replace(/\s+/g,"").replace(/^webcal:\/\//i,"https://");
+    if(/[•●·*]{3,}/.test(u)||!u) return alert("הודבקו נקודות במקום הכתובת.\n\nבגוגל הכתובת הסודית מוסתרת. קודם לוחצים על הנקודות (••••) — אז מופיעה הכתובת המלאה — ורק אז מעתיקים אותה.");
+    if(/\/public\/basic\.ics$/i.test(u)) return alert("זו הכתובת הציבורית — היא לא עובדת כשהיומן פרטי.\n\nצריך את השדה שמתחתיה: \"כתובת סודית בפורמט iCal\" (הכתובת עם private בתוכה). לוחצים על הנקודות כדי לחשוף אותה ואז מעתיקים.");
+    if(!OK.test(u)) return alert("זו לא הכתובת הנכונה.\nצריך את 'הכתובת הסודית בפורמט iCal' — מתחילה ב-https://calendar.google.com/calendar/ical/ ומסתיימת ב-basic.ics");
+    setBusy(true); setMsg("⏳ בודק את הכתובת מול גוגל…");
+    try{ await gcalFetch(u); }catch(e){ setBusy(false); setMsg("❌ "+(/404/.test(e.message)?"גוגל לא מצא את היומן — כנראה הכתובת לא הועתקה עד הסוף. נסה להעתיק שוב (עדיף מהמחשב).":e.message)); return; }
+    const c={id:Date.now().toString(36),url:u,workerId:wid,kind,from}; const list=[...cfgs,c]; save(list); setUrl(""); setMsg("⏳ מתחבר לגוגל…");
     const r=await gcalSyncAll(appointments,setAppointments,workers,c.id); setBusy(false); setCfgs(gcalCfgs());
     setMsg(r&&r.errors.length?"❌ "+r.errors[0]:"✅ מחובר! נוספו "+(r?r.added:0)+" רישומים מגוגל ליומן"); };
   const syncNow=async()=>{ setBusy(true); setMsg("⏳ מסנכרן…"); const r=await gcalSyncAll(appointments,setAppointments,workers); setBusy(false); setCfgs(gcalCfgs());
@@ -10315,10 +10320,10 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
       <ol style={{fontSize:13,color:"#334155",paddingRight:18,margin:"8px 0",lineHeight:1.7}}>
         <li>במחשב, פתח את <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">הגדרות גוגל יומן</a>.</li>
         <li>בצד ימין, תחת "הגדרות של היומנים שלי", לחץ על היומן שלך.</li>
-        <li>גלול למטה עד <b>"כתובת סודית בפורמט iCal"</b>, לחץ על סמל ההעתקה.</li>
+        <li>גלול למטה עד <b>"כתובת סודית בפורמט iCal"</b> (לא "ציבורית"!). <b>לחץ על הנקודות ••••</b> — תופיע הכתובת המלאה (עם המילה private) — ורק אז העתק אותה.</li>
         <li>הדבק כאן למטה ולחץ "חבר".</li>
       </ol>
-      <input dir="ltr" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" style={{...fld,width:"100%",marginBottom:8}}/>
+      <textarea dir="ltr" rows={3} value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" style={{...fld,width:"100%",marginBottom:8,fontSize:13,wordBreak:"break-all",resize:"vertical"}}/>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
         <span style={{fontSize:13}}>ייכנס ליומן של</span><select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select>
         <select value={kind} onChange={e=>setKind(e.target.value)} style={fld}><option value="free">כרישום מהיר (עבודה)</option><option value="personal">כמשימה אישית</option></select>
