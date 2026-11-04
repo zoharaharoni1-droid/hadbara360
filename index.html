@@ -161,7 +161,7 @@ const { useState } = React;
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
-const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "הקשת 31, תל אביב-יפו", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני" };
+const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "הקשת 31, תל אביב-יפו", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני", licenseType: "מדביר במבנים ובשטח פתוח", licenseNum: "2849", licenseExpiry: "2030-02-15", licenseImg: "preview/assets/license.webp" };
 // כתובת לניווט (Waze) — בלי דירה/קומה/כניסה, שמבלבלים את הניווט
 function navAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>x&&!/^(דירה|קומה|כניסה|דירת)\s/.test(x)).join(", "); }
 // "קומה 3 · דירה 1 · כניסה א׳"
@@ -7644,7 +7644,7 @@ function SiteMapEditor({zones,stations,onZones,onStations}){
 }
 
 // ─── 📁 מסמכי החברה (רישיונות, היתר רעלים, ביטוח) — משותף לכל התיקים ──
-const COMPANY_DOC_KINDS=["רישיון עסק / היתר מדביר","היתר רעלים","ביטוח צד ג׳","ביטוח אחריות מקצועית","תעודת ISO","אישור עבודה בגובה","אחר"];
+const COMPANY_DOC_KINDS=["ביטוח צד ג׳","תעודת ISO","אישור עבודה בגובה","אחר"];
 async function loadCompanyDocs(){
   if(!sb) return lsGet("h360_company_docs",[]);
   const {data,error}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}});
@@ -7705,7 +7705,10 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
   const td="padding:6px 8px;border:1px solid #e5e7eb;vertical-align:top", th="padding:6px 8px;background:#1a5c3a;color:#fff;text-align:right";
   const contacts=maintContacts(m); const zones=m.zones||[]; const stations=m.stations||[]; const logs=maintLogs(m,execLogs);
   const techIds=new Set([String(m.workerId||""),...logs.map(l=>String(l.workerId||""))]); const techNames=new Set(logs.map(l=>l.workerName));
-  const techs=(workers||[]).filter(w=>!w.deleted&&(techIds.has(String(w.id))||techNames.has(w.name))&&(w.license||w.licenseNum));
+  const techs0=(workers||[]).filter(w=>!w.deleted&&(techIds.has(String(w.id))||techNames.has(w.name))&&(w.license||w.licenseNum)&&String(w.licenseNum)!==COMPANY.licenseNum);
+  const techs=[{name:COMPANY.signer,license:COMPANY.licenseType,licenseNum:COMPANY.licenseNum,licenseExpiry:COMPANY.licenseExpiry},...techs0];
+  const licAbs=new URL(COMPANY.licenseImg,location.href).href;
+  let licSrc=licAbs; if(inline){ try{ const b=await (await fetch(licAbs)).blob(); licSrc=await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(""); fr.readAsDataURL(b); }); }catch(e){} }
   const fq=m.frequency==="אחר"?(m.frequencyOther||"אחר"):m.frequency; const win=(VISIT_WINDOWS.find(x=>x[0]===(m.visitWindow||"day"))||[])[1];
   const mats=m.fileMaterials||[];
   const link=async d=>{ const u=await signedUrl(d.path,60*60*24*30); return u?`<a href="${u}">${esc(d.name)}</a>`:esc(d.name); };
@@ -7736,7 +7739,8 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
    <table><tr><td style="${td};width:30%;background:#f0f9f4">חברה</td><td style="${td}">${esc(COMPANY.name)} — ${esc(COMPANY.legalName||"")}, ${esc(COMPANY.licensePrefix||"")}</td></tr>
    <tr><td style="${td};background:#f0f9f4">כתובת וטלפון</td><td style="${td}">${esc(COMPANY.address||"")} · ${esc(COMPANY.phone||"")} · ${esc(COMPANY.email||"")}</td></tr></table>
    ${techs.length?`<div style="font-weight:700;margin:10px 0 4px">מדבירים מורשים המטפלים במקום</div><table><tr><th style="${th}">שם</th><th style="${th}">סוג רישיון</th><th style="${th}">מס׳ רישיון</th><th style="${th}">בתוקף עד</th></tr>${techs.map(w=>`<tr><td style="${td}">${esc(w.name)}</td><td style="${td}">${esc(w.license||"")}</td><td style="${td}">${esc(w.licenseNum||"")}</td><td style="${td}">${w.licenseExpiry?fmtDate(w.licenseExpiry):"—"}</td></tr>`).join("")}</table>`:""}
-   ${cdocs.length?`<div style="font-weight:700;margin:10px 0 4px">רישיונות, היתרים וביטוחים</div><table><tr><th style="${th}">מסמך</th><th style="${th}">קובץ</th><th style="${th}">תוקף</th></tr>${cdocs.join("")}</table>`:""}
+   ${licSrc?`<div style="margin:10px 0;page-break-inside:avoid"><div style="font-weight:700;margin-bottom:4px">רישיון מדביר — המשרד להגנת הסביבה (לפי חוק הסדרת העיסוק בהדברה תברואית, התשע״ו-2016)</div><img src="${licSrc}" style="max-width:420px;width:100%;border:1px solid #ddd;border-radius:8px"/></div>`:""}
+   ${cdocs.length?`<div style="font-weight:700;margin:10px 0 4px">מסמכים נוספים</div><table><tr><th style="${th}">מסמך</th><th style="${th}">קובץ</th><th style="${th}">תוקף</th></tr>${cdocs.join("")}</table>`:""}
    ${H(3,"תוכנית השירות")}
    <table><tr><td style="${td};width:30%;background:#f0f9f4">תדירות ביקור</td><td style="${td}">${esc(fq)}${win&&m.visitWindow&&m.visitWindow!=="day"?" · "+esc(win):""}</td></tr>
    <tr><td style="${td};background:#f0f9f4">תחילת השירות</td><td style="${td}">${fmtDate(m.startDate)}${m.openEnded?" · ללא תאריך סיום":m.endDate?" · עד "+fmtDate(m.endDate):""}</td></tr>
@@ -7789,7 +7793,7 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
       if(navigator.canShare&&navigator.canShare({files:[file]})) await navigator.share({files:[file],title:name}); else saveBlobAs(b,name); }catch(e){ if(e&&e.name!=="AbortError") alert("שגיאה: "+(e.message||e)); } setBusy(""); };
   const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
   const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
-  const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",!docs.length&&"מסמכי החברה (רישיון / היתר רעלים / ביטוח)"].filter(Boolean);
+  const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",false].filter(Boolean);
   return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10}}>תיק דיגיטלי שנשאר אצל איש הקשר במקום: פרטי המקום והחברה, רישיונות המדבירים, היתרים וביטוח, מפת תחנות, רשימת החומרים עם מספר רישום, תווית ו-SDS, הוראות בטיחות ועזרה ראשונה, ויומן הביקורים. מתעדכן לבד אחרי כל ביקור.</div>
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
@@ -7810,8 +7814,8 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
       {q.trim().length>=2&&!hits.length&&<button type="button" onClick={()=>add(q.trim())} style={{marginTop:6,border:"1px solid #e2e8f0",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontFamily:"inherit"}}>+ הוסף "{q.trim()}" ידנית</button>}
     </div>
     <div style={sec}>
-      <div style={{fontWeight:800,marginBottom:4}}>📎 מסמכי החברה — נכנסים לכל תיקי ההדברה</div>
-      <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>מעלים פעם אחת: רישיון / היתר מדביר, היתר רעלים, ביטוח צד ג׳ ואחריות מקצועית. רישיונות המדבירים נלקחים מכרטיס העובד.</div>
+      <div style={{fontWeight:800,marginBottom:4}}>📎 מסמכים נוספים (לא חובה) — נכנסים לכל התיקים</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>✅ רישיון המדביר שלך (מס׳ {COMPANY.licenseNum}, בתוקף עד {fmtDate(COMPANY.licenseExpiry)}) כבר נכנס אוטומטית לכל תיק. כאן אפשר להוסיף מה שעסק מסוים דורש — למשל ביטוח צד ג׳. רישיונות של עובדים נוספים נלקחים מכרטיס העובד.</div>
       <CompanyDocsEditor docs={docs} setDocs={setDocs}/>
     </div>
     {busy?<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
