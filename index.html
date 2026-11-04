@@ -1174,9 +1174,9 @@ function execLogHtml({company,docNum,log,chemicals}){
         <th style="padding:8px 10px;text-align:right;">מס׳ אצווה</th></tr></thead>
       <tbody>${matRows}</tbody>
     </table>
-    ${(log.stationChecks||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 בדיקת תחנות האכלה</div>
-    <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">תחנה</th><th style="padding:6px 10px;text-align:right;">ממצא</th><th style="padding:6px 10px;text-align:right;">פיתיון</th></tr></thead>
-    <tbody>${log.stationChecks.map((c,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${c.num}</td><td style="padding:6px 10px;">${c.activity||"—"}</td><td style="padding:6px 10px;">${c.baitReplaced?"הוחלף":"—"}</td></tr>`).join("")}</tbody></table>`:""}
+    ${(log.stationChecks||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 בדיקת תחנות ומלכודות</div>
+    <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">מס׳</th><th style="padding:6px 10px;text-align:right;">סוג / אזור</th><th style="padding:6px 10px;text-align:right;">ממצא</th><th style="padding:6px 10px;text-align:right;">החלפה</th></tr></thead>
+    <tbody>${log.stationChecks.map((c,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${c.num}</td><td style="padding:6px 10px;">${[c.t||"תיבת האכלה",c.z,c.loc].filter(Boolean).join(" · ")}</td><td style="padding:6px 10px;">${c.activity||"—"}</td><td style="padding:6px 10px;">${c.baitReplaced?"הוחלף":"—"}</td></tr>`).join("")}</tbody></table>`:""}
     ${log.findings?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;white-space:pre-wrap;line-height:1.7;"><div style="font-weight:700;color:#075985;font-size:14px;margin-bottom:4px;">🔎 ממצאים והמלצות</div>${log.findings}</div>`:""}
     ${(log.devices||[]).length?`<div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🪤 מוצרי הדברה</div>
     <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">מוצר</th><th style="padding:6px 10px;text-align:right;">כמות</th><th style="padding:6px 10px;text-align:right;">מיקום</th></tr></thead>
@@ -1362,6 +1362,8 @@ async function shareLogAndDocPdf(log,doc){
 const LOG_PAY_TO_DOC={"מזומן":"מזומן","ביט":"ביט","PayBox":"פייבוקס","פייבוקס":"פייבוקס","העברה בנקאית":"העברה בנקאית","העברה":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"};
 function docPrefillFromLog(log,customers){
   const c=(customers||[]).find(x=>String(x.id)===String(log.customerId))||(customers||[]).find(x=>x.name===log.clientName)||null;
+  const mt=log.maintenanceId!=null?(window.__h360Maint||[]).find(x=>String(x.id)===String(log.maintenanceId)):null;
+  if(mt&&mt.billingName){ const r=docPrefillFromLog({...log,maintenanceId:null},customers); r.prefill.custName=mt.billingName; r.prefill.taxId=mt.billingTaxId||r.prefill.taxId; return r; }
   const t=(log.place&&log.place.type)||log.structureType||"";
   const what={"דירה":"הדברת דירה","בית פרטי":"הדברת בית פרטי","בניין משותף":"הדברת בניין משותף","משרד":"הדברת משרד","עסק":"הדברת עסק","מחסן":"הדברת מחסן","מסעדה":"הדברת מסעדה","גן ילדים":"הדברת גן ילדים"}[t]||(t?"הדברת "+t:"שירותי הדברה");
   const desc=log.exterminate===false&&(log.services||[]).length?serviceLabel(log):what;
@@ -2305,7 +2307,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [checks,setChecks]=useState(()=>initialData?.stationChecks||[]);
   const stations=(contract&&contract.stations)||[];
   const chk=num=>checks.find(c=>String(c.num)===String(num))||{num,activity:"",baitReplaced:false};
-  const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...patch}];});
+  const stMeta=num=>{ const st=stations.find(x=>String(x.num)===String(num))||{}; const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone); return {t:devType(st).label,z:z?z.name:"",loc:st.location||""}; };
+  const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...stMeta(num),...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...stMeta(num),...patch}];});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   // מילוי אוטומטי של זמני שהייה והנחיות — לפי יומנים קודמים עם אותם חומרים, או לפי ברירת מחדל
   const touched=React.useRef({reentry:!!initialData?.reentry,instr:!!(initialData?.instructions||[]).length});
@@ -2483,16 +2486,16 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
     </>)}
-    {stations.length>0&&sec("stations","🪤","בדיקת תחנות האכלה",checks.filter(c=>c.activity).length+" מתוך "+stations.length+" נבדקו",checks.filter(c=>c.activity).length?"ok":"opt",<>
+    {stations.length>0&&sec("stations","🪤","בדיקת תחנות ומלכודות",checks.filter(c=>c.activity).length+" מתוך "+stations.length+" נבדקו",checks.filter(c=>c.activity).length?"ok":"opt",<>
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8,flexWrap:"wrap"}}>
-        <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false})))} style={{border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
+        <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false,...stMeta(st.num)})))} style={{border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
       </div>
       {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>תחנה {st.num}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>{devType(st).icon} {devType(st).label} {st.num}{(()=>{const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone);return z?<span style={{fontWeight:600,color:"#0f766e"}}> · {z.name}</span>:null;})()}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
           {STATION_ACTIVITY.map(a=>{const on=c.activity===a;const col=a==="פעילות גבוהה"?"#dc2626":a==="פעילות קלה"?"#ca8a04":a==="חסרה / פגומה"?"#475569":"#16a34a";return <button key={a} type="button" onClick={()=>setChk(st.num,{activity:a})} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${on?col:CLR.border}`,background:on?col:"#fff",color:on?"#fff":"#334155",fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{a}</button>;})}
-          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,marginRight:"auto",cursor:"pointer"}}><input type="checkbox" checked={!!c.baitReplaced} onChange={e=>setChk(st.num,{baitReplaced:e.target.checked})}/> הוחלף פיתיון</label>
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,marginRight:"auto",cursor:"pointer"}}><input type="checkbox" checked={!!c.baitReplaced} onChange={e=>setChk(st.num,{baitReplaced:e.target.checked})}/> {devType(st).repl}</label>
         </div>
       </div>;})}
     </div>
@@ -7505,6 +7508,321 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   </div>;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// 🏢 אחזקה: כתובת מסודרת, מחירון תוספות, חלון ביקור, מיפוי המקום ותיק הדברה
+// ═══════════════════════════════════════════════════════════════════════
+const SITE_DEVICE_TYPES=[
+  {k:"bait",  icon:"🟫",label:"תיבת האכלה למכרסמים",pre:"",  repl:"הוחלף פיתיון"},
+  {k:"rtrap", icon:"🪤",label:"מלכודת מכרסמים (קפיץ / מכנית)",pre:"מ", repl:"נוקתה / הוחלפה"},
+  {k:"glue",  icon:"🟨",label:"משטח דבק למכרסמים",pre:"ד", repl:"הוחלף משטח"},
+  {k:"roach", icon:"🪳",label:"תחנת ניטור לתיקנים",pre:"ת", repl:"הוחלף משטח"},
+  {k:"fly",   icon:"🪰",label:"מלכודת זבובים (UV)",pre:"ז", repl:"הוחלף נייר דבק"},
+  {k:"moth",  icon:"🦋",label:"ניטור עש מזון (פרומון)",pre:"ע", repl:"הוחלף פרומון"},
+  {k:"beetle",icon:"🐞",label:"ניטור חיפושיות מזון (פרומון)",pre:"ח", repl:"הוחלף פרומון"},
+  {k:"other", icon:"📍",label:"אחר",pre:"א", repl:"הוחלף"},
+];
+const devType=st=>SITE_DEVICE_TYPES.find(t=>t.k===((st&&st.type)||"bait"))||SITE_DEVICE_TYPES[0];
+const ZONE_PRESETS=["קומת קרקע","קומה 1","קומה 2","מרתף","חצר","חניון","מטבח","מחסן","גג","היקף המבנה","חדר אשפה"];
+const VISIT_WINDOWS=[["day","יום קבוע (לפי תאריך ההתחלה)"],["w1","שבוע ראשון בחודש (1–7)"],["w2","שבוע שני (8–14)"],["w3","שבוע שלישי (15–21)"],["w4","שבוע רביעי (22–סוף)"],["h1","שבועיים ראשונים (1–14)"],["h2","שבועיים אחרונים (15–סוף)"],["m","מתי שנוח במהלך החודש"]];
+const EXTRA_PRESETS=["ביקור נוסף","פינוי פגר","הדברה נוספת (ריסוס)","עבודה במנוף / בגובה","אטימת פתחים","הדברת טרמיטים","הוספת תחנות"];
+const VAT_MUL=()=>1+VAT_RATE/100;
+const priceBefore=(p,incl)=>{ const n=parseFloat(p)||0; return incl?r2(n/VAT_MUL()):n; };
+const priceIncl=(p,incl)=>{ const n=parseFloat(p)||0; return incl?n:r2(n*VAT_MUL()); };
+function splitAddr(a){ const parts=String(a||"").split(",").map(x=>x.trim()).filter(Boolean); if(!parts.length) return {city:"",street:"",houseNum:"",addrMore:""};
+  const city=parts.length>1?parts[parts.length-1]:""; const first=parts[0]; const m=first.match(/^(.*?)\s+(\d+[א-ת]?)$/); const more=parts.slice(1,parts.length>1?-1:undefined).join(", ");
+  return {city,street:m?m[1]:first,houseNum:m?m[2]:"",addrMore:more}; }
+function joinAddr(f){ const st=[f.street,f.houseNum].filter(Boolean).join(" "); return [st,f.addrMore,f.city].map(x=>String(x||"").trim()).filter(Boolean).join(", "); }
+const maintPriceIncl=m=>!!m.priceInclVat;
+// חלונות ביקור חודשיים
+function maintVisitWindows(m, fromIso, toIso){
+  const win=m.visitWindow||"day";
+  const MON={"אחזקה חודשית":1,"כל חודשיים":2,"רבעוני (כל 3 חודשים)":3,"כל 6 חודשים":6,"שנתי":12};
+  if(m.frequency==="אחר") return [];
+  if(win==="day"||!MON[m.frequency]) return maintVisitDates(m,fromIso,toIso).map(d=>({date:d,from:d,to:d}));
+  const start=new Date((m.startDate||todayStr())+"T12:00:00"); if(isNaN(start)) return [];
+  const end=m.endDate&&!m.openEnded?m.endDate:"9999-12-31";
+  const out=[];
+  for(let k=0;k<200;k++){
+    const mo=new Date(start.getFullYear(),start.getMonth()+MON[m.frequency]*k,1,12);
+    const last=new Date(mo.getFullYear(),mo.getMonth()+1,0,12).getDate();
+    const R={w1:[1,7],w2:[8,14],w3:[15,21],w4:[22,last],h1:[1,14],h2:[15,last],m:[1,last]}[win]||[1,last];
+    let a=new Date(mo.getFullYear(),mo.getMonth(),R[0],12), b=new Date(mo.getFullYear(),mo.getMonth(),R[1],12);
+    if(isoD(b)<m.startDate) continue;
+    if(isoD(a)<m.startDate) a=new Date(start);
+    if(isoD(a)>toIso||isoD(a)>end) break;
+    if(isoD(b)<fromIso) continue;
+    let d=new Date(a); if(isoD(d)<fromIso) d=new Date(fromIso+"T12:00:00"); while(d.getDay()===6&&d<b) d.setDate(d.getDate()+1);
+    out.push({date:isoD(d),from:isoD(a),to:isoD(b)});
+  }
+  return out;
+}
+function nextDevNum(stations,type){ const t=SITE_DEVICE_TYPES.find(x=>x.k===type)||SITE_DEVICE_TYPES[0];
+  const mx=(stations||[]).filter(s=>(s.type||"bait")===type).reduce((m,s)=>Math.max(m,parseInt(String(s.num).replace(/\D/g,""))||0),0); return {pre:t.pre,n:mx+1}; }
+
+// תמונה מאוחסנת (קישור זמני)
+const __signed={};
+async function signedUrl(path,sec=3600){ if(!path) return ""; const c=__signed[path]; if(c&&c.until>Date.now()+60000) return c.url;
+  const r=await sb.storage.from('contracts').createSignedUrl(path,sec); if(r.error) return ""; __signed[path]={url:r.data.signedUrl,until:Date.now()+sec*1000}; return r.data.signedUrl; }
+function StoredImg({path,style,onClick,children}){
+  const [u,setU]=useState(""); React.useEffect(()=>{ let on=true; signedUrl(path).then(x=>on&&setU(x)); return ()=>{on=false;}; },[path]);
+  return <div style={{position:"relative",...style}} onClick={onClick}>{u?<img src={u} alt="" style={{width:"100%",display:"block",borderRadius:8,userSelect:"none",pointerEvents:"none"}}/>:<div style={{padding:30,textAlign:"center",color:"#94a3b8"}}>טוען תוכנית…</div>}{children}</div>;
+}
+async function uploadToContracts(file,folder){
+  if(file.size>15*1024*1024) throw new Error("הקובץ גדול מ-15MB");
+  const ext=(file.name.match(/\.[a-z0-9]+$/i)||[""])[0].toLowerCase();
+  const path=`${folder}/${Date.now()}_${Math.random().toString(36).slice(2,8)}${ext}`;
+  const up=await sb.storage.from('contracts').upload(path,file,{contentType:file.type||undefined,upsert:false});
+  if(up.error) throw up.error; return {name:file.name,type:file.type,size:file.size,path,addedAt:todayStr()};
+}
+
+// ─── 🗺️ מיפוי המקום ────────────────────────────────────────────────────
+function SiteMapEditor({zones,stations,onZones,onStations}){
+  zones=zones||[]; stations=stations||[];
+  const [type,setType]=useState("bait"); const [zoneId,setZoneId]=useState((zones[0]||{}).id||""); const [qty,setQty]=useState(1);
+  const [zName,setZName]=useState(""); const [pinFor,setPinFor]=useState(null); const [openZ,setOpenZ]=useState(null); const [busy,setBusy]=useState(false);
+  const addZone=name=>{ name=String(name||"").trim(); if(!name) return; if(zones.some(z=>z.name===name)) return; const z={id:"z"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name}; onZones([...zones,z]); setZoneId(z.id); setZName(""); };
+  const addDevices=()=>{ const n=Math.max(1,Math.min(200,parseInt(qty)||1)); const {pre,n:st}=nextDevNum(stations,type);
+    onStations([...stations,...Array.from({length:n},(_,i)=>({num:pre+(st+i),type,zone:zoneId||"",location:""}))]); };
+  const upd=(i,patch)=>onStations(stations.map((s,j)=>j===i?{...s,...patch}:s));
+  const zoneName=id=>(zones.find(z=>z.id===id)||{}).name||"";
+  const groups=[...zones.map(z=>({z,items:stations.map((s,i)=>({s,i})).filter(x=>x.s.zone===z.id)})),{z:{id:"",name:"בלי אזור"},items:stations.map((s,i)=>({s,i})).filter(x=>!x.s.zone||!zones.some(z=>z.id===x.s.zone))}].filter(g=>g.z.id||g.items.length);
+  const counts=SITE_DEVICE_TYPES.map(t=>[t,stations.filter(s=>(s.type||"bait")===t.k).length]).filter(x=>x[1]);
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",boxSizing:"border-box"};
+  const chip=on=>({padding:"6px 10px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:"#d1d5db"}`,background:on?CLR.primaryLight:"#fff",color:on?CLR.primary:"#475569",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:on?700:500});
+  const onPlan=async(z,e)=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy(true); try{ const p=await uploadToContracts(file,"sitemaps"); onZones(zones.map(x=>x.id===z.id?{...x,plan:p}:x)); setOpenZ(z.id); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(false); };
+  const placePin=(e,z)=>{ if(pinFor==null) return; const r=e.currentTarget.getBoundingClientRect(); const x=r2((e.clientX-r.left)/r.width*100), y=r2((e.clientY-r.top)/r.height*100);
+    upd(pinFor,{x,y,zone:z.id}); const nxt=stations.findIndex((s,j)=>j>pinFor&&s.zone===z.id&&s.x==null); setPinFor(nxt>=0?nxt:null); };
+  return <div>
+    <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>1️⃣ אזורים במקום</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+      {zones.map(z=><span key={z.id} style={{...chip(zoneId===z.id),display:"inline-flex",gap:6,alignItems:"center"}} onClick={()=>setZoneId(z.id)}>{z.name} <b style={{color:"#94a3b8"}}>{stations.filter(s=>s.zone===z.id).length}</b>
+        <button type="button" onClick={ev=>{ev.stopPropagation(); if(confirm("למחוק את האזור "+z.name+"? (הנקודות שבו יישארו בלי אזור)")){ onZones(zones.filter(x=>x.id!==z.id)); } }} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer",padding:0}}>✕</button></span>)}
+    </div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>{ZONE_PRESETS.filter(p=>!zones.some(z=>z.name===p)).map(p=><button key={p} type="button" onClick={()=>addZone(p)} style={{...chip(false),fontSize:12,padding:"4px 9px",borderStyle:"dashed"}}>+ {p}</button>)}</div>
+    <div style={{display:"flex",gap:6,marginBottom:12}}><input value={zName} onChange={e=>setZName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addZone(zName);}}} placeholder="אזור אחר — למשל: קומה 3 משרדים" style={{...fld,flex:1}}/><Btn sm v="secondary" onClick={()=>addZone(zName)}>הוסף</Btn></div>
+
+    <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>2️⃣ מה מציבים</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>{SITE_DEVICE_TYPES.map(t=><button key={t.k} type="button" onClick={()=>setType(t.k)} style={chip(type===t.k)}>{t.icon} {t.label}</button>)}</div>
+    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:12,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:8}}>
+      <span style={{fontSize:13}}>כמה:</span>
+      <div style={{display:"inline-flex",alignItems:"center",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden",background:"#fff"}}>
+        <button type="button" onClick={()=>setQty(q=>Math.max(1,(parseInt(q)||1)-1))} style={{border:"none",background:"#f1f5f9",width:34,height:34,fontSize:18,cursor:"pointer"}}>−</button>
+        <input type="number" inputMode="numeric" min={1} value={qty} onChange={e=>setQty(e.target.value)} style={{width:52,border:"none",textAlign:"center",fontSize:15,fontWeight:700,fontFamily:"inherit"}}/>
+        <button type="button" onClick={()=>setQty(q=>(parseInt(q)||0)+1)} style={{border:"none",background:"#f1f5f9",width:34,height:34,fontSize:18,cursor:"pointer"}}>+</button>
+      </div>
+      <span style={{fontSize:13}}>באזור:</span>
+      <select value={zoneId} onChange={e=>setZoneId(e.target.value)} style={fld}><option value="">— בלי אזור —</option>{zones.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}</select>
+      <Btn sm onClick={addDevices}>➕ הוסף</Btn>
+    </div>
+    {counts.length>0&&<div style={{fontSize:12,color:"#475569",marginBottom:8}}>סה״כ: {counts.map(([t,n])=>t.icon+" "+n+" "+t.label).join(" · ")}</div>}
+
+    {groups.map(({z,items})=><div key={z.id||"none"} style={{border:"1px solid #e2e8f0",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#f8fafc"}}>
+        <b style={{flex:1}}>📍 {z.name} <span style={{fontWeight:400,color:"#64748b",fontSize:12}}>({items.length})</span></b>
+        {z.id&&<label style={{fontSize:12,border:"1px solid #cbd5e1",borderRadius:8,padding:"4px 8px",cursor:"pointer",background:"#fff"}}><input type="file" accept="image/*" onChange={e=>onPlan(z,e)} style={{display:"none"}}/>{busy?"⏳":z.plan?"🔄 החלף תוכנית":"🖼️ תוכנית / צילום"}</label>}
+        {z.plan&&<button type="button" onClick={()=>{setOpenZ(openZ===z.id?null:z.id);setPinFor(null);}} style={{fontSize:12,border:"1px solid #cbd5e1",borderRadius:8,padding:"4px 8px",background:openZ===z.id?CLR.primaryLight:"#fff",cursor:"pointer"}}>🗺️ {openZ===z.id?"סגור מפה":"מפה"}</button>}
+      </div>
+      {z.plan&&openZ===z.id&&<div style={{padding:8}}>
+        <div style={{fontSize:12,color:"#475569",marginBottom:6}}>{pinFor!=null?<b style={{color:"#b45309"}}>👆 לחץ על המפה כדי למקם את {devType(stations[pinFor]).icon} {stations[pinFor].num}</b>:"לחץ על נקודה ברשימה למטה (📌) ואז על המפה — כדי לסמן איפה היא נמצאת."}</div>
+        <StoredImg path={z.plan.path} style={{cursor:pinFor!=null?"crosshair":"default",border:"1px solid #e2e8f0",borderRadius:8}} onClick={e=>placePin(e,z)}>
+          {items.filter(x=>x.s.x!=null).map(({s,i})=><span key={i} onClick={ev=>{ev.stopPropagation();setPinFor(i);}} title={s.location||""} style={{position:"absolute",left:s.x+"%",top:s.y+"%",transform:"translate(-50%,-50%)",background:pinFor===i?"#f59e0b":"#fff",border:"2px solid "+(pinFor===i?"#b45309":"#1a5c3a"),borderRadius:12,padding:"1px 5px",fontSize:11,fontWeight:800,whiteSpace:"nowrap",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}>{devType(s).icon}{s.num}</span>)}
+        </StoredImg>
+      </div>}
+      <div style={{padding:"6px 8px"}}>
+        {items.map(({s,i})=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:5}}>
+          <span title={devType(s).label} style={{minWidth:44,height:32,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",fontSize:12,flexShrink:0}}>{devType(s).icon}{s.num}</span>
+          <input value={s.location||""} onChange={e=>upd(i,{location:e.target.value})} placeholder={devType(s).label+" — מיקום מדויק"} style={{...fld,flex:1,minWidth:0,padding:"6px 8px",fontSize:13}}/>
+          {zones.length>0&&<select value={s.zone||""} onChange={e=>upd(i,{zone:e.target.value})} style={{...fld,padding:"6px 4px",fontSize:12,maxWidth:96}}><option value="">—</option>{zones.map(zz=><option key={zz.id} value={zz.id}>{zz.name}</option>)}</select>}
+          {z.plan&&<button type="button" title="מקם על המפה" onClick={()=>{setOpenZ(z.id);setPinFor(i);}} style={{border:"1px solid #e2e8f0",background:s.x!=null?"#ecfdf5":"#fff",borderRadius:8,width:32,height:32,cursor:"pointer"}}>📌</button>}
+          <button type="button" onClick={()=>onStations(stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:32,height:32,cursor:"pointer",flexShrink:0}}>✕</button>
+        </div>)}
+        {!items.length&&<div style={{fontSize:12,color:"#94a3b8",padding:4}}>אין עדיין נקודות באזור הזה</div>}
+      </div>
+    </div>)}
+  </div>;
+}
+
+// ─── 📁 מסמכי החברה (רישיונות, היתר רעלים, ביטוח) — משותף לכל התיקים ──
+const COMPANY_DOC_KINDS=["רישיון עסק / היתר מדביר","היתר רעלים","ביטוח צד ג׳","ביטוח אחריות מקצועית","תעודת ISO","אישור עבודה בגובה","אחר"];
+async function loadCompanyDocs(){
+  if(!sb) return lsGet("h360_company_docs",[]);
+  const {data,error}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}});
+  if(error||!data) return lsGet("h360_company_docs",[]);
+  const f=data.find(x=>/^docs-\d+\.json$/.test(x.name)); if(!f) return [];
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return lsGet("h360_company_docs",[]);
+  try{ const v=JSON.parse(await r.data.text()); lsSet("h360_company_docs",v); return v; }catch(e){ return []; }
+}
+async function saveCompanyDocs(list){
+  lsSet("h360_company_docs",list);
+  const name="company/docs-"+String(Date.now()).padStart(15,"0")+".json";
+  const {error}=await sb.storage.from('contracts').upload(name,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false});
+  if(error) throw error;
+}
+function CompanyDocsEditor({docs,setDocs}){
+  const [kind,setKind]=useState(COMPANY_DOC_KINDS[0]); const [exp,setExp]=useState(""); const [busy,setBusy]=useState(false);
+  const add=async e=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy(true);
+    try{ const p=await uploadToContracts(file,"company"); const next=[...docs,{...p,kind,expiry:exp}]; await saveCompanyDocs(next); setDocs(next); setExp(""); }catch(err){ alert("שמירה נכשלה: "+(err.message||err)); } setBusy(false); };
+  const remove=async i=>{ if(!confirm("להסיר את המסמך מתיקי ההדברה?")) return; const next=docs.filter((_,j)=>j!==i); try{ await saveCompanyDocs(next); setDocs(next); }catch(err){ alert(err.message||err); } };
+  const fld={padding:"7px 9px",borderRadius:8,border:"1px solid #d1d5db",fontSize:13,fontFamily:"inherit",background:"#fff"};
+  return <div>
+    {docs.map((d,i)=>{ const left=d.expiry?Math.round((new Date(d.expiry)-new Date())/864e5):null; return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",border:"1px solid #e2e8f0",borderRadius:8,marginBottom:5,fontSize:13}}>
+      <span style={{flex:1}}><b>{d.kind}</b> · {d.name}{d.expiry?<span style={{color:left<0?"#dc2626":left<30?"#b45309":"#64748b"}}> · בתוקף עד {fmtDate(d.expiry)}{left<0?" ⚠️ פג":""}</span>:""}</span>
+      <button type="button" onClick={()=>openDataFile(d)} style={{border:"1px solid #e2e8f0",background:"#fff",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>פתח</button>
+      <button type="button" onClick={()=>remove(i)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:6,padding:"3px 8px",cursor:"pointer"}}>✕</button></div>; })}
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+      <select value={kind} onChange={e=>setKind(e.target.value)} style={fld}>{COMPANY_DOC_KINDS.map(k=><option key={k}>{k}</option>)}</select>
+      <span style={{fontSize:12}}>תוקף:</span><input type="date" value={exp} onChange={e=>setExp(e.target.value)} style={fld}/>
+      <label style={{border:"1.5px dashed "+CLR.primary,color:CLR.primary,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:13,fontWeight:700}}><input type="file" accept="image/*,.pdf" onChange={add} style={{display:"none"}}/>{busy?"⏳ מעלה…":"📎 העלה מסמך"}</label>
+    </div>
+  </div>;
+}
+
+// ─── 🧪 חומרים לתיק ───────────────────────────────────────────────────
+function firstAidFor(active){
+  const a=String(active||"").toLowerCase(); const out=[];
+  if(/bromadiolone|brodifacoum|difenacoum|difethialone|flocoumafen|coumatetralyl|warfarin/.test(a)) out.push("נוגד קרישה (רעל מכרסמים). תסמינים עשויים להופיע אחרי כמה ימים — דימומים. נוגדן: ויטמין K1 — במתן ובהשגחת רופא בלבד. אין לגרום להקאה.");
+  if(/methrin|thrin|allethrin|permethrin|cyfluthrin|cyhalothrin|etofenprox/.test(a)) out.push("פירתרואיד: במגע בעור — לשטוף במים וסבון; עקצוץ/נימול בעור חולף בדרך כלל. במגע בעיניים — לשטוף 15 דקות במים זורמים.");
+  if(/fipronil/.test(a)) out.push("פיפרוניל: בבליעה — לא לגרום להקאה, לפנות מיד לטיפול רפואי עם התווית.");
+  if(/imidacloprid|thiamethoxam|dinotefuran|acetamiprid|clothianidin/.test(a)) out.push("ניאוניקוטינואיד: בבליעה — לשטוף פה במים, לא לגרום להקאה, לפנות לטיפול רפואי עם התווית.");
+  if(/pyriproxyfen|methoprene|diflubenzuron|hydroprene|novaluron/.test(a)) out.push("מווסת גדילה (IGR): רעילות נמוכה ליונקים; בכל זאת — לשטוף מגע ולפנות לרופא בבליעה.");
+  if(/piperonyl|pbo/.test(a)) out.push("מכיל PBO (מגביר): להימנע משאיפה; באי-נוחות — לצאת לאוויר צח.");
+  return out;
+}
+function regRowFor(reg,name){ return (reg||[]).find(r=>r[0]===name)||null; }
+function matFromName(name,reg,maintAll){
+  // אם החומר כבר מתועד בתיק אחר — לוקחים משם (כולל SDS ותווית שהועלו)
+  for(const m of (maintAll||[])) { const x=(m.fileMaterials||[]).find(y=>y.name===name&&(y.sds||y.label)); if(x) return {...x}; }
+  const r=regRowFor(reg,name); const l=(CHEMICALS||[]).find(c=>c.name===name)||{};
+  return r?{name,reg:r[2],holder:r[1],form:r[3],active:r[4],targets:r[5],expiry:r[6]}:{name,reg:"",holder:l.mfr||"",form:l.method||"",active:l.active||"",targets:(l.targets||[]).join(", "),expiry:""};
+}
+
+// ─── 📄 תוכן תיק ההדברה ───────────────────────────────────────────────
+async function imgDataUrl(path){ try{ const u=await signedUrl(path); if(!u) return ""; const b=await (await fetch(u)).blob(); return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(""); fr.readAsDataURL(b); }); }catch(e){ return ""; } }
+async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=false}={}){
+  const esc=x=>String(x??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+  const H=(n,t)=>`<h2 style="color:#1a5c3a;font-size:17px;margin:22px 0 8px;border-bottom:2px solid #1a5c3a;padding-bottom:4px">${n}. ${t}</h2>`;
+  const td="padding:6px 8px;border:1px solid #e5e7eb;vertical-align:top", th="padding:6px 8px;background:#1a5c3a;color:#fff;text-align:right";
+  const contacts=maintContacts(m); const zones=m.zones||[]; const stations=m.stations||[]; const logs=maintLogs(m,execLogs);
+  const techIds=new Set([String(m.workerId||""),...logs.map(l=>String(l.workerId||""))]); const techNames=new Set(logs.map(l=>l.workerName));
+  const techs=(workers||[]).filter(w=>!w.deleted&&(techIds.has(String(w.id))||techNames.has(w.name))&&(w.license||w.licenseNum));
+  const fq=m.frequency==="אחר"?(m.frequencyOther||"אחר"):m.frequency; const win=(VISIT_WINDOWS.find(x=>x[0]===(m.visitWindow||"day"))||[])[1];
+  const mats=m.fileMaterials||[];
+  const link=async d=>{ const u=await signedUrl(d.path,60*60*24*30); return u?`<a href="${u}">${esc(d.name)}</a>`:esc(d.name); };
+  // מפות
+  let maps="";
+  for(const z of zones){ if(!z.plan) continue; const src=inline?await imgDataUrl(z.plan.path):await signedUrl(z.plan.path,60*60*24*7); if(!src) continue;
+    const pins=stations.filter(s=>s.zone===z.id&&s.x!=null).map(s=>`<span style="position:absolute;left:${s.x}%;top:${s.y}%;transform:translate(-50%,-50%);background:#fff;border:2px solid #1a5c3a;border-radius:10px;padding:0 4px;font-size:10px;font-weight:700;white-space:nowrap">${devType(s).icon}${esc(s.num)}</span>`).join("");
+    maps+=`<div style="page-break-inside:avoid;margin:10px 0"><div style="font-weight:700;margin-bottom:4px">🗺️ ${esc(z.name)}</div><div style="position:relative;display:inline-block;max-width:100%"><img src="${src}" style="max-width:100%;max-height:520px;display:block;border:1px solid #ddd"/>${pins}</div></div>`; }
+  const stRows=(zones.length?[...zones,{id:"",name:"כללי"}]:[{id:"",name:""}]).map(z=>{ const items=stations.filter(s=>z.id?s.zone===z.id:(!s.zone||!zones.some(q=>q.id===s.zone))); if(!items.length) return "";
+    return items.map((s,i)=>`<tr>${i===0?`<td style="${td};font-weight:700" rowspan="${items.length}">${esc(z.name||"—")}</td>`:""}<td style="${td};text-align:center;font-weight:700">${devType(s).icon} ${esc(s.num)}</td><td style="${td}">${esc(devType(s).label)}</td><td style="${td}">${esc(s.location||"")}</td></tr>`).join(""); }).join("");
+  const matRows=[]; for(const x of mats){ const docs=[]; if(x.label) docs.push("תווית: "+await link(x.label)); if(x.sds) docs.push("SDS: "+await link(x.sds));
+    matRows.push(`<tr><td style="${td};font-weight:700">${esc(x.name)}</td><td style="${td}">${esc(x.reg||"—")}</td><td style="${td}">${esc(x.holder||"")}</td><td style="${td}">${esc(x.form||"")}</td><td style="${td};font-size:11px">${esc(x.active||"")}</td><td style="${td};font-size:11px">${esc(x.targets||"")}</td><td style="${td};white-space:nowrap">${esc(x.expiry||"")}</td><td style="${td};font-size:11px">${docs.join("<br>")||"<span style='color:#b45309'>יש לצרף SDS ותווית</span>"}</td></tr>`); }
+  const aid=[...new Set(mats.flatMap(x=>firstAidFor(x.active)))];
+  const cdocs=[]; for(const d of companyDocs){ cdocs.push(`<tr><td style="${td};font-weight:700">${esc(d.kind)}</td><td style="${td}">${await link(d)}</td><td style="${td}">${d.expiry?fmtDate(d.expiry):"—"}</td></tr>`); }
+  const logRows=logs.slice(0,60).map(l=>`<tr><td style="${td};white-space:nowrap">${fmtDate(l.date)}</td><td style="${td}">${esc(l.workerName||"")}</td><td style="${td}">${esc((l.pest||[]).join(", "))}</td><td style="${td};font-size:11px">${(l.materials||[]).map(x=>esc(x.name)+(x.batch?" (אצווה "+esc(x.batch)+")":"")).join("<br>")}</td><td style="${td};font-size:11px">${(l.stationChecks||[]).length?(l.stationChecks.filter(c=>c.activity&&c.activity!=="אין פעילות").length+" עם ממצא מתוך "+l.stationChecks.length):""}</td><td style="${td}">${esc(l.docNum||"")}</td></tr>`).join("");
+  const extras=(m.extras||[]).filter(x=>x.desc);
+  return `<div style="max-width:900px;margin:0 auto;font-size:13px;line-height:1.6">
+   <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a5c3a;padding-bottom:12px">
+     <div><img src="${LOGO_URL}" style="height:64px"/><div style="font-size:12px;color:#555">${esc(COMPANY.licensePrefix||"")} · ${esc(COMPANY.phone||"")}</div></div>
+     <div style="text-align:left"><div style="font-size:24px;font-weight:800;color:#1a5c3a">תיק הדברה</div><div style="font-size:15px;font-weight:700">${esc(m.customerName)}</div><div style="font-size:12px;color:#555">עודכן: ${fmtDate(todayStr())}</div></div>
+   </div>
+   ${H(1,"פרטי המקום")}
+   <table><tr><td style="${td};width:30%;background:#f0f9f4">שם המקום</td><td style="${td}">${esc(m.customerName)}${m.billingName&&m.billingName!==m.customerName?" ("+esc(m.billingName)+")":""}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">כתובת</td><td style="${td}">${esc(m.address||"")}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">סוג המקום</td><td style="${td}">${esc(m.type||"")}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">אנשי קשר</td><td style="${td}">${contacts.map(c=>esc([c.name,c.role,c.phone].filter(Boolean).join(" · "))).join("<br>")||"—"}</td></tr></table>
+   ${H(2,"חברת ההדברה")}
+   <table><tr><td style="${td};width:30%;background:#f0f9f4">חברה</td><td style="${td}">${esc(COMPANY.name)} — ${esc(COMPANY.legalName||"")}, ${esc(COMPANY.licensePrefix||"")}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">כתובת וטלפון</td><td style="${td}">${esc(COMPANY.address||"")} · ${esc(COMPANY.phone||"")} · ${esc(COMPANY.email||"")}</td></tr></table>
+   ${techs.length?`<div style="font-weight:700;margin:10px 0 4px">מדבירים מורשים המטפלים במקום</div><table><tr><th style="${th}">שם</th><th style="${th}">סוג רישיון</th><th style="${th}">מס׳ רישיון</th><th style="${th}">בתוקף עד</th></tr>${techs.map(w=>`<tr><td style="${td}">${esc(w.name)}</td><td style="${td}">${esc(w.license||"")}</td><td style="${td}">${esc(w.licenseNum||"")}</td><td style="${td}">${w.licenseExpiry?fmtDate(w.licenseExpiry):"—"}</td></tr>`).join("")}</table>`:""}
+   ${cdocs.length?`<div style="font-weight:700;margin:10px 0 4px">רישיונות, היתרים וביטוחים</div><table><tr><th style="${th}">מסמך</th><th style="${th}">קובץ</th><th style="${th}">תוקף</th></tr>${cdocs.join("")}</table>`:""}
+   ${H(3,"תוכנית השירות")}
+   <table><tr><td style="${td};width:30%;background:#f0f9f4">תדירות ביקור</td><td style="${td}">${esc(fq)}${win&&m.visitWindow&&m.visitWindow!=="day"?" · "+esc(win):""}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">תחילת השירות</td><td style="${td}">${fmtDate(m.startDate)}${m.openEnded?" · ללא תאריך סיום":m.endDate?" · עד "+fmtDate(m.endDate):""}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">מזיקים שנמצאו במקום</td><td style="${td}">${esc(maintList(m.pests).join(", ")||"—")}</td></tr>
+   <tr><td style="${td};background:#f0f9f4">כלול בשירות</td><td style="${td}">${m.coverAll!==false?"כל המזיקים הנפוצים"+(maintList(m.excludedPests).length?" למעט: "+esc(maintList(m.excludedPests).join(", ")):""):esc(maintList(m.includedPests).join(", ")||"—")}</td></tr>
+   ${maintList(m.paidPests).length?`<tr><td style="${td};background:#f0f9f4">בתשלום נוסף (באישור מראש)</td><td style="${td}">${esc(maintList(m.paidPests).join(", "))}</td></tr>`:""}
+   ${extras.length?`<tr><td style="${td};background:#f0f9f4">פעולות נוספות בתשלום</td><td style="${td}">${extras.map(x=>esc(x.desc)+(x.approval!==false?" (באישור מראש)":"")).join("<br>")}</td></tr>`:""}</table>
+   ${H(4,"מיפוי המקום — תחנות ומלכודות")}
+   ${stations.length?`<table><tr><th style="${th}">אזור</th><th style="${th}">מס׳</th><th style="${th}">סוג</th><th style="${th}">מיקום</th></tr>${stRows}</table>`:"<div>לא הוצבו תחנות</div>"}
+   ${maps}
+   ${H(5,"חומרי ההדברה בשימוש במקום")}
+   ${mats.length?`<table style="font-size:12px"><tr><th style="${th}">תכשיר</th><th style="${th}">מס׳ רישום</th><th style="${th}">בעל הרישום</th><th style="${th}">סוג תכשיר</th><th style="${th}">חומר פעיל</th><th style="${th}">מיועד ל</th><th style="${th}">רישום בתוקף עד</th><th style="${th}">תווית / SDS</th></tr>${matRows.join("")}</table>
+   <div style="font-size:11px;color:#555;margin-top:4px">כל התכשירים רשומים לשימוש מדבירים בהתאם לרשומות המשרד להגנת הסביבה. גיליונות הבטיחות (SDS) והתוויות מצורפים בקישורים / בנספח.</div>`:"<div>טרם נבחרו חומרים</div>"}
+   ${H(6,"בטיחות ועזרה ראשונה")}
+   <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:8px"><b>☎️ בכל חשד להרעלה: מרכז מידע בהרעלות (רמב״ם) 04-7771900 · מד״א 101</b><br>יש להציג לצוות הרפואי את תווית המוצר / גיליון הבטיחות.</div>
+   <ul style="padding-right:18px">
+     <li>אין לגעת, להזיז או לפתוח תחנות האכלה ומלכודות. לדווח לחברת ההדברה על תחנה פגועה או חסרה.</li>
+     <li>להרחיק ילדים וחיות מחמד מאזורים מטופלים ומתחנות.</li>
+     <li>במגע עם העור — לשטוף היטב במים וסבון. במגע בעיניים — לשטוף 15 דקות במים זורמים.</li>
+     <li>בבליעה — לא לגרום להקאה; לפנות מיד לטיפול רפואי עם התווית.</li>
+     <li>לדווח לחברת ההדברה על פגרים או על סימני פעילות מזיקים.</li>
+     ${aid.map(t=>`<li>${esc(t)}</li>`).join("")}
+   </ul>
+   ${H(7,"יומן ביקורים")}
+   ${logs.length?`<table style="font-size:12px"><tr><th style="${th}">תאריך</th><th style="${th}">מדביר</th><th style="${th}">מזיקים</th><th style="${th}">חומרים</th><th style="${th}">תחנות</th><th style="${th}">מס׳ יומן</th></tr>${logRows}</table><div style="font-size:11px;color:#555;margin-top:4px">יומן ביצוע מלא לכל ביקור נשלח למקום בסיום הטיפול.</div>`:"<div>טרם בוצעו ביקורים</div>"}
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:36px"><div><div style="color:#555;margin-bottom:28px">חתימת חברת ההדברה:</div><div style="border-bottom:1px solid #999"></div></div><div><div style="color:#555;margin-bottom:28px">חתימת נציג המקום:</div><div style="border-bottom:1px solid #999"></div></div></div>
+  </div>`;
+}
+function openPrintAsync(title,htmlPromise){
+  const w=window.open("","_blank"); if(!w){ alert("הדפדפן חסם חלון קופץ — אפשר חלונות קופצים לאתר."); return; }
+  w.document.write("<p style='font-family:Arial;padding:30px;direction:rtl'>⏳ מכין את המסמך…</p>");
+  htmlPromise.then(html=>{ w.document.open(); w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;}body{padding:28px;color:#111;direction:rtl;background:#fff;}table{width:100%;border-collapse:collapse;}a{color:#1d4ed8}@media print{.noprint{display:none;}body{padding:10px;}h2{page-break-after:avoid}tr{page-break-inside:avoid}}.btnbar{position:fixed;top:10px;left:10px;display:flex;gap:8px;}.btnbar button{padding:8px 16px;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700;}</style></head><body><div class="btnbar noprint"><button onclick="window.print()" style="background:#1a5c3a;color:#fff;">🖨️ הדפס / שמור PDF</button><button onclick="window.close()" style="background:#eee;color:#333;">סגור</button></div><div style="margin-top:48px;">${html}</div></body></html>`); w.document.close(); })
+    .catch(e=>{ w.document.body.innerHTML="<p style='padding:30px'>שגיאה: "+(e.message||e)+"</p>"; });
+}
+function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose}){
+  const reg=useRegProducts();
+  const [mats,setMats]=useState(()=>m.fileMaterials||[]);
+  const [docs,setDocs]=useState(()=>lsGet("h360_company_docs",[]));
+  const [q,setQ]=useState(""); const [busy,setBusy]=useState("");
+  React.useEffect(()=>{ loadCompanyDocs().then(setDocs).catch(()=>{}); },[]);
+  const used=[...new Set(maintLogs(m,execLogs).flatMap(l=>(l.materials||[]).map(x=>x.name)))];
+  const kit=(lsGet("h360_mykit",[])||[]).map(x=>x.name);
+  const sugg=[...new Set([...used,...kit])].filter(n=>n&&!mats.some(x=>x.name===n));
+  const add=name=>{ if(!name||mats.some(x=>x.name===name)) return; setMats(ms=>[...ms,matFromName(name,reg,maintenance)]); setQ(""); };
+  const hits=q.trim().length>=2?reg.filter(r=>r[0].includes(q.trim())||String(r[4]).toLowerCase().includes(q.trim().toLowerCase())).slice(0,8):[];
+  const upFor=async(i,key,e)=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy("מעלה…"); try{ const p=await uploadToContracts(file,"sds"); setMats(ms=>ms.map((x,j)=>j===i?{...x,[key]:p}:x)); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(""); };
+  const persist=()=>{ onSave({...m,fileMaterials:mats}); };
+  const cur={...m,fileMaterials:mats};
+  const sharePdf=async()=>{ persist(); setBusy("מכין PDF…"); try{ const html=await pestFileHtml(cur,{workers,execLogs,companyDocs:docs,inline:true}); const b=await htmlPdfBlob(html); const name="תיק הדברה - "+m.customerName+".pdf"; const file=new File([b],name,{type:"application/pdf"});
+      if(navigator.canShare&&navigator.canShare({files:[file]})) await navigator.share({files:[file],title:name}); else saveBlobAs(b,name); }catch(e){ if(e&&e.name!=="AbortError") alert("שגיאה: "+(e.message||e)); } setBusy(""); };
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
+  const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",!docs.length&&"מסמכי החברה (רישיון / היתר רעלים / ביטוח)"].filter(Boolean);
+  return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
+    <div style={{fontSize:13,color:"#475569",marginBottom:10}}>תיק דיגיטלי שנשאר אצל איש הקשר במקום: פרטי המקום והחברה, רישיונות המדבירים, היתרים וביטוח, מפת תחנות, רשימת החומרים עם מספר רישום, תווית ו-SDS, הוראות בטיחות ועזרה ראשונה, ויומן הביקורים. מתעדכן לבד אחרי כל ביקור.</div>
+    {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
+    <div style={sec}>
+      <div style={{fontWeight:800,marginBottom:6}}>🧪 חומרים בתיק ({mats.length})</div>
+      {mats.map((x,i)=><div key={x.name} style={{border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b>{x.name}</b><button type="button" onClick={()=>setMats(ms=>ms.filter((_,j)=>j!==i))} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>הסר</button></div>
+        <div style={{fontSize:12,color:"#475569"}}>{[x.reg&&"רישום "+x.reg,x.holder,x.form,x.active].filter(Boolean).join(" · ")||"לא נמצא במאגר הרישום — אפשר לצרף את התווית"}</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+          {[["sds","📄 SDS (גיליון בטיחות)"],["label","🏷️ תווית"]].map(([k,l])=>x[k]?<span key={k} style={{fontSize:12,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"4px 8px"}}>✓ {l} <button type="button" onClick={()=>openDataFile(x[k])} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer"}}>פתח</button><button type="button" onClick={()=>setMats(ms=>ms.map((y,j)=>j===i?{...y,[k]:null}:y))} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>✕</button></span>
+            :<label key={k} style={{fontSize:12,border:"1.5px dashed #cbd5e1",borderRadius:8,padding:"4px 8px",cursor:"pointer"}}><input type="file" accept=".pdf,image/*" onChange={e=>upFor(i,k,e)} style={{display:"none"}}/>+ {l}</label>)}
+          <a href={"https://www.google.com/search?q="+encodeURIComponent(x.name+" גיליון בטיחות SDS "+(x.holder||""))} target="_blank" rel="noopener" style={{fontSize:12,padding:"4px 8px",color:"#1d4ed8"}}>🔎 חפש SDS ברשת</a>
+        </div>
+      </div>)}
+      {sugg.length>0&&<div style={{margin:"6px 0"}}><div style={{fontSize:12,color:"#64748b",marginBottom:4}}>מהביקורים במקום ומ"החומרים שלי":</div><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{sugg.map(n=><button key={n} type="button" onClick={()=>add(n)} style={{padding:"5px 10px",borderRadius:20,border:"1.5px dashed "+CLR.primary,background:"#fff",color:CLR.primary,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ {n}</button>)}</div></div>}
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔎 חיפוש תכשיר במאגר הרשמי (שם או חומר פעיל)…" style={{...fld,width:"100%",marginTop:6}}/>
+      {hits.map(r=><div key={r[0]+r[2]} onClick={()=>add(r[0])} style={{padding:"6px 8px",borderBottom:"1px solid #f1f5f9",cursor:"pointer",fontSize:13}}><b>{r[0]}</b> <span style={{color:"#64748b",fontSize:12}}>· {r[4]} · רישום {r[2]}</span></div>)}
+      {q.trim().length>=2&&!hits.length&&<button type="button" onClick={()=>add(q.trim())} style={{marginTop:6,border:"1px solid #e2e8f0",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontFamily:"inherit"}}>+ הוסף "{q.trim()}" ידנית</button>}
+    </div>
+    <div style={sec}>
+      <div style={{fontWeight:800,marginBottom:4}}>📎 מסמכי החברה — נכנסים לכל תיקי ההדברה</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>מעלים פעם אחת: רישיון / היתר מדביר, היתר רעלים, ביטוח צד ג׳ ואחריות מקצועית. רישיונות המדבירים נלקחים מכרטיס העובד.</div>
+      <CompanyDocsEditor docs={docs} setDocs={setDocs}/>
+    </div>
+    {busy?<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      <Btn style={{flex:"1 1 180px"}} onClick={()=>{persist();openPrintAsync("תיק הדברה — "+m.customerName,pestFileHtml(cur,{workers,execLogs,companyDocs:docs}));}}>📄 פתח תיק להדפסה / PDF</Btn>
+      <Btn v="secondary" style={{flex:"1 1 160px"}} onClick={sharePdf}>📤 שלח לאיש הקשר</Btn>
+      <Btn v="ghost" onClick={()=>{persist();onClose();}}>💾 שמור וסגור</Btn>
+    </div>}
+  </Modal>;
+}
+
 // ═══ MAINTENANCE TAB ═══════════════════════════════════
 const MAINTENANCE_FREQUENCIES = ["פעמיים בשבוע","פעם בשבוע","אחזקה חודשית","כל חודשיים","רבעוני (כל 3 חודשים)","כל 6 חודשים","שנתי"];
 const MAINTENANCE_TYPES = ["דירת גן/וילה","עסק - מסעדה","עסק - מאפייה","עסק - מפעל מזון","עסק - בית מרקחת","עסק - גן ילדים","עסק - מלון","בניין משותף","ממסד/מוסד","אחר"];
@@ -7535,14 +7853,16 @@ function maintSchedule(maintenance, appointments, workers, horizonDays=62){
   const add=[];
   (maintenance||[]).filter(m=>!m.deleted&&m.status==="פעיל"&&m.autoSchedule&&m.workerId).forEach(m=>{
     const w=(workers||[]).find(x=>String(x.id)===String(m.workerId)); if(!w) return;
-    maintVisitDates(m,today,to).forEach(date=>{
-      const exists=(appointments||[]).some(a=>String(a.maintenanceId)===String(m.id)&&a.date===date)||add.some(a=>a.maintenanceId===m.id&&a.date===date);
+    maintVisitWindows(m,today,to).forEach(({date,from,to:wTo})=>{
+      const flex=from!==wTo;
+      const exists=(appointments||[]).some(a=>String(a.maintenanceId)===String(m.id)&&(a.date===date||(flex&&(a.flexFrom===from||(a.date>=from&&a.date<=wTo)))))||add.some(a=>a.maintenanceId===m.id&&a.date===date);
       if(exists) return;
       const t=m.visitTime||"08:00"; const hh=parseInt(t); const tw=t+"–"+String(Math.min(hh+2,22)).padStart(2,"0")+":"+t.split(":")[1];
-      add.push({customerId:null,customerName:m.customerName,workerId:w.id,workerName:w.name,date,time:t,timeWindow:tw,
-        pestType:"אחזקה"+(maintList(m.pests).length?" · "+maintList(m.pests).slice(0,3).join(", "):""),pests:maintList(m.pests),
-        price:parseInt(m.price)||0,address:m.address||"",notes:"ביקור אחזקה ("+m.frequency+")",status:"ממתין",executionLog:null,
-        maintenanceId:m.id,propertyType:m.type||""});
+      const fq=m.frequency==="אחר"?(m.frequencyOther||"אחר"):m.frequency;
+      add.push({customerId:null,customerName:m.customerName,workerId:w.id,workerName:w.name,date,time:flex?"07:00":t,timeWindow:flex?ALL_DAY_TW:tw,
+        pestType:"אחזקה"+(flex?" · גמיש עד "+fmtDate(wTo).slice(0,5):"")+(maintList(m.pests).length?" · "+maintList(m.pests).slice(0,3).join(", "):""),pests:maintList(m.pests),
+        price:parseInt(m.price)||0,address:m.address||"",notes:"ביקור אחזקה ("+fq+")"+(flex?" — לתאם עם המקום בין "+fmtDate(from)+" ל-"+fmtDate(wTo):""),status:"ממתין",executionLog:null,
+        maintenanceId:m.id,propertyType:m.type||"",...(flex?{flexFrom:from,flexTo:wTo}:{})});
     });
   });
   return add;
@@ -7557,9 +7877,9 @@ function maintReportHtml(m, logs, ym){
     return `<tr><td style="padding:7px;border:1px solid #e5e7eb;white-space:nowrap">${fmtDate(l.date)}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc(l.workerName||"")}${l.workerLicense?"<br><span style='color:#555;font-size:11px'>רישיון "+esc(l.workerLicense)+"</span>":""}</td><td style="padding:7px;border:1px solid #e5e7eb">${esc((l.pest||[]).join(", "))}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${mats||"—"}</td><td style="padding:7px;border:1px solid #e5e7eb;font-size:12px">${esc(l.extermination_notes||l.notes||"")}</td></tr>`;}).join("");
   const stations=m.stations||[];
   const checks=list.filter(l=>(l.stationChecks||[]).length);
-  const stTable=stations.length&&checks.length?`<h3 style="color:#1a5c3a;margin:18px 0 8px">🪤 מעקב תחנות האכלה</h3>
+  const stTable=stations.length&&checks.length?`<h3 style="color:#1a5c3a;margin:18px 0 8px">🪤 מעקב תחנות ומלכודות</h3>
     <table style="font-size:12px"><thead><tr style="background:#1a5c3a;color:#fff"><th style="padding:6px">תחנה</th><th style="padding:6px">מיקום</th>${checks.map(l=>`<th style="padding:6px">${fmtDate(l.date)}</th>`).join("")}</tr></thead>
-    <tbody>${stations.map(st=>`<tr><td style="padding:6px;border:1px solid #e5e7eb;text-align:center"><b>${st.num}</b></td><td style="padding:6px;border:1px solid #e5e7eb">${esc(st.location||"")}</td>${checks.map(l=>{const c=(l.stationChecks||[]).find(x=>String(x.num)===String(st.num))||{};const col=c.activity==="פעילות גבוהה"?"#fee2e2":c.activity==="פעילות קלה"?"#fef9c3":c.activity==="חסרה / פגומה"?"#e5e7eb":"#fff";return `<td style="padding:6px;border:1px solid #e5e7eb;background:${col}">${esc(c.activity||"—")}${c.baitReplaced?" · הוחלף":""}</td>`;}).join("")}</tr>`).join("")}</tbody></table>`:"";
+    <tbody>${stations.map(st=>`<tr><td style="padding:6px;border:1px solid #e5e7eb;text-align:center"><b>${devType(st).icon} ${st.num}</b></td><td style="padding:6px;border:1px solid #e5e7eb">${esc(st.location||"")}</td>${checks.map(l=>{const c=(l.stationChecks||[]).find(x=>String(x.num)===String(st.num))||{};const col=c.activity==="פעילות גבוהה"?"#fee2e2":c.activity==="פעילות קלה"?"#fef9c3":c.activity==="חסרה / פגומה"?"#e5e7eb":"#fff";return `<td style="padding:6px;border:1px solid #e5e7eb;background:${col}">${esc(c.activity||"—")}${c.baitReplaced?" · הוחלף":""}</td>`;}).join("")}</tr>`).join("")}</tbody></table>`:"";
   return `<div style="max-width:900px;margin:0 auto">
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:12px;margin-bottom:16px">
       <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:60px;width:auto;display:block;"/><div style="font-size:12px;color:#555">${COMPANY.licensePrefix||""}</div></div>
@@ -7596,7 +7916,10 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
   const init=initial||{};
   const [f,setF]=useState({customerName:"",address:"",type:"",typeOther:"",frequency:"אחזקה חודשית",price:"",extraVisitPrice:"",notes:"",startDate:todayStr(),endDate:"",status:"פעיל",autoSchedule:false,workerId:"",visitTime:"08:00",stations:[],...init,
     contacts:maintContacts(init).length?maintContacts(init):[{name:"",phone:"",role:""}],
-    pests:maintList(init.pests), excludedPests:maintList(init.excludedPests), contractFiles:init.contractFiles||[]});
+    pests:maintList(init.pests), excludedPests:maintList(init.excludedPests), contractFiles:init.contractFiles||[],
+    ...(init.city||init.street?{}:splitAddr(init.address)), coverAll:init.coverAll!==false, includedPests:maintList(init.includedPests), paidPests:maintList(init.paidPests),
+    visitWindow:init.visitWindow||"day", priceInclVat:!!init.priceInclVat, zones:init.zones||[], openEnded:!!init.openEnded, endNote:init.endNote||"", frequencyOther:init.frequencyOther||"",
+    extras:Array.isArray(init.extras)?init.extras:(init.extraVisitPrice?[{desc:"ביקור נוסף",price:String(init.extraVisitPrice),approval:false}]:[])});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const types=[...new Set([...MAINTENANCE_TYPES.filter(t=>t!=="אחר"),...knownTypes,...(f.type&&f.type!=="אחר"?[f.type]:[])])];
   const [otherOpen,setOtherOpen]=useState(false);
@@ -7620,13 +7943,16 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
     if(f.autoSchedule&&!f.workerId) return alert("לשיבוץ אוטומטי צריך לבחור מדביר קבוע");
     const contacts=f.contacts.filter(c=>c.name||c.phone);
     const type=otherOpen&&f.typeOther.trim()?f.typeOther.trim():f.type;
-    onSave({...f,type,typeOther:"",contacts,phone:(contacts[0]||{}).phone||"",contactName:(contacts[0]||{}).name||"",id:init.id||Date.now()});
+    const address=(f.street||f.city)?joinAddr(f):f.address;
+    const extras=(f.extras||[]).filter(x=>x.desc);
+    onSave({...f,address,extras,extraVisitPrice:(extras.find(x=>/ביקור נוסף/.test(x.desc))||{}).price||"",endDate:f.openEnded?"":f.endDate,type,typeOther:"",contacts,phone:(contacts[0]||{}).phone||"",contactName:(contacts[0]||{}).name||"",id:init.id||Date.now()});
     onClose();
   };
   const chip=on=>({padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
   const applyMaint=r=>{ setF(x=>{ const nx={...x};
       ["customerName","address","type","frequency","price","extraVisitPrice","startDate","endDate","visitTime","workerId"].forEach(k=>{ if(r[k]) nx[k]=r[k]; });
       if(r.autoSchedule) nx.autoSchedule=true;
+      if(r.address) Object.assign(nx,splitAddr(r.address));
       if(r.contact){ const cs=x.contacts.filter(c=>c.name||c.phone); const nz=Object.fromEntries(Object.entries(r.contact).filter(([,v])=>v)); const i=cs.findIndex(c=>(nz.phone&&c.phone===nz.phone)||(nz.name&&c.name===nz.name)); nx.contacts=i>=0?cs.map((c,j)=>j===i?{...c,...nz}:c):[...cs,{name:"",phone:"",role:"",...nz}]; }
       const ex=[...new Set([...x.excludedPests,...(r.excludedPests||[])])]; nx.excludedPests=ex; nx.pests=[...new Set([...x.pests,...(r.pests||[])])].filter(p=>!ex.includes(p));
       if(r.stations){ const st=x.stations||[]; if(st.length<r.stations){ const start=st.reduce((mx,s0)=>Math.max(mx,parseInt(s0.num)||0),0); nx.stations=[...st,...Array.from({length:r.stations-st.length},(_,i)=>({num:start+i+1,location:""}))]; } }
@@ -7638,14 +7964,22 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       placeholder={"למשל: מסעדת השף הלבן, הרצל 20 תל אביב, איש קשר רונן מנהל המסעדה 054-1112233. ג'וקים ומכרסמים, לא כולל נמלים. פעם בחודש, 450 שקל לביקור. חוזה לשנה, 6 תחנות, משה מדביר קבוע בשעה 7. יש חתול במחסן"}
       chips={r=>[spChip("מקום",r.customerName),spChip("כתובת",r.address),spChip("סוג",r.type),r.contact&&spChip("איש קשר",[r.contact.name,r.contact.role,r.contact.phone].filter(Boolean).join(" · ")),r.pests&&r.pests.length&&spChip("מזיקים",r.pests.join(", ")),r.excludedPests&&spChip("🚫 לא כולל",r.excludedPests.join(", ")),spChip("תדירות",r.frequency),spChip("מחיר לביקור",r.price&&"₪"+r.price),spChip("ביקור נוסף",r.extraVisitPrice&&"₪"+r.extraVisitPrice),spChip("התחלה",r.startDate&&fmtDate(r.startDate)),spChip("סיום חוזה",r.endDate&&fmtDate(r.endDate)),spChip("תחנות",r.stations),spChip("מדביר",r.workerId&&((workers.find(w=>String(w.id)===String(r.workerId))||{}).name)),spChip("שעה",r.visitTime),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <FieldCard title="📍 המקום">
-      <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מאפיית השכונה"/>
-      <Inp label="כתובת המקום" value={f.address} onChange={v=>set("address",v)} placeholder="רחוב, מספר, עיר"/>
+      <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מסעדת השף הלבן"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr 0.6fr",gap:8}}>
+        <Inp label="עיר" value={f.city||""} onChange={v=>set("city",v)} placeholder="תל אביב"/>
+        <Inp label="רחוב" value={f.street||""} onChange={v=>set("street",v)} placeholder="הרצל"/>
+        <Inp label="מספר" value={f.houseNum||""} onChange={v=>set("houseNum",v)} placeholder="20"/>
+      </div>
+      <Inp label="פרטים נוספים לכתובת (לא חובה)" value={f.addrMore||""} onChange={v=>set("addrMore",v)} placeholder="כניסה מהחצר, קומה 2, מתחם…"/>
       <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"4px 0 6px"}}>סוג המקום</label>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
         {types.map(t=><button key={t} type="button" onClick={()=>{set("type",t);setOtherOpen(false);}} style={chip(!otherOpen&&f.type===t)}>{t}</button>)}
         <button type="button" onClick={()=>setOtherOpen(true)} style={chip(otherOpen)}>+ אחר</button>
       </div>
       {otherOpen&&<div style={{marginTop:8}}><Inp label="סוג מקום אחר" value={f.typeOther} onChange={v=>set("typeOther",v)} placeholder="למשל: מחסן ברזל"/></div>}
+      <details open={!!(f.billingName||f.billingTaxId)} style={{marginTop:10}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:CLR.primary}}>🧾 פרטים לחשבונית (אם שונים מהשם)</summary>
+        <G2><Inp label="שם לחשבונית / שם משפטי" value={f.billingName||""} onChange={v=>set("billingName",v)} placeholder="למשל: ש.ל. מזון בע״מ"/><Inp label="ח.פ / ע.מ" value={f.billingTaxId||""} onChange={v=>set("billingTaxId",v)}/></G2>
+      </details>
     </FieldCard>
     <FieldCard title="👤 אנשי קשר">
       {f.contacts.map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr auto",gap:6,alignItems:"end",marginBottom:6}}>
@@ -7657,21 +7991,45 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       <button type="button" onClick={()=>set("contacts",[...f.contacts,{name:"",phone:"",role:""}])} style={{width:"100%",padding:"8px",borderRadius:8,border:`1.5px dashed ${CLR.primary}66`,background:"transparent",color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ הוסף איש קשר</button>
     </FieldCard>
     <FieldCard title="🐛 מזיקים">
-      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מזיקים עיקריים במקום (כלולים בחוזה)</label>
+      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>🔎 מזיקים שיש כרגע במקום (שהמדביר יידע למה הוא מגיע)</label>
       <MaintPestChips value={f.pests} onChange={v=>set("pests",v)} exclude={f.excludedPests}/>
-      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>🚫 מזיקים לא כלולים</label>
-      <MaintPestChips value={f.excludedPests} onChange={v=>set("excludedPests",v)} exclude={f.pests}/>
+      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>✅ מה כלול בחוזה</label>
+      <div style={{display:"flex",gap:6,marginBottom:6}}>
+        <button type="button" onClick={()=>set("coverAll",true)} style={chip(f.coverAll)}>כל המזיקים הנפוצים</button>
+        <button type="button" onClick={()=>set("coverAll",false)} style={chip(!f.coverAll)}>רק מזיקים מסוימים</button>
+      </div>
+      {!f.coverAll&&<MaintPestChips value={f.includedPests} onChange={v=>set("includedPests",v)} exclude={f.excludedPests}/>}
+      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>💵 כלול — אבל בתשלום נוסף ובאישור מראש (למשל טרמיטים)</label>
+      <MaintPestChips value={f.paidPests} onChange={v=>set("paidPests",v)} exclude={f.excludedPests}/>
+      <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>🚫 לא כלול בכלל</label>
+      <MaintPestChips value={f.excludedPests} onChange={v=>set("excludedPests",v)} exclude={[...f.pests,...f.paidPests]}/>
     </FieldCard>
     <FieldCard title="💰 תדירות ומחיר">
-      <Sel label="תדירות ביקור" value={f.frequency} onChange={v=>set("frequency",v)} options={MAINTENANCE_FREQUENCIES}/>
-      <G2>
-        <Inp label="מחיר לביקור (₪)" type="number" value={f.price} onChange={v=>set("price",v)}/>
-        <Inp label="מחיר לביקור נוסף בחודש (₪)" type="number" value={f.extraVisitPrice} onChange={v=>set("extraVisitPrice",v)}/>
-      </G2>
+      <Sel label="תדירות ביקור" value={f.frequency} onChange={v=>set("frequency",v)} options={[...MAINTENANCE_FREQUENCIES,"אחר"]}/>
+      {f.frequency==="אחר"&&<Inp label="תדירות — במילים" value={f.frequencyOther} onChange={v=>set("frequencyOther",v)} placeholder="למשל: 3 פעמים בחודש בקיץ, פעם בחודש בחורף"/>}
+      {["אחזקה חודשית","כל חודשיים","רבעוני (כל 3 חודשים)","כל 6 חודשים","שנתי"].includes(f.frequency)&&<Sel label="מתי בחודש מגיעים" value={(VISIT_WINDOWS.find(x=>x[0]===(f.visitWindow||"day"))||VISIT_WINDOWS[0])[1]} onChange={v=>set("visitWindow",(VISIT_WINDOWS.find(x=>x[1]===v)||VISIT_WINDOWS[0])[0])} options={VISIT_WINDOWS.map(x=>x[1])}/>}
+      <div style={{display:"flex",gap:6,alignItems:"flex-end",marginBottom:4}}>
+        <div style={{flex:1}}><Inp label="מחיר לביקור (₪)" type="number" value={f.price} onChange={v=>set("price",v)}/></div>
+        <div style={{display:"flex",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden",marginBottom:12}}>
+          {[[false,"לפני מע״מ"],[true,"כולל מע״מ"]].map(([v,l])=><button key={l} type="button" onClick={()=>set("priceInclVat",v)} style={{border:"none",padding:"9px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit",background:f.priceInclVat===v?CLR.primary:"#fff",color:f.priceInclVat===v?"#fff":"#475569",fontWeight:f.priceInclVat===v?700:500}}>{l}</button>)}
+        </div>
+      </div>
+      {parseFloat(f.price)>0&&<div style={{fontSize:12,color:"#475569",margin:"-6px 0 10px"}}>לפני מע״מ ₪{priceBefore(f.price,f.priceInclVat).toLocaleString()} · כולל מע״מ ₪{priceIncl(f.price,f.priceInclVat).toLocaleString()}</div>}
+      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>💵 מחירון תוספות ({f.priceInclVat?"כולל":"לפני"} מע״מ)</label>
+      {(f.extras||[]).map((x,i)=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+        <input value={x.desc} onChange={e=>set("extras",f.extras.map((y,j)=>j===i?{...y,desc:e.target.value}:y))} placeholder="מה" style={{flex:2,minWidth:0,padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit"}}/>
+        <input type="number" value={x.price||""} onChange={e=>set("extras",f.extras.map((y,j)=>j===i?{...y,price:e.target.value}:y))} placeholder="₪ / לפי הצעה" style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit"}}/>
+        <label title="דורש אישור הלקוח לפני ביצוע" style={{fontSize:11,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}><input type="checkbox" checked={x.approval!==false} onChange={e=>set("extras",f.extras.map((y,j)=>j===i?{...y,approval:e.target.checked}:y))}/>באישור</label>
+        <button type="button" onClick={()=>set("extras",f.extras.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:32,height:34,cursor:"pointer"}}>✕</button>
+      </div>)}
+      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>{EXTRA_PRESETS.filter(p=>!(f.extras||[]).some(x=>x.desc===p)).map(p=><button key={p} type="button" onClick={()=>set("extras",[...(f.extras||[]),{desc:p,price:"",approval:p!=="ביקור נוסף"}])} style={{padding:"5px 10px",borderRadius:20,border:"1.5px dashed "+CLR.primary,background:"#fff",color:CLR.primary,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ {p}</button>)}
+        <button type="button" onClick={()=>set("extras",[...(f.extras||[]),{desc:"",price:"",approval:true}])} style={{padding:"5px 10px",borderRadius:20,border:"1.5px dashed #94a3b8",background:"#fff",color:"#475569",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ אחר</button></div>
       <G2>
         <Inp label="תאריך התחלה" type="date" value={f.startDate} onChange={v=>set("startDate",v)}/>
-        <Inp label="סיום החוזה (לתזכורת חידוש)" type="date" value={f.endDate||""} onChange={v=>set("endDate",v)}/>
+        {!f.openEnded?<Inp label="סיום החוזה (לתזכורת חידוש)" type="date" value={f.endDate||""} onChange={v=>set("endDate",v)}/>:<div/>}
       </G2>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:8}}><input type="checkbox" checked={!!f.openEnded} onChange={e=>set("openEnded",e.target.checked)} style={{width:18,height:18}}/> ללא תאריך סיום (ממשיך עד שמישהו מודיע)</label>
+      {f.openEnded&&<Inp label="הערה על החוזה" value={f.endNote} onChange={v=>set("endNote",v)} placeholder="למשל: הודעה של 30 יום מראש לסיום"/>}
       <Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={["פעיל","מושהה","הסתיים"]}/>
       <Txt label="הערות" value={f.notes} onChange={v=>set("notes",v)} rows={2}/>
     </FieldCard>
@@ -7686,19 +8044,12 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
             <option value="">-- בחר --</option>
             {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
           </select></div>
-        <Sel label="שעת ביקור" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/>
+        {(f.visitWindow||"day")==="day"?<Sel label="שעת ביקור" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/>:<div style={{fontSize:12,color:"#475569",alignSelf:"center"}}>הביקור ייכנס ליומן "במהלך היום" בתחילת החלון, עם תווית "גמיש עד…". מזיזים אותו ליום שתואם.</div>}
       </G2>}
-      {f.autoSchedule&&<div style={{fontSize:12,color:CLR.muted}}>הביקורים ישובצו חודשיים קדימה מתאריך ההתחלה. ביקור שיוצא בשבת עובר ליום ראשון.</div>}
+      {f.autoSchedule&&<div style={{fontSize:12,color:CLR.muted}}>הביקורים ישובצו חודשיים קדימה. ביקור שיוצא בשבת עובר ליום ראשון.</div>}
     </FieldCard>
-    <FieldCard title={`🪤 תחנות האכלה במקום (${(f.stations||[]).length})`}>
-      {(f.stations||[]).map((st,i)=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-        <span style={{width:34,height:34,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",flexShrink:0}}>{st.num}</span>
-        <input value={st.location||""} onChange={e=>set("stations",f.stations.map((x,j)=>j===i?{...x,location:e.target.value}:x))} placeholder="מיקום (למשל: פינת מחסן צפונית)" style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit"}}/>
-        <button type="button" onClick={()=>set("stations",f.stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:34,height:34,cursor:"pointer"}}>✕</button>
-      </div>)}
-      <div style={{display:"flex",gap:6}}>
-        {[1,5,10].map(n=><button key={n} type="button" onClick={()=>{const st=f.stations||[];const start=st.reduce((mx,x)=>Math.max(mx,parseInt(x.num)||0),0);set("stations",[...st,...Array.from({length:n},(_,i)=>({num:start+i+1,location:""}))]);}} style={{flex:1,padding:"8px",borderRadius:8,border:`1.5px dashed #fdba74`,background:"transparent",color:"#9a3412",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ {n===1?"תחנה":n+" תחנות"}</button>)}
-      </div>
+    <FieldCard title={`🗺️ מיפוי המקום — תחנות ומלכודות (${(f.stations||[]).length})`}>
+      <SiteMapEditor zones={f.zones} stations={f.stations} onZones={v=>set("zones",v)} onStations={v=>set("stations",v)}/>
     </FieldCard>
     <FieldCard title="📎 חוזה חתום">
       {f.contractFiles.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:CLR.surface,borderRadius:8,marginBottom:6}}>
@@ -7736,6 +8087,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
   const [showNew,setShowNew]=useState(false);
   const [histFor,setHistFor]=useState(null);
   const [reportFor,setReportFor]=useState(null);
+  const [fileFor,setFileFor]=useState(null);
   const [reportMonth,setReportMonth]=useState(()=>todayStr().slice(0,7));
   const runSchedule=(list,silent)=>{ if(!setAppointments) return 0; const add=maintSchedule(list||maintenance,appointments,workers); if(add.length) setAppointments(as=>{let out=[...as];add.forEach(a=>{ if(!out.some(x=>String(x.maintenanceId)===String(a.maintenanceId)&&x.date===a.date)) out.push({...a,id:nextId(out)}); });return out;}); if(!silent) alert(add.length?`📅 שובצו ${add.length} ביקורים ביומן`:"כל הביקורים כבר משובצים"); return add.length; };
   React.useEffect(()=>{ if(maintenance.some(m=>m.autoSchedule)) runSchedule(maintenance,true); },[maintenance.length]);
@@ -7747,7 +8099,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
   const knownTypes=[...new Set(maintenance.map(m=>m.type).filter(t=>t&&!MAINTENANCE_TYPES.includes(t)))];
   const totalMonthly=active.reduce((s,m)=>{
     const prices={["פעמיים בשבוע"]:8,["פעם בשבוע"]:4,["אחזקה חודשית"]:1,["כל חודשיים"]:0.5,["רבעוני (כל 3 חודשים)"]:0.33,["כל 6 חודשים"]:0.17,["שנתי"]:0.083};
-    return s+(parseInt(m.price)||0)*(prices[m.frequency]||1);
+    return s+priceBefore(m.price,m.priceInclVat)*(prices[m.frequency]||1);
   },0);
   const statusColor={פעיל:"#dcfce7",מושהה:"#fef9c3",הסתיים:"#f3f4f6"};
   const statusText={פעיל:"#166534",מושהה:"#854d0e",הסתיים:"#374151"};
@@ -7792,22 +8144,28 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
           </div>}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12,marginBottom:8}}>
             {m.type&&<div style={cell}><span style={{color:CLR.muted}}>סוג: </span>{m.type}</div>}
-            <div style={cell}><span style={{color:CLR.muted}}>תדירות: </span>{m.frequency}</div>
-            {m.price&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>לביקור: </span>₪{m.price}</div>}
-            {m.extraVisitPrice&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>ביקור נוסף: </span>₪{m.extraVisitPrice}</div>}
+            <div style={cell}><span style={{color:CLR.muted}}>תדירות: </span>{m.frequency==="אחר"?(m.frequencyOther||"אחר"):m.frequency}{m.visitWindow&&m.visitWindow!=="day"?<div style={{fontSize:11,color:"#0f766e"}}>{(VISIT_WINDOWS.find(x=>x[0]===m.visitWindow)||[])[1]}</div>:null}</div>
+            {m.price&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>לביקור: </span>₪{m.price}<span style={{fontWeight:400,fontSize:10,color:CLR.muted}}> {m.priceInclVat?"כולל":"+"} מע״מ</span></div>}
+            {!(m.extras||[]).length&&m.extraVisitPrice&&<div style={{...cell,background:CLR.primaryLight,fontWeight:700,color:CLR.primary}}><span style={{fontWeight:400,color:CLR.muted}}>ביקור נוסף: </span>₪{m.extraVisitPrice}</div>}
           </div>
-          {pests.length>0&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>✅ כלול: </span>{pests.join(", ")}</div>}
+          {m.billingName&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>🧾 לחשבונית: </span>{m.billingName}{m.billingTaxId?" · "+m.billingTaxId:""}</div>}
+          {(m.extras||[]).length>0&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>💵 תוספות: </span>{m.extras.map(x=>x.desc+(x.price?" ₪"+x.price:"")).join(" · ")}</div>}
+          {maintList(m.paidPests).length>0&&<div style={{fontSize:12,marginBottom:4,color:"#b45309"}}><span style={{color:CLR.muted}}>💵 בתשלום נוסף: </span>{maintList(m.paidPests).join(", ")}</div>}
+          {pests.length>0&&<div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>🔎 במקום: </span>{pests.join(", ")}</div>}
+          <div style={{fontSize:12,marginBottom:4}}><span style={{color:CLR.muted}}>✅ כלול: </span>{m.coverAll===false?(maintList(m.includedPests).join(", ")||"—"):"כל המזיקים הנפוצים"}</div>
           {ex.length>0&&<div style={{fontSize:12,marginBottom:4,color:"#b91c1c"}}><span style={{color:CLR.muted}}>🚫 לא כלול: </span>{ex.join(", ")}</div>}
           {m.notes&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>📝 {m.notes}</div>}
           <div style={{display:"flex",flexDirection:"column",gap:4,fontSize:12,background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
             <div>🕓 ביקור אחרון: <b>{logs[0]?fmtDate(logs[0].date):"—"}</b>{logs.length?<span style={{color:CLR.muted}}> · {logs.length} ביקורים</span>:null}</div>
             {m.autoSchedule&&<div>📅 ביקור הבא: <b>{nextVisit?fmtDate(nextVisit.date)+" "+(nextVisit.time||""):"—"}</b>{worker?<span style={{color:CLR.muted}}> · 👷 {worker.name}</span>:null}</div>}
-            {(m.stations||[]).length>0&&<div>🪤 {m.stations.length} תחנות האכלה</div>}
+            {(m.stations||[]).length>0&&<div>🗺️ {SITE_DEVICE_TYPES.map(t=>[t,m.stations.filter(x=>(x.type||"bait")===t.k).length]).filter(x=>x[1]).map(([t,n])=>t.icon+" "+n+" "+t.label).join(" · ")}{(m.zones||[]).length?" · "+m.zones.length+" אזורים":""}</div>}
+            {m.openEnded&&<div style={{color:CLR.muted}}>♾️ ללא תאריך סיום{m.endNote?" · "+m.endNote:""}</div>}
             {dl!=null&&<div style={{color:dl<=30?"#b91c1c":CLR.muted,fontWeight:dl<=30?700:400}}>⏳ {dl<0?`החוזה הסתיים לפני ${-dl} ימים`:`החוזה מסתיים בעוד ${dl} ימים`} ({fmtDate(m.endDate)})</div>}
           </div>
           <div style={{display:"flex",gap:6,marginBottom:8}}>
             <button type="button" onClick={()=>setHistFor(m)} style={{flex:1,border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>🕓 היסטוריה</button>
             <button type="button" onClick={()=>setReportFor(m)} style={{flex:1,border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>📄 דוח חודשי</button>
+            <button type="button" onClick={()=>setFileFor(m)} style={{flex:1,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📁 תיק הדברה</button>
           </div>
           {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
@@ -7840,6 +8198,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
         {visits.length===0?<div style={{color:CLR.muted,fontSize:13}}>אין ביקורים משובצים</div>:
           <div style={{display:"flex",flexDirection:"column",gap:4}}>{visits.slice(0,30).map(a=><div key={a.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"6px 10px",background:CLR.surface,borderRadius:8}}><span>{fmtDate(a.date)} {a.time||""}</span><span style={{color:CLR.muted}}>{a.workerName} · {a.status}</span></div>)}</div>}
       </Modal>;})()}
+    {fileFor&&<PestFileModal m={maintenance.find(x=>x.id===fileFor.id)||fileFor} maintenance={maintenance} workers={workers} execLogs={execLogs} onSave={nm=>setMaintenance(ms=>ms.map(x=>x.id===nm.id?{...x,fileMaterials:nm.fileMaterials}:x))} onClose={()=>setFileFor(null)}/>}
     {reportFor&&<Modal title={"📄 דוח חודשי — "+reportFor.customerName} onClose={()=>setReportFor(null)} width={420}>
       <Inp label="חודש" type="month" value={reportMonth} onChange={v=>setReportMonth(v)}/>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:12}}>{maintLogs(reportFor,execLogs).filter(l=>String(l.date||"").startsWith(reportMonth)).length} ביקורים בחודש הזה</div>
@@ -10480,6 +10839,7 @@ function App(){
 
   // ── פריטים פעילים בלבד (מסנן deleted:true) ──
   const activeWorkers = React.useMemo(()=>activeOnly(workers),[workers]);
+  window.__h360Maint=maintenance;
   // 💾 גיבוי יומי אוטומטי (מנהל) + 📅 סנכרון מגוגל יומן כל 5 דקות
   const gcalRef=React.useRef({}); gcalRef.current={appointments,setAppointments,workers:activeWorkers};
   React.useEffect(()=>{
