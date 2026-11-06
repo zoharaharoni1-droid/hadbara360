@@ -2438,6 +2438,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
       }}/>
     </div>}
+    {prefillAppt&&(prefillAppt.rawMsg||prefillAppt.freeText)&&<details open style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"8px 12px",marginBottom:12}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#166534"}}>📝 הפרטים כפי שנרשמו בהזמנה</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:4}}>{prefillAppt.freeText||prefillAppt.rawMsg}</div></details>}
     {/* לקוח — אותו סדר כמו בלקוח חדש / הזמנת עבודה */}
     {(()=>{ const biz=f.clientKind?f.clientKind==="biz":!!f.contactName;
       const place=f.placeName!=null?f.placeName:(f.contactName?f.clientName:"");
@@ -3900,7 +3901,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
           <b style={{flex:1}}>{[c.role,c.name].filter(Boolean).join(" · ")||"איש קשר"}</b><span style={{direction:"ltr",color:"#16a34a",fontWeight:700}}>{c.phone}</span></button>)}
       </div>:null; })()}
       {appt.notes&&<div style={{background:"#f8fafc",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>📝 <b>הערות לתור:</b> {appt.notes}</div>}
-      {appt.rawMsg&&<details style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"9px 12px",marginTop:8}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#92400e"}}>📋 ההודעה המקורית (פנימי — רק למדביר)</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:6}}>{appt.rawMsg}</div></details>}
+      {appt.rawMsg&&appt.kind!=="free"&&<details open style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"9px 12px",marginTop:8}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#166534"}}>📝 הפרטים כפי שנרשמו</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:6}}>{appt.rawMsg}</div></details>}
       {cust.notes&&<div style={{background:"#fef9c3",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>⚠️ <b>הערות לקוח:</b> {cust.notes}</div>}
       {appt.propertyNotes&&<div style={{background:"#f8fafc",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>🏠 <b>הערות על הנכס:</b> {appt.propertyNotes}</div>}
       {onSaveEdit&&!editMode&&<div style={{marginTop:10}}><Btn v="secondary" full onClick={()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);}}>✏️ ערוך תור / שנה שעה</Btn></div>}
@@ -5579,6 +5580,30 @@ function SmartBox({parse,chips,onApply,hint,placeholder,contacts=false,color="#1
 }
 const spChip=(k,v)=>v?<span><span style={{color:"#64748b"}}>{k}:</span> <b>{v}</b></span>:null;
 
+// ═══ 📝 תיאור חופשי + מילוי חכם: הטקסט נשמר כמו שהוא (כולם רואים), ואפשר גם למלא ממנו את השדות ═══
+function IntakeTextBox({value,onChange,onFill,cityNames,custOnly}){
+  const res=React.useMemo(()=>value&&String(value).trim()?waParse(value,cityNames):null,[value,cityNames.length]);
+  const upd=v=>onChange(v);
+  const add=t=>upd((value?value.replace(/\s+$/,"")+(/[.,\n]$/.test(value.trim())?" ":", "):"")+t);
+  const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) upd((value?value+"\n":"")+t); }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
+  const LBL={name:"שם",phone:"טלפון",city:"עיר",street:"רחוב",buildingNum:"מספר",propertyType:"נכס",pests:"מזיק",price:"מחיר",prefDate:"תאריך"};
+  const chips=res?Object.keys(LBL).filter(k=>res[k]!==undefined&&res[k]!==""&&!(Array.isArray(res[k])&&!res[k].length)).map(k=>LBL[k]+": "+(Array.isArray(res[k])?res[k].join(", "):String(res[k]))):[];
+  return <div style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
+    <b style={{color:"#166534",fontSize:15}}>📝 {custOnly?"פרטי הלקוח במילים שלך":"מה צריך — כתוב בחופשיות"}</b>
+    <div style={{fontSize:12,color:"#166534",margin:"2px 0 8px"}}>נשמר כמו שהוא, וכולם רואים אותו — גם המדביר בשטח. אפשר לשמור רק את זה, ולהשלים את השדות למטה מתי שנוח.</div>
+    <textarea value={value||""} onChange={e=>upd(e.target.value)} rows={4} placeholder={"למשל: יובל משווארמה שמש, 0521234567, הרצל 12 ראשון לציון, ג׳וקים במטבח, לבוא ביום שלישי בבוקר"} style={{width:"100%",boxSizing:"border-box",padding:"10px",borderRadius:10,border:"1px solid #86efac",fontSize:15,fontFamily:"inherit",resize:"vertical",background:"#fff"}}/>
+    <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
+      <MicButton label="🎤 דבר" onText={add}/>
+      <ContactPickBtn onPick={c=>add(contactLine(c))}/>
+      <button type="button" onClick={paste} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>
+    </div>
+    {res&&res.found&&res.found.length>0&&<div style={{marginTop:8}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontSize:12}}>{c}</span>)}</div>
+      <button type="button" onClick={()=>onFill(res,value)} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✨ מלא את השדות למטה מהטקסט</button>
+      <div style={{fontSize:11,color:"#64748b",marginTop:4,textAlign:"center"}}>הטקסט נשאר כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
+    </div>}
+  </div>;
+}
 function WAPasteBox({onApply,cityNames}){
   const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [res,setRes]=useState(null); const [nApplied,setNApplied]=useState(0);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ setTxt(t); setRes(waParse(t,cityNames)); } }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
@@ -5717,9 +5742,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   };
 
   const save=()=>{
-    if(!f.name||!f.phone) return alert("שם וטלפון הם שדות חובה");
+    const raw=String(f.rawMsg||"").trim();
+    if(!raw&&(!f.name||!f.phone)) return alert("צריך שם וטלפון — או לכתוב את הפרטים בתיבת \"כתוב בחופשיות\" למעלה");
+    if(!f.name&&raw){ const pr=waParse(raw,[])||{}; const nm=pr.name||raw.split("\n")[0].replace(/[\d\-+]{7,}/g,"").replace(/\s+/g," ").trim().slice(0,40)||"ללא שם"; f.name=nm; if(!f.phone&&pr.phone) f.phone=pr.phone; }
     if(custOnly&&doSchedule) setDoSchedule(false);
-    if(doSchedule&&(!schedWorker||allPests().length===0)) return alert("לשיגור ליומן צריך לבחור מדביר ולפחות מזיק אחד");
+    if(doSchedule&&(!schedWorker||(allPests().length===0&&!raw))) return alert("לשיגור ליומן צריך לבחור מדביר ולפחות מזיק אחד (או לכתוב את הפרטים בתיבה החופשית)");
     if(doSchedule&&!f.prefDate) return alert("לשיגור ליומן צריך לבחור תאריך");
     const addr=fullAddress();
     const customer={
@@ -5728,7 +5755,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,entrance:f.entrance||"",
       propertyType:f.propertyType,rooms:isUnit?f.rooms:"",levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
       floor:isApt||isBiz?f.floor:"",aptNum:isApt||isBiz?f.aptNum:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
-      status:f.status,notes:f.notes,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
+      status:f.status,notes:custOnly?f.notes:(existingId!=null?((customers||[]).find(c=>String(c.id)===String(existingId))||{}).notes||"":""),extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
+      ...(custOnly?{intakeText:String(f.rawMsg||"").trim()}:{}),
       addrMore:String(f.addrMore||"").trim(),buildingCode:f.buildingCode||"",parking:f.parking??null,elevator:f.elevator??null,
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
       bizName:isBizClient&&clientNameForDocs()!==placeForCustomer()?clientNameForDocs():"", placeName:isBizClient?String(f.placeName||"").trim():"", taxId:isBizClient?String(f.taxId||"").trim():"",
@@ -5756,7 +5784,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     onDone(saved,schedInfo);
   };
 
-  const applyWA=(r,raw)=>{
+  const applyWA=(r,raw,keepRaw)=>{
     const known=r.pests?r.pests.filter(p=>PEST_TYPES_CRM.includes(p)):[]; const other=r.pests?r.pests.filter(p=>!PEST_TYPES_CRM.includes(p)):[];
     const techs=workers.filter(w=>isTech(w)&&w.status!=="לא פעיל");
     setF(x=>{ const nx={...x};
@@ -5765,13 +5793,13 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       if(r.propertyType){ nx.propertyType=r.propertyType; nx.propOther=false; }
       if(r.bizName&&!x.bizName) nx.bizName=r.bizName;
       if(r.hasYard!==undefined) nx.hasYard=r.hasYard;
-      nx.name=r.name||x.name||"לא צוין";
+      nx.name=r.name||x.name||"";
       if(r.brand&&!x.source) nx.source=r.brand;
       if(known.length) nx.pests=[...new Set([...x.pests,...known])];
       if(other.length) nx.customPest=[x.customPest,...other].filter(Boolean).join(", ");
       if(r.timeFrom) nx.allDay=false;
       nx.notes=mergeNotes(x.notes,[r.boxesNote,r.sewerNote,...(r.notes||[])]);
-      nx.rawMsg=[x.rawMsg,raw.trim()].filter(Boolean).join("\n— — —\n");
+      if(!keepRaw) nx.rawMsg=[x.rawMsg,raw.trim()].filter(Boolean).join("\n— — —\n");
       if(r.contacts&&r.contacts.length){ const ex=[...(x.extraContacts||[])]; r.contacts.forEach((c,i)=>{ if(i===0&&!c.role) return; if(!ex.some(e=>e.phone===c.phone)) ex.push({role:c.role||"",name:c.name||"",phone:c.phone}); }); nx.extraContacts=ex; }
       return nx; });
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
@@ -5780,7 +5808,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
     const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
     if(!initialCustomer){ try{ DK&&localStorage.removeItem(DK); }catch(e){} setRestored(false); }
-    setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); }); },[]);
+    setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:custOnly?(c.notes||""):"",custNotes:custOnly?"":(c.notes||""),rawMsg:custOnly?(c.intakeText||""):prev.rawMsg,status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); }); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -5788,7 +5816,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <button type="button" onClick={()=>setRestored(false)} style={{border:"1px solid #fcd34d",background:"#fff",color:"#92400e",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ המשך</button>
       <button type="button" onClick={startFresh} style={{border:"1px solid #fecaca",background:"#fff",color:"#b91c1c",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️ התחל חדש</button>
     </div>}
-    <WAPasteBox onApply={applyWA} cityNames={ilCities.map(c=>c.name)}/>
+    <IntakeTextBox value={f.rawMsg} onChange={v=>set("rawMsg",v)} onFill={(r,raw)=>applyWA(r,raw,true)} cityNames={ilCities.map(c=>c.name)} custOnly={custOnly}/>
     <FieldCard title="פרטי לקוח">
       <div style={{marginBottom:12}}>
         <button type="button" onClick={()=>setShowExistingSearch(true)}
@@ -5808,11 +5836,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         </div>)}
         <button type="button" onClick={()=>set("extraContacts",[...(f.extraContacts||[]),{role:"",name:"",phone:""}])} style={{width:"100%",padding:"7px",borderRadius:8,border:`1.5px dashed ${CLR.primary}66`,background:"transparent",color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ איש קשר נוסף</button>
       </div>
-      {f.rawMsg&&<details style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:12}}>
-        <summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#475569"}}>📋 ההודעה המקורית — פנימי, רק למדביר (לא נשלח ללקוח)</summary>
-        <div style={{whiteSpace:"pre-wrap",fontSize:13,marginTop:6,color:"#0f172a"}}>{f.rawMsg}</div>
-        <button type="button" onClick={()=>set("rawMsg","")} style={{marginTop:6,border:"none",background:"none",color:"#b91c1c",fontSize:12,cursor:"pointer"}}>מחק</button>
-      </details>}
+
       <Sel label="כיצד הגיע הלקוח?" value={f.source||""} onChange={v=>set("source",v)}
         options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/>
     </FieldCard>
@@ -5969,9 +5993,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </FieldCard>
 
     </>}
-    <FieldCard title="הערות">
+    <FieldCard title={custOnly?"הערות קבועות על הלקוח":"הערות להזמנה הזו"}>
+      {f.custNotes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"7px 10px",fontSize:13,marginBottom:8}}>⚠️ <b>הערות קבועות על הלקוח:</b> {f.custNotes}</div>}
       <QuickChips chips={QUICK_NOTES} onPick={addNote} isOn={notesHas}/>
-      <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder="הערות חופשיות, או לחץ על הכפתורים למעלה..."/>
+      <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder={custOnly?"מה חשוב לזכור על הלקוח בכל ביקור (כלב, קוד שער, משלם רק בביט…)":"מה המדביר צריך לדעת על הביקור הזה (חניה, שעה, להתקשר לפני…)"}/>
     </FieldCard>
 
     {/* Schedule — בחירת מדביר בלחיצה */}
@@ -6669,6 +6694,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             row("ח.פ / ע.מ",c.taxId),
             ...(c.extraContacts||[]).filter(x=>x&&(x.name||x.phone)).map((x,i)=>row([x.role||"איש קשר נוסף",x.name].filter(Boolean).join(" · "),x.phone||"—",x.phone?tel(x.phone):null)),
           ])}
+          {c.intakeText&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:"#166534",margin:"4px 0"}}>📝 הפרטים כפי שנרשמו</div><div style={{whiteSpace:"pre-wrap",fontSize:14}}>{c.intakeText}</div></div>}
           {box("📍 כתובת",[row("כתובת",c.address),row(isBizC||c.propertyType==="חנות"?"קומה / יחידה":"כניסה / קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":"")])}
           {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}>
             <a href={"https://waze.com/ul?q="+encodeURIComponent(nav)+"&navigate=yes"} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#e0f7ff",color:"#0369a1",fontWeight:700,textDecoration:"none",fontSize:13}}>🚙 Waze</a>
@@ -11054,7 +11080,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="112";
+const APP_BUILD="113";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
