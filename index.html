@@ -5752,8 +5752,9 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
   };
-  React.useEffect(()=>{ const c=initialCustomer||window.__h360PendingOrder; if(!c||custOnly) return; window.__h360PendingOrder=null; setExistingId(c.id);
-    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||""})); },[]);
+  React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
+    const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
+    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||prev.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})})); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -5769,7 +5770,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           👤 לקוח חוזר? חפש לקוח קיים
         </button>
       </div>
-      {existingId!=null&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
+      {existingId!=null&&!initialCustomer&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
       <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""}
         onChange={x=>setF(p=>({...p,clientKind:x.kind,name:x.name,phone:x.phone,placeName:x.place||"",bizName:x.doc||"",taxId:x.taxId||""}))}/>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
@@ -6585,10 +6586,15 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         </div>
       </div>)}
     </div>
-    {sel&&<Modal title={`🗂️ תיק הדברה – ${sel.name}`} onClose={()=>setSel(null)} width={600}>
+    {sel&&editingCust&&<Modal title={"✏️ עריכת פרטי לקוח — "+sel.name} onClose={()=>setEditingCust(false)} width={640}>
+      <OrderForm key={"edit-"+sel.id} mode="customer" initialCustomer={sel} workers={workers} customers={customers}
+        onSave={c=>{ const up=upsertCustomerRec({...c,id:sel.id},customers,setCustomers); setSel(up); return up; }}
+        onDone={()=>{ setEditingCust(false); showToast("✅ פרטי הלקוח עודכנו"); }} onCancel={()=>setEditingCust(false)}/>
+    </Modal>}
+    {sel&&!editingCust&&<Modal title={`🗂️ תיק הדברה – ${sel.name}`} onClose={()=>setSel(null)} width={600}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         {!editingCust
-          ? <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Btn sm onClick={()=>{setEditCustData({...sel});setEditingCust(true);}}>✏️ ערוך פרטים</Btn>
+          ? <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Btn sm onClick={()=>setEditingCust(true)}>✏️ ערוך פרטים</Btn>
               {currentUser&&currentUser.role==="מנהל"&&<Btn sm v="ghost" onClick={()=>{ if(window.confirm(`למחוק את ${sel.name}?\nהלקוח יעבור לסל המחזור ואפשר יהיה לשחזר אותו.`)){ softDelete(setCustomers, sel.id); setSel(null); } }} style={{color:CLR.danger,border:`1px solid ${CLR.danger}`}}>🗑️ מחק לקוח</Btn>}</div>
           : <div style={{display:"flex",gap:8}}>
               <Btn sm onClick={()=>{setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,...editCustData}:c));setSel({...sel,...editCustData});setEditingCust(false);}}>✅ שמור</Btn>
@@ -11002,7 +11008,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="107";
+const APP_BUILD="108";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
