@@ -1156,7 +1156,7 @@ function execLogHtml({company,docNum,log,chemicals}){
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(log.date)}</div></div>
     </div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:8px;font-size:13px;">
-      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.placePhone?` &nbsp;·&nbsp; <b>טלפון המקום:</b> ${log.placePhone}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
+      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.placeName&&log.placeName!==log.clientName?` &nbsp;·&nbsp; <b>מקום:</b> ${log.placeName}`:""}${log.placePhone?` &nbsp;·&nbsp; <b>טלפון המקום:</b> ${log.placePhone}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
       <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
@@ -1370,7 +1370,7 @@ function docPrefillFromLog(log,customers){
   const price=String(log.agreedPrice||log.paymentAmount||"");
   const paid=log.paymentDone===true||log.paymentStatus==="paid";
   const type=paid?"חשבונית מס/קבלה":log.paymentStatus==="office"?"חשבונית מס":"חשבון עסקה";
-  return {type,prefill:{custId:c?c.id:null,custName:(c&&c.name)||log.clientName||"",taxId:(c&&c.taxId)||"",apptId:log.apptId||"",execLogId:log.id,execDocNum:log.docNum||"",date:log.date&&log.date<=todayStr()?log.date:todayStr(),
+  return {type,prefill:{custId:c?c.id:null,custName:(c&&custDocName(c))||log.clientName||"",contactName:(c&&c.contactName)||log.contactName||"",taxId:(c&&c.taxId)||"",apptId:log.apptId||"",execLogId:log.id,execDocNum:log.docNum||"",date:log.date&&log.date<=todayStr()?log.date:todayStr(),
     inclVat:true,lines:[{desc,qty:"1",unit:"יח׳",price}],
     payments:paid?[{method:LOG_PAY_TO_DOC[log.paymentMethod]||"אחר",amount:String(log.paymentAmount||price),date:log.date||todayStr(),details:LOG_PAY_TO_DOC[log.paymentMethod]?{}:{note:log.paymentMethod||""}}]:[]}};
 }
@@ -2256,8 +2256,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const defaultWorker = apptWorker || worker || {};
 
   const [f,setF]=useState({
-    clientName:    initialData?.clientName    || prefillAppt?.customerName || "",
+    clientName:    initialData?.clientName    || custDocName((customers||[]).find(c=>prefillAppt&&String(c.id)===String(prefillAppt.customerId))) || prefillAppt?.customerName || "",
     contactName:   initialData?.contactName   || prefillAppt?.contactName || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).contactName || "",
+    placeName:     initialData?.placeName!=null?initialData.placeName:(()=>{ const c=(customers||[]).find(c=>prefillAppt&&String(c.id)===String(prefillAppt.customerId)); return c&&c.contactName?(c.placeName||c.name):undefined; })(),
+    taxId:         initialData?.taxId||"",
     placePhone:    initialData?.placePhone    || "",
     customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
     phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || ""),
@@ -2311,6 +2313,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const stMeta=num=>{ const st=stations.find(x=>String(x.num)===String(num))||{}; const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone); return {t:devType(st).label,z:z?z.name:"",loc:st.location||""}; };
   const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...stMeta(num),...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...stMeta(num),...patch}];});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
+  const elCities=useIlCities();
+  const elCityName=f.addrCity!=null?f.addrCity:(()=>{ const parts=String(f.address||"").split(",").map(x=>x.trim()).filter(Boolean); return parts.length>1?parts[parts.length-1]:""; })();
+  const elStreets=useIlStreets((elCities.find(c=>c.name===String(elCityName||"").trim())||{}).code);
   // מילוי אוטומטי של זמני שהייה והנחיות — לפי יומנים קודמים עם אותם חומרים, או לפי ברירת מחדל
   const touched=React.useRef({reentry:!!initialData?.reentry,instr:!!(initialData?.instructions||[]).length});
   const matNames=f.materials.map(m=>m.name); const matKey=[...matNames].sort().join("|")+"#"+f.materials.map(m=>m.method||"").join(",")+"#"+f.devices.map(d=>d.type).sort().join(","); const pestKey=[...f.pest].sort().join("|");
@@ -2429,24 +2434,29 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <CustomerSearchSelect customers={customers.filter(c=>!c.deleted)} value={f.customerId||""} onChange={(id,c)=>{
         if(!c){ set("customerId",null); return; }
         const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
-        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,contactName:c.contactName||"",bizDraft:null,address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
+        setF(x=>({...x,customerId:c.id,clientName:custDocName(c)||x.clientName,contactName:c.contactName||"",clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),docDraft:null,taxId:c.taxId||"",address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
           structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
       }}/>
     </div>}
-    {/* לקוח: שם למסמכים (לא חובה) → איש קשר → טלפון → כתובת */}
-    {(()=>{ const biz=f.bizDraft!=null?f.bizDraft:(f.contactName?f.clientName:""); const person=f.contactName||(biz?"":f.clientName);
-      const setNames=(b,pn)=>setF(x=>({...x,bizDraft:b,clientName:String(b||"").trim()?b:pn,contactName:String(b||"").trim()?pn:""}));
-      return <>
-      <Inp label="🏢 שם העסק / המוסד (למסמכים) — לא חובה" value={biz} onChange={v=>setNames(v,person)} placeholder="למשל: גן ילדים השקמה, ועד הבית. לקוח פרטי — להשאיר ריק"/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <Inp label={String(biz||"").trim()?"👤 שם איש הקשר *":"👤 שם הלקוח *"} value={person} onChange={v=>setNames(biz,v)}/>
-        <Inp label="📞 טלפון" value={f.phone} onChange={v=>set("phone",v)} placeholder="050-000-0000"/>
-      </div>
-      {String(biz||"").trim()&&<div style={{fontSize:12,color:"#1e40af",marginTop:-6,marginBottom:10}}>במסמכים יופיע "{biz}", ו{person?<b>{person}</b>:"איש הקשר"} כאיש קשר. הטלפון — של איש הקשר.</div>}
-      {f.placePhone||f.showPlacePhone?<Inp label="☎️ טלפון נוסף של המקום (לא חובה)" value={f.placePhone||""} onChange={v=>set("placePhone",v)} placeholder="למשל טלפון המשרד / הגן"/>
-        :<button type="button" onClick={()=>set("showPlacePhone",true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit"}}>+ טלפון נוסף של המקום</button>}
-      </>; })()}
-    <Inp label="כתובת (רחוב, מספר, עיר) *" value={f.address} onChange={v=>set("address",v)} placeholder="טייבר 21, גבעתיים"/>
+    {/* לקוח — אותו סדר כמו בלקוח חדש / הזמנת עבודה */}
+    {(()=>{ const biz=f.clientKind?f.clientKind==="biz":!!f.contactName;
+      const place=f.placeName!=null?f.placeName:(f.contactName?f.clientName:"");
+      const doc=f.docDraft!=null?f.docDraft:(f.contactName&&f.placeName&&f.clientName!==f.placeName?f.clientName:"");
+      const person=biz?(f.contactName||""):(f.clientName||"");
+      return <ClientIdentity v={{kind:biz?"biz":"private",name:person,phone:f.phone,place,doc,taxId:f.taxId||""}} onChange={x=>setF(p=>{ const isB=x.kind==="biz"; const docs=isB?(String(x.doc||"").trim()||String(x.place||"").trim()||x.name):x.name;
+        return {...p,clientKind:x.kind,phone:x.phone,clientName:docs,contactName:isB?x.name:"",placeName:isB?(x.place||""):"",docDraft:isB?(x.doc||""):"",taxId:x.taxId||""}; })}/>; })()}
+    {f.placePhone||f.showPlacePhone?<Inp label="☎️ טלפון נוסף של המקום (לא חובה)" value={f.placePhone||""} onChange={v=>set("placePhone",v)} placeholder="למשל טלפון המשרד / הגן"/>
+      :<button type="button" onClick={()=>set("showPlacePhone",true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit"}}>+ טלפון נוסף של המקום</button>}
+    {(()=>{ const sp=(()=>{ const parts=String(f.address||"").split(",").map(x=>x.trim()).filter(Boolean); return f.addrCity!=null?{city:f.addrCity,street:f.addrStreet||""}:{city:parts.length>1?parts[parts.length-1]:"",street:parts.length>1?parts.slice(0,-1).join(", "):(parts[0]||"")}; })();
+      const setA=(k,val)=>setF(p=>{ const c=k==="city"?val:sp.city, st=k==="street"?val:sp.street; return {...p,addrCity:c,addrStreet:st,address:[st,c].map(x=>String(x||"").trim()).filter(Boolean).join(", ")}; });
+      return <G2>
+        <div style={{marginBottom:12}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500}}>עיר *</label>
+          <input list="el-cities" value={sp.city} onChange={e=>setA("city",e.target.value)} placeholder="התחילו להקליד..." autoComplete="off" style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <datalist id="el-cities">{elCities.map(c=><option key={c.code} value={c.name}/>)}</datalist></div>
+        <div style={{marginBottom:12}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500}}>רחוב ומספר *</label>
+          <input list="el-streets" value={sp.street} onChange={e=>setA("street",e.target.value)} placeholder="לדוגמה: הרצל 12" autoComplete="off" style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <datalist id="el-streets">{elStreets.map(st=><option key={st} value={st+" "}/>)}</datalist></div>
+      </G2>; })()}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><Inp label="קומה / דירה" value={f.unit} onChange={v=>set("unit",v)} placeholder="קומה 3 · דירה 1"/><Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/></div>
 
     </>)}
@@ -2813,9 +2823,10 @@ function ensureLogCustomer(newLog,customers,setCustomers){
   if(newLog.customerId||!setCustomers||!String(newLog.clientName||"").trim()) return;
   const ph=String(newLog.phone||"").replace(/\D/g,"").slice(-9);
   const nm=String(newLog.clientName||"").trim();
-  const ex=(ph.length>=9?(customers||[]).find(c=>!c.deleted&&String(c.phone||"").replace(/\D/g,"").slice(-9)===ph):null)||(customers||[]).find(c=>!c.deleted&&String(c.name||"").trim()===nm);
+  const ex=(ph.length>=9?(customers||[]).find(c=>!c.deleted&&String(c.phone||"").replace(/\D/g,"").slice(-9)===ph):null)||(customers||[]).find(c=>!c.deleted&&(String(c.name||"").trim()===nm||String(c.bizName||"").trim()===nm));
   if(ex){ newLog.customerId=ex.id; return; }
-  const nc={id:nextId(customers),name:newLog.clientName.trim(),contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",extraContacts:newLog.placePhone?[{role:"טלפון המקום",name:"",phone:newLog.placePhone}]:[],pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
+  const _place=String(newLog.placeName||"").trim(); const _doc=newLog.clientName.trim();
+  const nc={id:nextId(customers),name:_place||_doc,bizName:_place&&_doc!==_place?_doc:"",placeName:_place,taxId:newLog.taxId||"",contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",extraContacts:newLog.placePhone?[{role:"טלפון המקום",name:"",phone:newLog.placePhone}]:[],pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
   setCustomers(cs=>[...cs,nc]); newLog.customerId=nc.id; setTimeout(()=>showToast("👤 "+nc.name+" נשמר גם בלקוחות"),300);
 }
 function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],setCustomers,maintenance=[]}){
@@ -2844,7 +2855,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||""};
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
@@ -2865,7 +2876,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   // הגעה מ"לקוח חדש → יומן ביצוע עכשיו"
   React.useEffect(()=>{ const c=window.__h360PendingExec; if(!c) return; window.__h360PendingExec=null;
     setPrefillAppt(null); setSavedLog(null);
-    setExtracted({clientName:c.name,contactName:c.contactName||"",customerId:c.id,phone:c.phone||"",address:[c.street&&(c.street+(c.buildingNum?" "+c.buildingNum:"")),c.city].filter(Boolean).join(", ")||c.address||"",unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||"",structureType:c.propertyType||"",date:todayStr()});
+    setExtracted({clientName:custDocName(c),contactName:c.contactName||"",placeName:c.placeName||(c.contactName?c.name:""),clientKind:c.contactName?"biz":"private",taxId:c.taxId||"",customerId:c.id,phone:c.phone||"",address:[c.street&&(c.street+(c.buildingNum?" "+c.buildingNum:"")),c.city].filter(Boolean).join(", ")||c.address||"",unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||"",structureType:c.propertyType||"",date:todayStr()});
     setFormKey(k=>k+1); setMode("new"); },[]);
   const [autoInv,setAutoInv]=useState(false);
   const saveDocTab=rec=>{ const saved={...rec,id:nextId(finance||[])}; setFinance&&setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x)); return saved; };
@@ -4570,7 +4581,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft};
+    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||""};
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog,customerId:a.customerId||newLog.customerId||null}:a));
@@ -4785,7 +4796,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {detailAppt&&<ApptDetailModal appt={detailAppt} customers={customers} workers={workers} currentUser={currentUser}
       onConvertFree={a=>{setDetailAppt(null);setConvertId(a.id);setPrefill({date:a.date,time:isAllDay(a)?"":a.time,workerId:a.workerId});setFullText({text:a.freeText||a.rawMsg||"",n:Date.now()});setNewKind("job");setShowNew(true);}}
       execLogs={execLogs} finance={finance}
@@ -5574,6 +5585,29 @@ function WAPasteBox({onApply,cityNames}){
   </div>;
 }
 
+// ═══ 👤/🏢 זהות הלקוח — אותו בלוק בהזמנת עבודה, בלקוח חדש וביומן ביצוע ═══
+// פרטי: שם + טלפון. עסקי: איש קשר + טלפון + שם המקום, ובהרחבה — שם אחר על המסמכים + ח.פ
+const custDocName=c=>c?(c.bizName||c.name||""):"";
+function ClientIdentity({v,onChange,sharedHint=""}){
+  const biz=v.kind==="biz";
+  const [docOpen,setDocOpen]=useState(()=>!!(v.doc&&v.doc!==v.place)||!!v.taxId);
+  const set=(k,x)=>onChange({...v,[k]:x});
+  const chip=on=>({flex:1,padding:"9px 6px",borderRadius:10,border:`1.5px solid ${on?CLR.primary:"#d1d5db"}`,background:on?CLR.primaryLight:"#fff",color:on?CLR.primary:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit",fontWeight:on?800:500});
+  const docShown=String(v.doc||"").trim()||String(v.place||"").trim()||sharedHint||v.name;
+  return <div>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>
+      <button type="button" onClick={()=>set("kind","private")} style={chip(!biz)}>👤 לקוח פרטי</button>
+      <button type="button" onClick={()=>set("kind","biz")} style={chip(biz)}>🏢 עסק / מוסד / ועד בית</button>
+    </div>
+    <G2><Inp label={biz?"שם איש הקשר *":"שם הלקוח *"} value={v.name||""} onChange={x=>set("name",x)} placeholder={biz?"למשל: יוסי":""}/><Inp label={biz?"טלפון איש הקשר *":"טלפון *"} value={v.phone||""} onChange={x=>set("phone",x)} placeholder="050-000-0000"/></G2>
+    {biz&&<>
+      <Inp label="🏪 שם המקום (איך שכולם מכירים)" value={v.place||""} onChange={x=>set("place",x)} placeholder={sharedHint||"למשל: שווארמה שמש, גן השקמה"}/>
+      {!docOpen?<button type="button" onClick={()=>setDocOpen(true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit",fontWeight:700}}>+ שם אחר על המסמכים (חשבונית) / ח.פ</button>
+      :<G2><Inp label="🧾 שם על המסמכים" value={v.doc||""} onChange={x=>set("doc",x)} placeholder="למשל: נ.ש. עסקים בע״מ"/><Inp label="ח.פ / ע.מ (לא חובה)" value={v.taxId||""} onChange={x=>set("taxId",x)}/></G2>}
+      <div style={{fontSize:12,color:"#1e40af",background:"#eff6ff",borderRadius:8,padding:"6px 10px",marginTop:-4,marginBottom:12}}>🧾 במסמכים: <b>{docShown||"—"}</b>{v.place&&v.doc&&v.doc!==v.place?<> · 🏪 מקום: <b>{v.place}</b></>:null} · 👤 איש קשר: <b>{v.name||"—"}</b></div>
+    </>}
+  </div>;
+}
 function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null}){
   const custOnly=mode==="customer";
   // 📝 טיוטה: מה שמילאת נשמר לבד — אפשר לעבור ללשונית אחרת ולחזור להמשיך
@@ -5584,7 +5618,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     name:"",phone:"",email:"",
     city:"",street:"",buildingNum:"",aptNum:"",entrance:"",
     propertyType:"דירה",rooms:"3",levels:"1",floors:"",sewers:"",hasYard:false,floor:"קרקע",
-    parking:null, elevator:null, underground:"0", bizName:"", docName:"", docNameEdited:false, propertyNotes:"",
+    parking:null, elevator:null, underground:"0", bizName:"", docName:"", docNameEdited:false, placeName:"", clientKind:"private", taxId:"", propertyNotes:"",
     status:"פעיל",notes:"",
     pests:[],customPest:"",price:"",source:"",
     buildingAreas:[],
@@ -5636,8 +5670,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const isBiz=["עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"].includes(f.propertyType);
   const autoDocName=()=>("ועד הבית "+[f.street,f.buildingNum].filter(Boolean).join(" ")).trim();
   const docNameShown=f.docNameEdited?f.docName:autoDocName();
-  const clientNameForDocs=()=>isShared?(docNameShown||"ועד הבית"):(String(f.bizName||"").trim()?f.bizName.trim():f.name);
-  const contactForDocs=()=>(isShared||String(f.bizName||"").trim())?f.name:"";
+  const isBizClient=f.clientKind==="biz"||isShared;
+  const clientNameForDocs=()=>!isBizClient?f.name:(String(f.bizName||"").trim()||String(f.placeName||"").trim()||(isShared?(docNameShown||"ועד הבית"):f.name));
+  const placeForCustomer=()=>!isBizClient?f.name:(String(f.placeName||"").trim()||String(f.bizName||"").trim()||(isShared?(docNameShown||"ועד הבית"):f.name));
+  const contactForDocs=()=>isBizClient?f.name:"";
 
   const toggleArea=a=>set("buildingAreas",f.buildingAreas.includes(a)?f.buildingAreas.filter(x=>x!==a):[...f.buildingAreas,a]);
   const ilCities=useIlCities();
@@ -5663,14 +5699,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(doSchedule&&!f.prefDate) return alert("לשיגור ליומן צריך לבחור תאריך");
     const addr=fullAddress();
     const customer={
-      name:clientNameForDocs(),contactName:contactForDocs(),phone:f.phone,email:f.email,
+      name:placeForCustomer(),contactName:contactForDocs(),phone:f.phone,email:f.email,
       address:addr||f.city||"—",
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,entrance:f.entrance||"",
       propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
       floor:isApt||isBiz?f.floor:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
       status:f.status,notes:f.notes,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
-      bizName:String(f.bizName||"").trim(),
+      bizName:isBizClient&&clientNameForDocs()!==placeForCustomer()?clientNameForDocs():"", placeName:isBizClient?String(f.placeName||"").trim():"", taxId:isBizClient?String(f.taxId||"").trim():"",
       ...(existingId!=null?{id:existingId}:{totalPaid:0,lastTreatment:""}),
     };
     if(custOnly){ delete customer.pestType; delete customer.pests; delete customer.lastPrice; }
@@ -5717,7 +5753,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
   };
   React.useEffect(()=>{ const c=initialCustomer||window.__h360PendingOrder; if(!c||custOnly) return; window.__h360PendingOrder=null; setExistingId(c.id);
-    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,bizName:c.bizName||(c.contactName&&c.propertyType!=="בניין משותף"?c.name:""),phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||""})); },[]);
+    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||""})); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -5734,10 +5770,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         </button>
       </div>
       {existingId!=null&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
-      {isShared?<div style={{marginBottom:4}}><Inp label="🏢 שם במסמכים (ועד הבית)" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/></div>
-        :<Inp label="🏢 שם העסק / המוסד (למסמכים) — לא חובה" value={f.bizName} onChange={v=>set("bizName",v)} placeholder="למשל: גן ילדים השקמה, מסעדת השף. לקוח פרטי — להשאיר ריק"/>}
-      <G2><Inp label={isShared||String(f.bizName||"").trim()?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label={isShared||String(f.bizName||"").trim()?"טלפון איש הקשר *":"טלפון *"} value={f.phone} onChange={v=>set("phone",v)}/></G2>
-      {(isShared||String(f.bizName||"").trim())&&<div style={{fontSize:12,color:"#1e40af",marginTop:-6,marginBottom:10}}>במסמכים יופיע "{clientNameForDocs()}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} כאיש קשר.</div>}
+      <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""}
+        onChange={x=>setF(p=>({...p,clientKind:x.kind,name:x.name,phone:x.phone,placeName:x.place||"",bizName:x.doc||"",taxId:x.taxId||""}))}/>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר / טלפונים נוספים <span style={{fontSize:11}}>(טלפון המקום, דייר, בעל הדירה, מנהל…)</span></label>
@@ -5937,7 +5971,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </div>
     {showExistingSearch&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setShowExistingSearch(false)} onSelect={c=>{
       setExistingId(c.id);
-      setF(prev=>({...prev,bizName:c.bizName||(c.contactName&&c.contactName!==c.name&&c.propertyType!=="בניין משותף"?c.name:prev.bizName),
+      setF(prev=>({...prev,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",
         name:c.name||prev.name, phone:c.phone||prev.phone, email:c.email||prev.email,
         city:c.city||prev.city, street:c.street||prev.street,
         buildingNum:c.buildingNum||prev.buildingNum, aptNum:c.aptNum||prev.aptNum,
@@ -6719,7 +6753,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"ג'וקים",price:schedFor.lastPrice||""}}
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
   </div>;
 }
 
@@ -7462,7 +7496,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const custOf=l=>customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
   const openInvFor=l=>{const c=custOf(l);
     const paid=parseFloat(l.paymentAmount)||0;
-    setDocReq({type:"חשבונית מס/קבלה",prefill:{custId:c?c.id:null,custName:c?c.name:l.clientName,apptId:l.apptId||"",execLogId:l.id,execDocNum:l.docNum||"",
+    setDocReq({type:"חשבונית מס/קבלה",prefill:{custId:c?c.id:null,custName:c?custDocName(c):l.clientName,apptId:l.apptId||"",execLogId:l.id,execDocNum:l.docNum||"",
       lines:[{desc:"הדברת "+(l.pest||[]).join(", ")+(l.address?" – "+l.address:""),qty:"1",unit:"יח׳",price:paid?String(paid):""}],inclVat:true,
       payments:(()=>{ const m=({"ביט":"ביט","פייבוקס":"פייבוקס","PayBox":"פייבוקס","מזומן":"מזומן","העברה":"העברה בנקאית","העברה בנקאית":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"})[l.paymentMethod]; return m?[{method:m,amount:paid?String(paid):"",date:l.date||todayStr(),details:{}}]:[]; })()}});};
   const [typeF,setTypeF]=useState("הכל");
