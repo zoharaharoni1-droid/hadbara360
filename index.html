@@ -10774,41 +10774,75 @@ async function gcalSyncAll(appointments,setAppointments,workers,onlyId){
   } finally { __gcalBusy=false; }
   return res;
 }
+// ─── 📅 גוגל יומן — סנכרון בצד השרת (רץ כל כמה דקות גם כשאף מכשיר לא פתוח) ───
+const GSYNC_FN=SUPA_URL+"/functions/v1/gcal-sync";
+async function gsync(action,extra){
+  let tok=SUPA_KEY; try{ const {data}=await sb.auth.getSession(); if(data&&data.session) tok=data.session.access_token; }catch(e){}
+  const r=await fetch(GSYNC_FN,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+tok,"apikey":SUPA_KEY},body:JSON.stringify({action,...(extra||{})})});
+  const j=await r.json().catch(()=>({ok:false,error:"תשובה לא תקינה מהשרת"}));
+  if(j&&j.list){ window.__gcalStatus={list:j.list,at:Date.now()}; window.dispatchEvent(new Event("h360-gcal-status")); }
+  if(!r.ok&&!j.list) throw new Error(j.error||("שגיאה "+r.status));
+  return j;
+}
+function useGcalStatus(){ const [st,setSt]=useState(()=>window.__gcalStatus||null);
+  React.useEffect(()=>{ const f=()=>setSt({...(window.__gcalStatus||{})}); window.addEventListener("h360-gcal-status",f); return ()=>window.removeEventListener("h360-gcal-status",f); },[]); return st; }
+function gcalProblem(c){ if(!c||c.paused) return ""; const s=c.status||{}; const last=s.lastOk?new Date(s.lastOk).getTime():0;
+  if(s.lastErr&&(s.fails||0)>=2) return s.lastErr; if(!last) return s.lastTry?"עוד לא הצליח להתחבר":""; if(Date.now()-last>30*60*1000) return "לא התעדכן מאז "+new Date(last).toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"}); return ""; }
+function GcalBanner(){
+  const st=useGcalStatus(); const [busy,setBusy]=useState(false); const [hide,setHide]=useState(false);
+  const bad=((st&&st.list)||[]).map(c=>[c,gcalProblem(c)]).filter(x=>x[1]);
+  if(!bad.length||hide) return null;
+  return <div style={{background:"#fef2f2",border:"1.5px solid #fca5a5",borderRadius:12,padding:"10px 14px",marginBottom:10,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+    <div style={{flex:1,minWidth:200,fontSize:14,color:"#991b1b"}}><b>⚠️ אין סנכרון עם יומן גוגל</b> — {bad[0][1]}. מה שכבר נכנס נשאר ביומן, אבל דברים חדשים מגוגל לא מגיעים. שים לב לבדוק ביומן של גוגל.</div>
+    <button type="button" disabled={busy} onClick={async()=>{ setBusy(true); try{ const r=await gsync("sync"); showToast(r.ok?"✅ סונכרן עם גוגל":"❌ "+((r.calendars||[]).find(x=>!x.ok)||{}).error); }catch(e){ showToast("❌ "+e.message); } setBusy(false); }} style={{border:"none",background:"#dc2626",color:"#fff",borderRadius:8,padding:"8px 12px",fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{busy?"⏳":"🔄 נסה עכשיו"}</button>
+    <button type="button" onClick={()=>{ setHide(true); window.__h360Nav&&window.__h360Nav("settings"); }} style={{border:"1px solid #fca5a5",background:"#fff",color:"#991b1b",borderRadius:8,padding:"8px 10px",cursor:"pointer",fontFamily:"inherit"}}>הגדרות</button>
+  </div>;
+}
 function GcalSettings({workers,appointments,setAppointments,currentUser}){
-  const [cfgs,setCfgs]=useState(gcalCfgs); const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
+  const st=useGcalStatus(); const list=(st&&st.list)||null; const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
   const me=myWorkerFor(currentUser,workers);
   const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
-  const save=list=>{ setCfgs(list); lsSet("h360_gcal",list); };
   const [url,setUrl]=useState(""); const [wid,setWid]=useState(String(me?me.id:(techs[0]||{}).id||"")); const [kind,setKind]=useState("free"); const [from,setFrom]=useState(todayStr());
-  const OK=/^https:\/\/calendar\.google\.com\/calendar\/ical\/[^\s?#]+\/(private-[0-9a-f]+|public)\/basic\.ics$/i;
-  const add=async()=>{ let u=url.replace(/\s+/g,"").replace(/^webcal:\/\//i,"https://");
-    if(/[•●·*]{3,}/.test(u)||!u) return alert("הודבקו נקודות במקום הכתובת.\n\nבגוגל הכתובת הסודית מוסתרת. קודם לוחצים על הנקודות (••••) — אז מופיעה הכתובת המלאה — ורק אז מעתיקים אותה.");
-    if(/\/public\/basic\.ics$/i.test(u)) return alert("זו הכתובת הציבורית — היא לא עובדת כשהיומן פרטי.\n\nצריך את השדה שמתחתיה: \"כתובת סודית בפורמט iCal\" (הכתובת עם private בתוכה). לוחצים על הנקודות כדי לחשוף אותה ואז מעתיקים.");
-    if(!OK.test(u)) return alert("זו לא הכתובת הנכונה.\nצריך את 'הכתובת הסודית בפורמט iCal' — מתחילה ב-https://calendar.google.com/calendar/ical/ ומסתיימת ב-basic.ics");
-    setBusy(true); setMsg("⏳ בודק את הכתובת מול גוגל…");
-    try{ await gcalFetch(u); }catch(e){ setBusy(false); setMsg("❌ "+(/404/.test(e.message)?"גוגל לא מצא את היומן — כנראה הכתובת לא הועתקה עד הסוף. נסה להעתיק שוב (עדיף מהמחשב).":e.message)); return; }
-    const c={id:Date.now().toString(36),url:u,workerId:wid,kind,from}; const list=[...cfgs,c]; save(list); setUrl(""); setMsg("⏳ מתחבר לגוגל…");
-    const r=await gcalSyncAll(appointments,setAppointments,workers,c.id); setBusy(false); setCfgs(gcalCfgs());
-    setMsg(r&&r.errors.length?"❌ "+r.errors[0]:"✅ מחובר! נוספו "+(r?r.added:0)+" רישומים מגוגל ליומן"); };
-  const syncNow=async()=>{ setBusy(true); setMsg("⏳ מסנכרן…"); const r=await gcalSyncAll(appointments,setAppointments,workers); setBusy(false); setCfgs(gcalCfgs());
-    setMsg(!r?"סנכרון כבר רץ":r.errors.length?"❌ "+r.errors[0]:"✅ נוספו "+r.added+" · עודכנו "+r.updated+(r.removed?" · הוסרו "+r.removed:"")); };
-  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  const [disc,setDisc]=useState(null);
+  React.useEffect(()=>{ gsync("status").catch(e=>setMsg("❌ "+e.message)); },[]);
   const wName=id=>(techs.find(w=>String(w.id)===String(id))||{}).name||"—";
+  const run=async(fn,okMsg)=>{ setBusy(true); setMsg("⏳ רגע…"); try{ const r=await fn(); setMsg(r&&r.ok===false?"❌ "+(r.error||((r.calendars||[]).find(x=>!x.ok)||{}).error||"שגיאה"):okMsg(r)); }catch(e){ setMsg("❌ "+e.message); } setBusy(false); };
+  const add=()=>{ let u=url.replace(/\s+/g,"").replace(/^webcal:\/\//i,"https://");
+    if(/[•●·*]{3,}/.test(u)||!u) return alert("הודבקו נקודות במקום הכתובת.\n\nבגוגל הכתובת הסודית מוסתרת. קודם לוחצים על הנקודות (••••) — אז מופיעה הכתובת המלאה — ורק אז מעתיקים אותה.");
+    if(/\/public\/basic\.ics$/i.test(u)) return alert("זו הכתובת הציבורית — היא לא עובדת כשהיומן פרטי.\n\nצריך את \"כתובת סודית בפורמט iCal\" (עם המילה private).");
+    run(()=>gsync("connect",{url:u,workerId:wid,workerName:wName(wid),kind,from}),r=>{ setUrl(""); const c=(r.calendars||[])[0]||{}; return "✅ מחובר! נוספו "+(c.added||0)+" רישומים. מעכשיו הסנכרון רץ בשרת כל כמה דקות — גם כשהטלפון סגור."; }); };
+  const upd=(id,patch)=>run(()=>gsync("update",{id,patch}),()=>"✅ נשמר");
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  const ago=t=>t?new Date(t).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}):"—";
   return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
     <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>📅 סנכרון מגוגל יומן</div>
-    <div style={{fontSize:13,color:"#64748b",marginBottom:10}}>כל מה שתרשום ביומן של גוגל ייכנס ליומן העבודה כ"רישום מהיר" — עם זיהוי שם, טלפון, כתובת ומזיק — ומשם לוחצים "השלם להזמנה". שינוי שעה או מחיקה בגוגל מתעדכנים גם כאן. הסנכרון רץ כל 5 דקות כשהמערכת פתוחה במכשיר הזה.</div>
-    {cfgs.map(c=><div key={c.id} style={{border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:8,fontSize:13}}>
-      <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b>🔗 יומן גוגל → {wName(c.workerId)} ({c.kind==="personal"?"משימות":"רישום מהיר / עבודה"})</b>
-        <button type="button" onClick={()=>{ if(confirm("לנתק את היומן הזה? (מה שכבר נכנס נשאר)")) save(cfgs.filter(x=>x.id!==c.id)); }} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer",fontFamily:"inherit"}}>נתק</button></div>
-      <div style={{color:"#64748b"}}>מתאריך {fmtDate(c.from)} · {c.lastSync?"סונכרן "+new Date(c.lastSync).toLocaleString("he-IL",{dateStyle:"short",timeStyle:"short"}):"עוד לא סונכרן"}{c.lastErr?" · ❌ "+c.lastErr:""}</div>
-    </div>)}
-    {cfgs.length>0&&<Btn sm onClick={syncNow} disabled={busy} style={{marginBottom:10}}>🔄 סנכרן עכשיו</Btn>}
-    <details open={!cfgs.length}><summary style={{cursor:"pointer",fontWeight:700,fontSize:14}}>➕ חבר יומן גוגל</summary>
+    <div style={{fontSize:13,color:"#64748b",marginBottom:10}}>מה שרושמים ביומן של גוגל נכנס ליומן העבודה כ"רישום מהיר" (עם זיהוי שם, טלפון וכתובת) — ומשם "השלם להזמנה". הסנכרון רץ <b>בשרת כל כמה דקות</b>, גם כשהטלפון והמחשב סגורים. אם גוגל לא זמין — שום דבר לא נמחק, ותופיע התראה אדומה.</div>
+    {list===null?<div style={{fontSize:13,color:CLR.muted,marginBottom:8}}>⏳ בודק חיבור…</div>:list.map(c=>{ const s=c.status||{}; const prob=gcalProblem(c);
+      return <div key={c.id} style={{border:"1.5px solid "+(prob?"#fca5a5":"#bbf7d0"),background:prob?"#fef2f2":"#f0fdf4",borderRadius:10,padding:"10px 12px",marginBottom:8,fontSize:13}}>
+        <div style={{fontWeight:800}}>{c.paused?"⏸️":prob?"⚠️":"✅"} יומן גוגל → {c.workerName||wName(c.workerId)} ({c.kind==="personal"?"משימות":"רישום מהיר"})</div>
+        <div style={{color:"#475569"}}>סונכרן בהצלחה: {ago(s.lastOk)}{s.events!=null?" · "+s.events+" אירועים":""}{prob?<span style={{color:"#b91c1c"}}> · {prob}</span>:""}</div>
+        {s.skippedDeletes>0&&<div style={{color:"#b45309"}}>🛡️ גוגל החזיר רשימה חשודה — לא מחקתי {s.skippedDeletes} רישומים ליתר ביטחון</div>}
+        <label style={{display:"flex",alignItems:"center",gap:6,margin:"6px 0"}}><input type="checkbox" checked={c.syncDeletes} onChange={e=>upd(c.id,{syncDeletes:e.target.checked})}/> כשמוחקים אירוע בגוגל — להוריד אותו גם מכאן (רק רישומים שעוד לא הפכו להזמנה)</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button type="button" disabled={busy} onClick={()=>upd(c.id,{paused:!c.paused})} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit"}}>{c.paused?"▶️ חדש סנכרון":"⏸️ השהה"}</button>
+          <button type="button" onClick={()=>setDisc(c)} style={{border:"1px solid #fca5a5",background:"#fff",color:"#dc2626",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit"}}>נתק</button>
+        </div>
+      </div>; })}
+    {disc&&<div style={{border:"2px solid #fca5a5",borderRadius:12,padding:12,marginBottom:10,background:"#fff"}}>
+      <div style={{fontWeight:800,marginBottom:6}}>לנתק את יומן גוגל של {disc.workerName||wName(disc.workerId)}?</div>
+      <div style={{fontSize:13,color:"#475569",marginBottom:8}}>מה לעשות עם מה שכבר נכנס מגוגל?</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Btn sm onClick={()=>{ const c=disc; setDisc(null); run(()=>gsync("disconnect",{id:c.id,removeItems:false}),()=>"✅ נותק — כל הרישומים נשארו ביומן"); }}>נתק והשאר את הרישומים</Btn>
+        <Btn sm v="secondary" style={{color:"#dc2626"}} onClick={()=>{ const c=disc; setDisc(null); run(()=>gsync("disconnect",{id:c.id,removeItems:true}),r=>"✅ נותק — הוסרו "+(r.removed||0)+" רישומים עתידיים שלא טופלו (אפשר לשחזר מסל המחזור)"); }}>נתק והסר רישומים עתידיים</Btn>
+        <Btn sm v="ghost" onClick={()=>setDisc(null)}>ביטול</Btn>
+      </div>
+    </div>}
+    {list&&list.length>0&&<Btn sm onClick={()=>run(()=>gsync("sync"),r=>{ const a=(r.calendars||[]).reduce((t,x)=>t+(x.added||0),0), u=(r.calendars||[]).reduce((t,x)=>t+(x.updated||0),0), d=(r.calendars||[]).reduce((t,x)=>t+(x.removed||0),0); return "✅ סונכרן · נוספו "+a+" · עודכנו "+u+(d?" · הוסרו "+d:""); })} disabled={busy} style={{marginBottom:10}}>🔄 סנכרן עכשיו</Btn>}
+    <details open={list!==null&&!list.length}><summary style={{cursor:"pointer",fontWeight:700,fontSize:14}}>➕ חבר יומן גוגל</summary>
       <ol style={{fontSize:13,color:"#334155",paddingRight:18,margin:"8px 0",lineHeight:1.7}}>
-        <li>במחשב, פתח את <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">הגדרות גוגל יומן</a>.</li>
-        <li>בצד ימין, תחת "הגדרות של היומנים שלי", לחץ על היומן שלך.</li>
-        <li>גלול למטה עד <b>"כתובת סודית בפורמט iCal"</b> (לא "ציבורית"!). <b>לחץ על הנקודות ••••</b> — תופיע הכתובת המלאה (עם המילה private) — ורק אז העתק אותה.</li>
-        <li>הדבק כאן למטה ולחץ "חבר".</li>
+        <li>פתח את <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">הגדרות גוגל יומן</a> ולחץ על היומן שלך.</li>
+        <li>גלול עד <b>"כתובת סודית בפורמט iCal"</b> (לא "ציבורית"). <b>לחץ על הנקודות ••••</b> — תופיע הכתובת המלאה (עם המילה private) — והעתק אותה.</li>
+        <li>הדבק כאן ולחץ "חבר".</li>
       </ol>
       <textarea dir="ltr" rows={3} value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" style={{...fld,width:"100%",marginBottom:8,fontSize:13,wordBreak:"break-all",resize:"vertical"}}/>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
@@ -10817,7 +10851,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
         <span style={{fontSize:13}}>מתאריך</span><input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={fld}/>
       </div>
       <Btn sm onClick={add} disabled={busy}>🔗 חבר</Btn>
-      <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>🔒 הכתובת הסודית נשמרת רק במכשיר הזה. אירועים מלפני "מתאריך" לא נכנסים — כדי לא לשכפל מה שכבר רשום במערכת.</div>
+      <div style={{fontSize:11,color:"#94a3b8",marginTop:6}}>🔒 הכתובת הסודית נשמרת רק בשרת, לא נשלחת למכשירים. אירועים מלפני "מתאריך" לא נכנסים.</div>
     </details>
     {msg&&<div style={{fontSize:13,marginTop:8}}>{msg}</div>}
   </div>;
@@ -10973,11 +11007,28 @@ function App(){
   React.useEffect(()=>{
     if(!authUser||authUser.role!=="מנהל") return;
     const t1=setTimeout(()=>{ if(lsGet("h360_last_backup","")!==todayStr()) cloudBackupNow(false).catch(e=>console.warn("[backup]",e)); },25000);
-    const run=()=>{ if(!gcalCfgs().length) return; const c=gcalRef.current; gcalSyncAll(c.appointments,c.setAppointments,c.workers).then(r=>{ if(r&&r.added) showToast&&showToast("📅 נוספו "+r.added+" רישומים מגוגל יומן"); }).catch(()=>{}); };
-    const t2=setTimeout(run,12000); const iv=setInterval(run,5*60*1000);
-    const onRef=()=>setTimeout(run,1500); window.addEventListener('h360-refresh',onRef);
+    const t2=0, iv=0, onRef=()=>{};
     return ()=>{ clearTimeout(t1); clearTimeout(t2); clearInterval(iv); window.removeEventListener('h360-refresh',onRef); };
   },[authUser&&authUser.id,authUser&&authUser.role]);
+  // 📅 סנכרון גוגל (בשרת) — כל מכשיר מחובר מזרז אותו; + מעבר עם המפענח על רישומים חדשים מגוגל
+  React.useEffect(()=>{
+    if(!authUser) return;
+    // מעבר חד-פעמי: חיבור ישן ששמור רק בטלפון → עובר לשרת
+    const migrate=async()=>{ const old=lsGet("h360_gcal",[]); if(!old.length) return; try{ const st=await gsync("status"); const have=new Set((st.list||[]).map(c=>c.id));
+      for(const c of old){ if(!c.url||have.has(c.id)) continue; const w=(gcalRef.current.workers||[]).find(x=>String(x.id)===String(c.workerId)); await gsync("connect",{id:c.id,url:c.url,workerId:c.workerId,workerName:w?w.name:"",kind:c.kind,from:c.from}); }
+      lsSet("h360_gcal",[]); }catch(e){ console.warn("[gcal migrate]",e); } };
+    const run=()=>{ if(document.visibilityState==="hidden") return; gsync("sync").then(r=>{ const a=(r.calendars||[]).reduce((t,x)=>t+(x.added||0),0); if(a) showToast("📅 נוספו "+a+" רישומים מגוגל יומן"); }).catch(()=>{}); };
+    const t0=setTimeout(()=>{ migrate().then(run); },4000); const iv=setInterval(run,3*60*1000);
+    const vis=()=>{ if(document.visibilityState==="visible") run(); }; document.addEventListener("visibilitychange",vis);
+    const onRef=()=>setTimeout(run,800); window.addEventListener('h360-refresh',onRef);
+    return ()=>{ clearTimeout(t0); clearInterval(iv); document.removeEventListener("visibilitychange",vis); window.removeEventListener('h360-refresh',onRef); };
+  },[authUser&&authUser.id]);
+  React.useEffect(()=>{
+    const need=(appointments||[]).filter(a=>a&&a.needsParse&&!a.deleted); if(!need.length) return;
+    const upd={}; need.forEach(a=>{ try{ const p=waParse(a.freeText||a.rawMsg||"",[])||{}; const street=[p.street,p.buildingNum].filter(Boolean).join(" "); const addr=[street,p.city].filter(Boolean).join(", ");
+      upd[a.id]={customerName:p.name||a.customerName,phone:p.phone||a.phone||"",address:a.address||addr,pestType:(p.pests||[]).join(", ")||a.pestType||"",pests:(p.pests||[]).filter(x=>PEST_TYPES_CRM.includes(x)),price:parseInt(p.price)||a.price||0,aptNum:p.aptNum||"",entrance:p.entrance||"",floor:p.floor||"",propertyType:p.propertyType||"",needsParse:false}; }catch(e){ upd[a.id]={needsParse:false}; } });
+    setAppointments(as=>as.map(x=>upd[x.id]&&x.needsParse?{...x,...upd[x.id]}:x));
+  },[appointments]);
   const activeAppointments = React.useMemo(()=>{
     const live=activeOnly(appointments);
     if(!customers||!customers.length) return live;
@@ -11085,7 +11136,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -11243,6 +11294,7 @@ function App(){
         <div style={{padding:isMobile?"12px 12px 20px":"24px",width:"100%",overflowX:"hidden",boxSizing:"border-box"}}>
               <PushPrompt/>
               <ReminderBanner appointments={jobAppointments} customers={customers} scheduledMsgs={activeScheduledMsgs} currentUser={user}/>
+              {tab==="fieldview"&&<GcalBanner/>}
               {tab==="fieldview"&&<WorkerFieldView currentUser={user} workers={activeWorkers} appointments={calAppointments} setAppointments={setApptsCal} customers={customers} execLogs={execLogs} setExecLogs={setExecLogs} finance={activeFinance} onOpenAppt={(a,mode)=>{setOpenReq({id:a.id,mode:mode||"",n:Date.now()});setTab("calendar");}} onQuickAdd={()=>{setOpenReq({quick:true,n:Date.now()});setTab("calendar");}}/>}
               {tab==="settings"&&<SettingsPage isAdmin={user.role==="מנהל"} onReset={resetAllData} workers={activeWorkers} appointments={appointments} setAppointments={setAppointments} currentUser={user}/>}
               {tab==="mychems"&&<MyChemicals currentUser={user} workers={activeWorkers} setWorkers={setWorkers} execLogs={execLogs}/>}
@@ -11252,6 +11304,7 @@ function App(){
             {tab==="neworder"&&<NewOrderPage customers={customers} setCustomers={setCustomers} appointments={activeAppointments} setAppointments={setAppointments} workers={activeWorkers} goToCustomers={()=>setTab("customers")}/>}
             {tab==="calculator"&&<CalculatorPage/>}
             {tab==="customers"&&<Customers customers={customers} setCustomers={setCustomers} appointments={jobAppointments} setAppointments={setAppointments} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} currentUser={user}/>}
+            {tab==="calendar"&&<GcalBanner/>}
             {tab==="calendar"&&<WeekCalendar appointments={calAppointments} setAppointments={setApptsCal} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
             {tab==="invoices"&&(()=>{ const own=permOf(authUser,"invoices")==="own"; const meW=myWorkerFor(user,activeWorkers); return <Invoices mineOnly={own?{id:authUser.id,workerName:meW?meW.name:authUser.name}:null} finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={own?execLogs.filter(l=>l.workerName===(meW?meW.name:authUser.name)):execLogs} setExecLogs={setExecLogs}/>; })()}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
