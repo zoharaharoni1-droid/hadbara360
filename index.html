@@ -11002,6 +11002,15 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
+const APP_BUILD="107";
+// עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
+async function forceAppUpdate(){
+  try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
+  try{ const regs=await navigator.serviceWorker.getRegistrations(); for(const r of regs){ try{ await r.update(); }catch(e){} if(r.waiting) r.waiting.postMessage({type:'SKIP_WAITING'}); } }catch(e){}
+  try{ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); }catch(e){}
+  try{ await fetch('/hadbara360/index.html?fresh='+Date.now(),{cache:'reload'}); }catch(e){}
+  setTimeout(()=>{ location.replace('/hadbara360/?u='+Date.now()); },600);
+}
 function SettingsPage({isAdmin,onReset,workers=[],appointments=[],setAppointments,currentUser}){
   const [theme,setTheme]=useState(()=>{ try{ return localStorage.getItem('h360_theme')||'light'; }catch(e){ return 'light'; } });
   const pick=t=>{ setTheme(t); try{ localStorage.setItem('h360_theme',t); }catch(e){} try{ window.h360ApplyTheme&&window.h360ApplyTheme(); }catch(e){} };
@@ -11017,6 +11026,10 @@ function SettingsPage({isAdmin,onReset,workers=[],appointments=[],setAppointment
         {opt("dark","🌙","לילה","רקע כהה")}
         {opt("auto","🌗","אוטומטי","לפי הגדרת הטלפון")}
       </div>
+    </div>
+    <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:180}}><div style={{fontWeight:800,fontSize:16}}>🔄 גרסת המערכת</div><div style={{fontSize:13,color:"#64748b"}}>גרסה {APP_BUILD}. אם לא רואים שינוי שאמור להיות — לחץ "טען גרסה אחרונה".</div></div>
+      <Btn sm onClick={forceAppUpdate}>⬇️ טען גרסה אחרונה</Btn>
     </div>
     {isAdmin&&setAppointments&&<GcalSettings workers={workers} appointments={appointments} setAppointments={setAppointments} currentUser={currentUser}/>}
     {isAdmin&&<BackupSettings/>}
