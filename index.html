@@ -2799,7 +2799,16 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
   </div>;
 }
 
-function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],maintenance=[]}){
+// לקוח שבוצע לו טיפול בלי כרטיס לקוח — נשמר אוטומטית בלקוחות (או מתחבר ללקוח קיים לפי טלפון)
+function ensureLogCustomer(newLog,customers,setCustomers){
+  if(newLog.customerId||!setCustomers||!String(newLog.clientName||"").trim()) return;
+  const ph=String(newLog.phone||"").replace(/\D/g,"").slice(-9);
+  const ex=ph.length>=9?(customers||[]).find(c=>!c.deleted&&String(c.phone||"").replace(/\D/g,"").slice(-9)===ph):null;
+  if(ex){ newLog.customerId=ex.id; return; }
+  const nc={id:nextId(customers),name:newLog.clientName.trim(),contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
+  setCustomers(cs=>[...cs,nc]); newLog.customerId=nc.id; setTimeout(()=>showToast("👤 "+nc.name+" נשמר גם בלקוחות"),300);
+}
+function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],setCustomers,maintenance=[]}){
   const workerObj = workers.find(w=>String(w.crmUserId)===String(currentUser.id)) || workers.find(w=>String(w.name||"").trim()===String(currentUser.name||"").trim()) || {name:currentUser.name,license:"—"};
   const [savedLog,setSavedLog]=useState(null);
   const [mode,setMode]=useState("list"); // list | new | preview
@@ -2826,6 +2835,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
     const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
     setSavedLog(newLog);
@@ -2834,6 +2844,11 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   const finish=()=>{ setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
 
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setSavedLog(null);setFormKey(k=>k+1);setMode("new");};
+  // הגעה מ"לקוח חדש → יומן ביצוע עכשיו"
+  React.useEffect(()=>{ const c=window.__h360PendingExec; if(!c) return; window.__h360PendingExec=null;
+    setPrefillAppt(null); setSavedLog(null);
+    setExtracted({clientName:c.name,contactName:c.contactName||"",customerId:c.id,phone:c.phone||"",address:[c.street&&(c.street+(c.buildingNum?" "+c.buildingNum:"")),c.city].filter(Boolean).join(", ")||c.address||"",unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||"",structureType:c.propertyType||"",date:todayStr()});
+    setFormKey(k=>k+1); setMode("new"); },[]);
   const [autoInv,setAutoInv]=useState(false);
   const saveDocTab=rec=>{ const saved={...rec,id:nextId(finance||[])}; setFinance&&setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x)); return saved; };
   const handlePreview=(data,opt={})=>{const log=handleSave(data);setPreviewData(data);setExtracted(data);setAutoInv(!!opt.invoice);setMode("preview");if(opt.send&&data.phone) sendExecLogWA(log,data.phone);};
@@ -4532,9 +4547,10 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
-    if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
+    if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog,customerId:a.customerId||newLog.customerId||null}:a));
     return newLog;
   };
   const saveInvoiceFromLog=inv=>{
@@ -4724,7 +4740,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       </div>
       <OrderForm workers={workers} showGuidance={false} initialParsed={fullText}
         initialDate={prefill.date} initialTime={prefill.time} initialWorker={prefill.workerId}
-        onSave={c=>{const saved={...c,id:nextId(customers)};setCustomers(cs=>[...cs,saved]);return saved;}}
+        onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
         onSchedule={appt=>setAppointments(as=>{ const keep=convertId!=null?as.filter(x=>x.id!==convertId):as; return [...keep,{...appt,id:nextId(as)}]; })}
         onDone={(saved,schedInfo)=>{
           setConvertId(null);
@@ -5535,7 +5551,8 @@ function WAPasteBox({onApply,cityNames}){
   </div>;
 }
 
-function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey}){
+function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null}){
+  const custOnly=mode==="customer";
   // 📝 טיוטה: מה שמילאת נשמר לבד — אפשר לעבור ללשונית אחרת ולחזור להמשיך
   const DK=draftKey?"h360_draft_"+draftKey:null;
   const draft0=React.useMemo(()=>{ if(!DK||initialParsed) return null; try{ const d=JSON.parse(localStorage.getItem(DK)||"null"); return d&&d.f?d:null; }catch(e){ return null; } },[]);
@@ -5554,6 +5571,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const [showExistingSearch,setShowExistingSearch]=useState(false);
+  const [existingId,setExistingId]=useState(initialCustomer?initialCustomer.id:null);
   const [doSchedule,setDoSchedule]=useState(draft0?!!draft0.doSchedule:!!initialDate);
   const [schedWorker,setSchedWorker]=useState(draft0&&draft0.schedWorker!=null?draft0.schedWorker:(initialWorker||""));
   // סנכרון עם לוח הזמינות של המדבירים
@@ -5594,8 +5612,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const isBiz=["עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"].includes(f.propertyType);
   const autoDocName=()=>("ועד הבית "+[f.street,f.buildingNum].filter(Boolean).join(" ")).trim();
   const docNameShown=f.docNameEdited?f.docName:autoDocName();
-  const clientNameForDocs=()=>isShared?(docNameShown||"ועד הבית"):(isBiz&&f.bizName.trim()?f.bizName.trim():f.name);
-  const contactForDocs=()=>(isShared||(isBiz&&f.bizName.trim()))?f.name:"";
+  const clientNameForDocs=()=>isShared?(docNameShown||"ועד הבית"):(String(f.bizName||"").trim()?f.bizName.trim():f.name);
+  const contactForDocs=()=>(isShared||String(f.bizName||"").trim())?f.name:"";
 
   const toggleArea=a=>set("buildingAreas",f.buildingAreas.includes(a)?f.buildingAreas.filter(x=>x!==a):[...f.buildingAreas,a]);
   const ilCities=useIlCities();
@@ -5616,6 +5634,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
 
   const save=()=>{
     if(!f.name||!f.phone) return alert("שם וטלפון הם שדות חובה");
+    if(custOnly&&doSchedule) setDoSchedule(false);
     if(doSchedule&&(!schedWorker||allPests().length===0)) return alert("לשיגור ליומן צריך לבחור מדביר ולפחות מזיק אחד");
     if(doSchedule&&!f.prefDate) return alert("לשיגור ליומן צריך לבחור תאריך");
     const addr=fullAddress();
@@ -5627,11 +5646,13 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       floor:isApt||isBiz?f.floor:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
       status:f.status,notes:f.notes,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
-      totalPaid:0,lastTreatment:"",
+      bizName:String(f.bizName||"").trim(),
+      ...(existingId!=null?{id:existingId}:{totalPaid:0,lastTreatment:""}),
     };
+    if(custOnly){ delete customer.pestType; delete customer.pests; delete customer.lastPrice; }
     const saved=onSave(customer);
     let schedInfo=null;
-    if(doSchedule&&saved){
+    if(!custOnly&&doSchedule&&saved){
       const w=workers.find(x=>x.id===parseInt(schedWorker));
       const timeWindow=f.allDay?ALL_DAY_TW:`${f.timeFrom}–${f.timeTo}`;
       onSchedule({
@@ -5671,6 +5692,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(r.prefDate){ setDoSchedule(true); if(!schedWorker&&techs.length===1) setSchedWorker(String(techs[0].id)); }
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
   };
+  React.useEffect(()=>{ const c=initialCustomer||window.__h360PendingOrder; if(!c||custOnly) return; window.__h360PendingOrder=null; setExistingId(c.id);
+    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,bizName:c.bizName||(c.contactName&&c.propertyType!=="בניין משותף"?c.name:""),phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||""})); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -5686,7 +5709,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           👤 לקוח חוזר? חפש לקוח קיים
         </button>
       </div>
-      <G2><Inp label={isShared||isBiz?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
+      {existingId!=null&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
+      {isShared?<div style={{marginBottom:4}}><Inp label="🏢 שם במסמכים (ועד הבית)" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/></div>
+        :<Inp label="🏢 שם העסק / המוסד (למסמכים) — לא חובה" value={f.bizName} onChange={v=>set("bizName",v)} placeholder="למשל: גן ילדים השקמה, מסעדת השף. לקוח פרטי — להשאיר ריק"/>}
+      <G2><Inp label={isShared||String(f.bizName||"").trim()?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
+      {(isShared||String(f.bizName||"").trim())&&<div style={{fontSize:12,color:"#1e40af",marginTop:-6,marginBottom:10}}>במסמכים יופיע "{clientNameForDocs()}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} כאיש קשר.</div>}
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר נוספים <span style={{fontSize:11}}>(דייר, בעל הדירה, מנהל, שכן…)</span></label>
@@ -5703,54 +5730,6 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       </details>}
       <Sel label="כיצד הגיע הלקוח?" value={f.source||""} onChange={v=>set("source",v)}
         options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/>
-    </FieldCard>
-
-    <FieldCard title="פרטי הנכס">
-      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>סוג הנכס</label>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-        {[...PROPERTY_TYPES,"אחר"].map(t=>{ const isOther=t==="אחר"; const otherOn=!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)||!!f.propOther; const on=isOther?otherOn:(f.propertyType===t&&!f.propOther); return <button key={t} type="button" onClick={()=>{ if(isOther){ setF(x=>({...x,propOther:true,propertyType:PROPERTY_TYPES.includes(x.propertyType)?"":x.propertyType})); } else setF(x=>({...x,propOther:false,propertyType:t})); }}
-          style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{isOther?"✏️ אחר":t}</button>; })}
-      </div>
-      {(f.propOther||(!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)))&&<Inp label="איזה נכס? (כתוב חופשי)" value={f.propertyType} onChange={v=>setF(x=>({...x,propOther:true,propertyType:v}))} placeholder="למשל: מבנה תעשייה, בית כנסת, חניון, מספרה..."/>}
-      {isShared&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-        <Inp label="שם הלקוח במסמכים" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/>
-        <div style={{fontSize:12,color:"#1e40af",marginTop:-6}}>ביומן הביצוע ובחשבונית יופיע "{docNameShown||"ועד הבית"}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} יירשם כאיש קשר.</div>
-      </div>}
-      {isBiz&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-        <Inp label="שם העסק / המוסד (למסמכים)" value={f.bizName} onChange={v=>set("bizName",v)} placeholder="לא חובה — אם ריק יופיע שם איש הקשר"/>
-      </div>}
-      {isUnit&&<G2>
-        <Sel label="מספר חדרים" value={f.rooms} onChange={v=>set("rooms",v)} options={ROOMS_OPTIONS}/>
-        <Sel label="מפלסים" value={f.levels||"1"} onChange={v=>set("levels",v)} options={["1","2","3","4"]}/>
-      </G2>}
-      {isShared&&<>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Sel label="מספר קומות" value={f.floors} onChange={v=>set("floors",v)} options={["","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"]}/>
-          <Inp label="מספר ביובים / פירים" type="number" value={f.sewers} onChange={v=>set("sewers",v)}/>
-        </div>
-        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>חניון תת-קרקעי</label>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-          {[["0","אין"],["1","‎-1"],["2","עד ‎-2"],["3","עד ‎-3"],["4","עד ‎-4"]].map(([v,l])=>{ const on=String(f.underground||"0")===v; return <button key={v} type="button" onClick={()=>set("underground",v)}
-            style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"6px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{l}</button>; })}
-        </div>
-        <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>✓ חצר ובורות ביוב נכללים אוטומטית בבניין משותף</div>
-        <div style={{marginBottom:4}}>
-          <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>אזורים משותפים נוספים</label>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {BUILDING_AREAS.filter(a=>a!=="חצר"&&a!=="ביובים"&&a!=="חניון").map(a=>{
-              const on=f.buildingAreas.includes(a);
-              return <button key={a} type="button" onClick={()=>toggleArea(a)}
-                style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":CLR.muted,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:on?600:400}}>
-                {on?"✓ ":""}{a}
-              </button>;
-            })}
-          </div>
-        </div>
-      </>}
-      {!isShared&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:CLR.surface,padding:"8px 12px",borderRadius:8,marginBottom:10}}>
-        <input type="checkbox" checked={f.hasYard} onChange={e=>set("hasYard",e.target.checked)}/> יש חצר / גינה
-      </label>}
-      <Txt label="הערות על הנכס" value={f.propertyNotes} onChange={v=>set("propertyNotes",v)} rows={2} placeholder="לדוגמה: כלב בחצר, פיר אשפה בכניסה ב׳, מפתח אצל השכן"/>
     </FieldCard>
 
     <FieldCard title="כתובת">
@@ -5795,6 +5774,48 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       </div>
     </FieldCard>
 
+    <FieldCard title="פרטי הנכס">
+      <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>סוג הנכס</label>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+        {[...PROPERTY_TYPES,"אחר"].map(t=>{ const isOther=t==="אחר"; const otherOn=!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)||!!f.propOther; const on=isOther?otherOn:(f.propertyType===t&&!f.propOther); return <button key={t} type="button" onClick={()=>{ if(isOther){ setF(x=>({...x,propOther:true,propertyType:PROPERTY_TYPES.includes(x.propertyType)?"":x.propertyType})); } else setF(x=>({...x,propOther:false,propertyType:t})); }}
+          style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{isOther?"✏️ אחר":t}</button>; })}
+      </div>
+      {(f.propOther||(!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType)))&&<Inp label="איזה נכס? (כתוב חופשי)" value={f.propertyType} onChange={v=>setF(x=>({...x,propOther:true,propertyType:v}))} placeholder="למשל: מבנה תעשייה, בית כנסת, חניון, מספרה..."/>}
+      {isUnit&&<G2>
+        <Sel label="מספר חדרים" value={f.rooms} onChange={v=>set("rooms",v)} options={ROOMS_OPTIONS}/>
+        <Sel label="מפלסים" value={f.levels||"1"} onChange={v=>set("levels",v)} options={["1","2","3","4"]}/>
+      </G2>}
+      {isShared&&<>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <Sel label="מספר קומות" value={f.floors} onChange={v=>set("floors",v)} options={["","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"]}/>
+          <Inp label="מספר ביובים / פירים" type="number" value={f.sewers} onChange={v=>set("sewers",v)}/>
+        </div>
+        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>חניון תת-קרקעי</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+          {[["0","אין"],["1","‎-1"],["2","עד ‎-2"],["3","עד ‎-3"],["4","עד ‎-4"]].map(([v,l])=>{ const on=String(f.underground||"0")===v; return <button key={v} type="button" onClick={()=>set("underground",v)}
+            style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":"#334155",border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"6px 14px",fontSize:14,cursor:"pointer",fontWeight:on?700:500,fontFamily:"inherit"}}>{l}</button>; })}
+        </div>
+        <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>✓ חצר ובורות ביוב נכללים אוטומטית בבניין משותף</div>
+        <div style={{marginBottom:4}}>
+          <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>אזורים משותפים נוספים</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {BUILDING_AREAS.filter(a=>a!=="חצר"&&a!=="ביובים"&&a!=="חניון").map(a=>{
+              const on=f.buildingAreas.includes(a);
+              return <button key={a} type="button" onClick={()=>toggleArea(a)}
+                style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":CLR.muted,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:on?600:400}}>
+                {on?"✓ ":""}{a}
+              </button>;
+            })}
+          </div>
+        </div>
+      </>}
+      {!isShared&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:CLR.surface,padding:"8px 12px",borderRadius:8,marginBottom:10}}>
+        <input type="checkbox" checked={f.hasYard} onChange={e=>set("hasYard",e.target.checked)}/> יש חצר / גינה
+      </label>}
+      <Txt label="הערות על הנכס" value={f.propertyNotes} onChange={v=>set("propertyNotes",v)} rows={2} placeholder="לדוגמה: כלב בחצר, פיר אשפה בכניסה ב׳, מפתח אצל השכן"/>
+    </FieldCard>
+
+    {!custOnly&&<>
     <FieldCard title="פרטי ההדברה המבוקשת" extra="(ניתן להשלים אחר כך)">
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מזיקים לטיפול (אפשר לבחור כמה)</label>
@@ -5860,13 +5881,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       {f.prefDate&&!f.allDay&&<div style={{fontSize:11,color:CLR.muted,marginTop:4}}>💡 אפשר לשבץ כמה עבודות באותו חלון שעות — היומן לא חוסם חפיפות.</div>}
     </FieldCard>
 
+    </>}
     <FieldCard title="הערות">
       <QuickChips chips={QUICK_NOTES} onPick={addNote} isOn={notesHas}/>
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder="הערות חופשיות, או לחץ על הכפתורים למעלה..."/>
     </FieldCard>
 
     {/* Schedule — בחירת מדביר בלחיצה */}
-    <div style={{background:CLR.primaryLight,border:`1px solid ${CLR.primary}33`,borderRadius:12,padding:"14px 18px",marginBottom:14}}>
+    {!custOnly&&<div style={{background:CLR.primaryLight,border:`1px solid ${CLR.primary}33`,borderRadius:12,padding:"14px 18px",marginBottom:14}}>
       <div style={{fontSize:14,fontWeight:700,color:CLR.primary,marginBottom:10}}>📅 שיגור למדביר <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(לחיצה על שם = שיגור ליומן שלו בשמירה)</span></div>
       {routeSuggestion&&!schedWorker&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>🗺️ מוצע לפי אזור: <b>{routeSuggestion.name}</b></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -5878,19 +5900,20 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         {workers.filter(w=>isTech(w)&&w.status==="פעיל").length===0&&<div style={{fontSize:13,color:CLR.muted}}>אין מדבירים פעילים. הוסיפו בלשונית "עובדים".</div>}
       </div>
       {doSchedule&&<div style={{fontSize:12,color:CLR.muted,marginTop:8}}>* ישוגר ליומן בתאריך ובחלון השעות שנבחרו. חובה: מזיק + תאריך.</div>}
-    </div>
+    </div>}
 
     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-      <Btn full onClick={save}>{doSchedule?("✅ שמור ושגר ל"+((workers.find(w=>String(w.id)===String(schedWorker))||{}).name||"מדביר")):"✅ שמור תיק הדברה"}</Btn>
-      <Btn v="secondary" onClick={()=>{
+      <Btn full onClick={save}>{custOnly?"✅ שמור לקוח":doSchedule?("✅ שמור ושגר ל"+((workers.find(w=>String(w.id)===String(schedWorker))||{}).name||"מדביר")):"✅ שמור תיק הדברה"}</Btn>
+      {!custOnly&&<Btn v="secondary" onClick={()=>{
         if(!f.name||!f.phone) return alert("צריך שם וטלפון של הלקוח");
         if(allPests().length===0) return alert("צריך לבחור לפחות מזיק אחד");
         setShowWAConfirm(true);
-      }} style={{background:"#dcfce7",color:"#166534",border:"1px solid #86efac",whiteSpace:"nowrap"}}>💬 שלח ללקוח בוואטסאפ</Btn>
+      }} style={{background:"#dcfce7",color:"#166534",border:"1px solid #86efac",whiteSpace:"nowrap"}}>💬 שלח ללקוח בוואטסאפ</Btn>}
       {onCancel&&<Btn v="ghost" full onClick={onCancel}>ביטול</Btn>}
     </div>
     {showExistingSearch&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setShowExistingSearch(false)} onSelect={c=>{
-      setF(prev=>({...prev,
+      setExistingId(c.id);
+      setF(prev=>({...prev,bizName:c.bizName||(c.contactName&&c.contactName!==c.name&&c.propertyType!=="בניין משותף"?c.name:prev.bizName),
         name:c.name||prev.name, phone:c.phone||prev.phone, email:c.email||prev.email,
         city:c.city||prev.city, street:c.street||prev.street,
         buildingNum:c.buildingNum||prev.buildingNum, aptNum:c.aptNum||prev.aptNum,
@@ -6027,9 +6050,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   </div>;
 }
 
-function NewCustomerModal({onClose,onSave,workers,onSchedule,customers}){
-  return <Modal title="📋 תיק הדברה חדש" onClose={onClose} width={640}>
-    <OrderForm workers={workers} customers={customers||[]} onSave={onSave} onSchedule={onSchedule} onDone={()=>onClose()} onCancel={onClose}/>
+function upsertCustomerRec(c,customers,setCustomers){
+  if(c.id!=null&&(customers||[]).some(x=>String(x.id)===String(c.id))){ const up={...(customers.find(x=>String(x.id)===String(c.id))),...c}; setCustomers(cs=>cs.map(x=>String(x.id)===String(c.id)?up:x)); return up; }
+  const saved={...c,id:nextId(customers)}; setCustomers(cs=>[...cs,saved]); return saved;
+}
+function NewCustomerModal({onClose,onSave,workers,onSchedule,customers,onCreated}){
+  return <Modal title="👤 לקוח חדש" onClose={onClose} width={640}>
+    <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>רק פרטי הלקוח, הכתובת והנכס — בלי מזיק, תאריך או יומן. אחרי השמירה אפשר להמשיך ליומן ביצוע, לקבוע תור או להזמנת עבודה.</div>
+    <OrderForm mode="customer" workers={workers} customers={customers||[]} onSave={onSave} onSchedule={onSchedule} onDone={saved=>{ onClose(); onCreated&&saved&&onCreated(saved); }} onCancel={onClose}/>
   </Modal>;
 }
 
@@ -6199,7 +6227,7 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
       <OrderForm draftKey="neworder" workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
-        onSave={c=>{const saved={...c,id:nextId(customers)};setCustomers(cs=>[...cs,saved]);return saved;}}
+        onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
           if(schedInfo){
@@ -6403,6 +6431,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const [editCustData,setEditCustData]=useState({});
   const setEC=(k,v)=>setEditCustData(x=>({...x,[k]:v}));
   const [showNew,setShowNew]=useState(false);
+  const [nextFor,setNextFor]=useState(null);
   const [showCalc,setShowCalc]=useState(false);
   const [invAppt,setInvAppt]=useState(null);
   const [schedFor,setSchedFor]=useState(null);
@@ -6439,7 +6468,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       <button onClick={()=>setShowArchive(a=>!a)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(showArchive?"#f59e0b":CLR.border),background:showArchive?"#fef9c3":"transparent",color:showArchive?"#92400e":CLR.muted,cursor:"pointer",fontSize:13,fontWeight:showArchive?700:400}}>
         {showArchive?"← חזור לפעילים":"📦 ארכיון ("+archivedCustomers.length+")"}
       </button>
-      <Btn sm onClick={()=>setShowNew(true)}>+ תיק הדברה חדש</Btn>
+      <Btn sm onClick={()=>setShowNew(true)}>+ לקוח חדש</Btn>
     </div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       <span style={{fontSize:12,color:CLR.muted}}>סטטוס:</span>
@@ -6623,8 +6652,16 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         </div>;
       })()}
     </Modal>}
-    {showNew&&<NewCustomerModal onClose={()=>setShowNew(false)} workers={workers} customers={customers}
-      onSave={c=>{const saved={...c,id:nextId(customers)};setCustomers(cs=>[...cs,saved]);return saved;}}
+    {nextFor&&<Modal title={"✅ "+nextFor.name+" נשמר בלקוחות — מה עכשיו?"} onClose={()=>setNextFor(null)} width={460}>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <Btn onClick={()=>{ window.__h360PendingExec=nextFor; setNextFor(null); window.__h360Nav&&window.__h360Nav("execlog"); }}>📋 יומן ביצוע עכשיו <span style={{fontWeight:400,fontSize:12}}>(כבר ביצעתי את העבודה)</span></Btn>
+        <Btn v="secondary" onClick={()=>{ const c=nextFor; setNextFor(null); setSchedFor(c); }}>📅 קבע תור ביומן</Btn>
+        <Btn v="secondary" onClick={()=>{ window.__h360PendingOrder=nextFor; setNextFor(null); window.__h360Nav&&window.__h360Nav("neworder"); }}>📝 המשך להזמנת עבודה מלאה</Btn>
+        <Btn v="ghost" onClick={()=>setNextFor(null)}>סיום — רק לשמור את הלקוח</Btn>
+      </div>
+    </Modal>}
+    {showNew&&<NewCustomerModal onCreated={c=>setNextFor(c)} onClose={()=>setShowNew(false)} workers={workers} customers={customers}
+      onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
       onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}/>}
     {showCalc&&<PriceCalc onClose={()=>setShowCalc(false)} onDone={()=>setShowCalc(false)}/>}
     {schedFor&&<NewApptModal customers={customers} workers={workers} collabs={collabs}
@@ -9741,6 +9778,20 @@ const SB_TABLES = {
 };
 
 // useSB: like useLS but syncs with Supabase in real-time
+// 🛟 תור שמירה: שינוי שעוד לא אושר ע"י השרת לא נעלם — נשמר במכשיר ונשלח שוב עד שמצליח
+const __pend={};
+function pendOf(key){ if(!__pend[key]){ let v={rows:{},dels:{}}; try{ v=JSON.parse(localStorage.getItem('h360_pending_'+key)||'null')||v; }catch(e){} __pend[key]={rows:v.rows||{},dels:v.dels||{}}; } return __pend[key]; }
+function pendSave(key){ try{ const p=pendOf(key); if(!Object.keys(p.rows).length&&!Object.keys(p.dels).length) localStorage.removeItem('h360_pending_'+key); else localStorage.setItem('h360_pending_'+key,JSON.stringify(p)); }catch(e){} }
+let __pendWarned=0;
+function pendWarn(err){ console.warn('[SB] save failed — will retry',err); if(Date.now()-__pendWarned>60000){ __pendWarned=Date.now(); try{ showToast("⚠️ אין חיבור לשרת — השינויים שמורים במכשיר ויישלחו לבד"); }catch(e){} } window.__h360Unsynced=true; }
+function pendPush(key,tbl){
+  const p=pendOf(key); const ids=Object.keys(p.rows); const dels=Object.keys(p.dels);
+  const jobs=[];
+  if(ids.length){ const snap=ids.map(id=>p.rows[id]); jobs.push(sb.from(tbl).upsert(snap.map(it=>({id:String(it.row.id),data:it.row,updated_at:new Date().toISOString()})),{onConflict:'id'}).then(({error})=>{
+      if(error){ pendWarn(error); return; } snap.forEach(it=>{ const cur=p.rows[String(it.row.id)]; if(cur&&cur.at===it.at) delete p.rows[String(it.row.id)]; }); pendSave(key); })); }
+  if(dels.length){ jobs.push(sb.from(tbl).delete().in('id',dels).then(({error})=>{ if(error){ pendWarn(error); return; } dels.forEach(id=>delete p.dels[id]); pendSave(key); })); }
+  return Promise.all(jobs).catch(e=>pendWarn(e));
+}
 function useLS(key, init){
   const tbl = SB_TABLES[key];
   const initVal = typeof init === 'function' ? init() : init;
@@ -9763,11 +9814,17 @@ function useLS(key, init){
 
     // סנכרון מ-Supabase: מיזוג לפי updated_at
     // Supabase הוא source of truth — כל שורה שב-Supabase מנצחת
-    const syncFromSupabase = () => {
+    const syncFromSupabase = async () => {
+      const P=pendOf(key);
+      if(Object.keys(P.rows).length||Object.keys(P.dels).length) await pendPush(key,tbl);
       sb.from(tbl).select('*').order('updated_at', {ascending:true})
         .then(({data, error})=>{
           if(error || !data) return; // טבלה ריקה = אין נתונים (לא מציגים דוגמאות)
-          const sbRows = data.map(r => r.data);
+          let sbRows = data.map(r => r.data).filter(Boolean);
+          // שינויים שעוד לא הגיעו לשרת — גוברים על מה שבשרת, ולא נעלמים
+          const pr=Object.values(P.rows).map(x=>x.row); const dl=new Set(Object.keys(P.dels));
+          if(pr.length||dl.size){ const m=new Map(sbRows.map(r=>[String(r.id),r])); pr.forEach(r=>m.set(String(r.id),r)); dl.forEach(id=>m.delete(id)); sbRows=[...m.values()]; }
+          window.__h360Unsynced=Object.keys(P.rows).length>0||dl.size>0;
           // החלף לגמרי במה שב-Supabase — הוא ה-source of truth
           // הכתיבה שלנו כבר עלתה לשם, אז זה בטוח
           setVal(sbRows);
@@ -9808,11 +9865,13 @@ function useLS(key, init){
             const act = !wasThere ? "יצירה" : (item.deleted && !(prevRows.find(r=>String(r.id)===String(item.id))||{}).deleted ? "העברה לסל" : "עדכון");
             logActivity(act+" "+(LOG_LABELS[tbl]||tbl), itemLabel(item));
           });
+          const P=pendOf(key); const at=Date.now()+Math.random();
+          changed.forEach(item=>{ P.rows[String(item.id)]={row:item,at}; delete P.dels[String(item.id)]; }); pendSave(key);
           sb.from(tbl).upsert(upsertData, {onConflict:'id'})
             .then(({error})=>{
-              if(error) console.warn('[SB] sync error:', tbl, error);
-              else console.log('[SB] saved OK:', tbl);
-            });
+              if(error){ pendWarn(error); return; }
+              changed.forEach(item=>{ const cur=P.rows[String(item.id)]; if(cur&&cur.at===at) delete P.rows[String(item.id)]; }); pendSave(key);
+            }, e=>pendWarn(e));
         }
 
         // מחק רק שורות שהמשתמש מחק במפורש (היו ב-prev, אינן ב-next)
@@ -9822,7 +9881,8 @@ function useLS(key, init){
         if(deletedIds.length > 0){
           console.log('[SB] deleting', tbl, deletedIds);
           deletedIds.slice(0,5).forEach(id=>{ const it=prevRows.find(r=>String(r.id)===id); logActivity("מחיקה "+(LOG_LABELS[tbl]||tbl), itemLabel(it)); });
-          sb.from(tbl).delete().in('id', deletedIds).then(()=>{});
+          const P2=pendOf(key); deletedIds.forEach(id=>{ P2.dels[id]=Date.now(); delete P2.rows[id]; }); pendSave(key);
+          sb.from(tbl).delete().in('id', deletedIds).then(({error})=>{ if(error){ pendWarn(error); return; } deletedIds.forEach(id=>delete P2.dels[id]); pendSave(key); }, e=>pendWarn(e));
         }
       }
       return next;
