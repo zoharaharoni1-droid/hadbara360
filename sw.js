@@ -1,7 +1,7 @@
 // הדברה 360 — Service Worker v2
 // תכונות: cache-first, offline queue, auto-update
 
-const VERSION = 'hadbara360-v105';
+const VERSION = 'hadbara360-v106';
 const ASSETS = [
   '/hadbara360/',
   '/hadbara360/index.html',
@@ -109,7 +109,7 @@ self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(VERSION).then(async cache => {
       // Cache local assets
-      try { await cache.addAll(ASSETS); } catch(err) { console.warn('[SW] ASSETS cache fail:', err); }
+      try { await cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))); } catch(err) { console.warn('[SW] ASSETS cache fail:', err); }
       // Cache CDN assets (best effort)
       await Promise.allSettled(CDN_ASSETS.map(async url => {
         try {
@@ -182,6 +182,17 @@ self.addEventListener('fetch', e => {
         )
       );
     }
+    return;
+  }
+
+  // ── The app page itself: network-first (always the newest version when online) ──
+  if (e.request.method === 'GET' && url.origin === self.location.origin && (e.request.mode === 'navigate' || /\/hadbara360\/(index\.html)?$/.test(url.pathname))) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' }).then(response => {
+        if (response && response.ok) { const clone = response.clone(); caches.open(VERSION).then(c => c.put('/hadbara360/index.html', clone)); }
+        return response;
+      }).catch(() => caches.match('/hadbara360/index.html').then(r => r || caches.match('/hadbara360/')))
+    );
     return;
   }
 

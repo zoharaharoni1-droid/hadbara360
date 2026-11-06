@@ -11534,7 +11534,7 @@ setTimeout(updateOnlineStatus, 1000);
 
 // ─── Service Worker — עדכון אוטומטי + Offline Queue ─────────────────────
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/hadbara360/sw.js?v=2').then(reg => {
+  navigator.serviceWorker.register('/hadbara360/sw.js?v=2',{updateViaCache:'none'}).then(reg => {
     console.log('[App] SW registered', reg.scope);
 
     // אם יש worker חדש שמחכה — הצג בנר
