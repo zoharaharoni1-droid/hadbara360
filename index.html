@@ -4796,7 +4796,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=invAppt.id==null?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {detailAppt&&<ApptDetailModal appt={detailAppt} customers={customers} workers={workers} currentUser={currentUser}
       onConvertFree={a=>{setDetailAppt(null);setConvertId(a.id);setPrefill({date:a.date,time:isAllDay(a)?"":a.time,workerId:a.workerId});setFullText({text:a.freeText||a.rawMsg||"",n:Date.now()});setNewKind("job");setShowNew(true);}}
       execLogs={execLogs} finance={finance}
@@ -5755,7 +5755,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   };
   React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
     const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
-    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||prev.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})})); },[]);
+    if(!initialCustomer){ try{ DK&&localStorage.removeItem(DK); }catch(e){} setRestored(false); }
+    setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); }); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -6121,6 +6122,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
 }
 
 function upsertCustomerRec(c,customers,setCustomers){
+  c={...c,updatedAt:new Date().toISOString()}; if(c.id==null) c.createdAt=c.createdAt||c.updatedAt;
   if(c.id!=null&&(customers||[]).some(x=>String(x.id)===String(c.id))){ const up={...(customers.find(x=>String(x.id)===String(c.id))),...c}; setCustomers(cs=>cs.map(x=>String(x.id)===String(c.id)?up:x)); return up; }
   const saved={...c,id:nextId(customers)}; setCustomers(cs=>[...cs,saved]); return saved;
 }
@@ -6525,10 +6527,12 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const displayCustomers=showArchive?archivedCustomers:activeCustomers;
 
   // לקוחות לפי פעילות אחרונה — מה שעבדת עליו עכשיו למעלה
-  const lastAct=React.useMemo(()=>{ const m={}; const bump=(id,d)=>{ if(id==null||!d) return; const k=String(id); if(!m[k]||d>m[k]) m[k]=d; }; const today=todayStr();
-    (appointments||[]).forEach(a=>{ if(a.date&&a.date<=today) bump(a.customerId,a.date+"T"+(a.time||"00:00")); });
-    (execLogs||[]).forEach(l=>{ if(!l.deleted) bump(l.customerId,(l.date||"")+"T23:59"); });
-    (customers||[]).forEach(c=>{ const n=Number(c.id); if(n>1e8) bump(c.id,new Date(((n/100)+1700000000)*1000).toISOString().slice(0,16)); if(c.createdAt) bump(c.id,String(c.createdAt).slice(0,16)); if(c.lastTreatment) bump(c.id,c.lastTreatment); });
+  const lastAct=React.useMemo(()=>{ const m={}; const bump=(id,d)=>{ if(id==null||!d) return; const k=String(id); if(!m[k]||d>m[k]) m[k]=d; };
+    const stamp=id=>{ const n=Number(id); return n>1e8?new Date(((n/100)+1700000000)*1000).toISOString():""; };
+    const today=todayStr();
+    (appointments||[]).forEach(a=>{ if(a.updatedAt&&(a.date||"")<=today) bump(a.customerId,String(a.updatedAt)); else if(a.date&&a.date<today) bump(a.customerId,a.date); });
+    (execLogs||[]).forEach(l=>{ if(l.deleted) return; bump(l.customerId,l.updatedAt||l.createdAt||stamp(l.id)||l.date); });
+    (customers||[]).forEach(c=>{ bump(c.id,stamp(c.id)); if(c.createdAt) bump(c.id,String(c.createdAt)); if(c.updatedAt) bump(c.id,String(c.updatedAt)); if(c.lastTreatment) bump(c.id,c.lastTreatment); });
     return m; },[appointments,execLogs,customers]);
   const filtered=displayCustomers.filter(c=>{
     const matchSrch=!srch||c.name.includes(srch)||c.phone.includes(srch)||(c.address||"").includes(srch)||(c.city||"").includes(srch);
@@ -6686,6 +6690,11 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         <h3 style={{fontSize:14,color:CLR.primary,margin:0}}>📋 ציר זמן טיפולים</h3>
         {currentUser.role!=="מדביר"&&<Btn sm onClick={()=>{setSchedFor(sel);setSel(null);}}>📅 שבץ תור ליומן</Btn>}
       </div>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        <Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>{ window.__h360PendingExec=sel; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); }}>📋 יומן ביצוע חדש</Btn>
+        {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})}>🧾 חשבונית / קבלה</Btn>}
+        {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>{ window.__h360PendingOrder=sel; setSel(null); window.__h360Nav&&window.__h360Nav("neworder"); }}>📝 הזמנת עבודה</Btn>}
+      </div>
       {(()=>{
         const custAppts=[...appointments.filter(a=>a.customerId===sel.id)].sort((a,b)=>a.date.localeCompare(b.date));
         if(custAppts.length>=2){
@@ -6789,7 +6798,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"ג'וקים",price:schedFor.lastPrice||""}}
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
-    {invAppt&&(()=>{ const _lg=(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=invAppt.id==null?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
   </div>;
 }
 
@@ -11038,7 +11047,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="110";
+const APP_BUILD="111";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
