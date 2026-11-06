@@ -1156,7 +1156,7 @@ function execLogHtml({company,docNum,log,chemicals}){
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(log.date)}</div></div>
     </div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:8px;font-size:13px;">
-      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
+      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.placePhone?` &nbsp;·&nbsp; <b>טלפון המקום:</b> ${log.placePhone}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
       <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
@@ -2258,6 +2258,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [f,setF]=useState({
     clientName:    initialData?.clientName    || prefillAppt?.customerName || "",
     contactName:   initialData?.contactName   || prefillAppt?.contactName || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).contactName || "",
+    placePhone:    initialData?.placePhone    || "",
     customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
     phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || ""),
     address:       initialData?.address!=null&&initialData?.unit!=null ? initialData.address : navAddr(initialData?.address || prefillAppt?.address || ""),
@@ -2428,18 +2429,25 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <CustomerSearchSelect customers={customers.filter(c=>!c.deleted)} value={f.customerId||""} onChange={(id,c)=>{
         if(!c){ set("customerId",null); return; }
         const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
-        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,contactName:c.contactName||"",address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
+        setF(x=>({...x,customerId:c.id,clientName:c.name||x.clientName,contactName:c.contactName||"",bizDraft:null,address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
           structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
       }}/>
     </div>}
-    {/* Client + Date */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-      <Inp label="שם לקוח *" value={f.clientName} onChange={v=>set("clientName",v)}/>
-      <Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/>
-    </div>
+    {/* לקוח: שם למסמכים (לא חובה) → איש קשר → טלפון → כתובת */}
+    {(()=>{ const biz=f.bizDraft!=null?f.bizDraft:(f.contactName?f.clientName:""); const person=f.contactName||(biz?"":f.clientName);
+      const setNames=(b,pn)=>setF(x=>({...x,bizDraft:b,clientName:String(b||"").trim()?b:pn,contactName:String(b||"").trim()?pn:""}));
+      return <>
+      <Inp label="🏢 שם העסק / המוסד (למסמכים) — לא חובה" value={biz} onChange={v=>setNames(v,person)} placeholder="למשל: גן ילדים השקמה, ועד הבית. לקוח פרטי — להשאיר ריק"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Inp label={String(biz||"").trim()?"👤 שם איש הקשר *":"👤 שם הלקוח *"} value={person} onChange={v=>setNames(biz,v)}/>
+        <Inp label="📞 טלפון" value={f.phone} onChange={v=>set("phone",v)} placeholder="050-000-0000"/>
+      </div>
+      {String(biz||"").trim()&&<div style={{fontSize:12,color:"#1e40af",marginTop:-6,marginBottom:10}}>במסמכים יופיע "{biz}", ו{person?<b>{person}</b>:"איש הקשר"} כאיש קשר. הטלפון — של איש הקשר.</div>}
+      {f.placePhone||f.showPlacePhone?<Inp label="☎️ טלפון נוסף של המקום (לא חובה)" value={f.placePhone||""} onChange={v=>set("placePhone",v)} placeholder="למשל טלפון המשרד / הגן"/>
+        :<button type="button" onClick={()=>set("showPlacePhone",true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit"}}>+ טלפון נוסף של המקום</button>}
+      </>; })()}
     <Inp label="כתובת (רחוב, מספר, עיר) *" value={f.address} onChange={v=>set("address",v)} placeholder="טייבר 21, גבעתיים"/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><Inp label="קומה / דירה" value={f.unit} onChange={v=>set("unit",v)} placeholder="קומה 3 · דירה 1"/><Inp label="טלפון לקוח" value={f.phone} onChange={v=>set("phone",v)} placeholder="050-000-0000"/></div>
-    <Inp label="איש קשר (לוועד בית / עסק)" value={f.contactName||""} onChange={v=>set("contactName",v)} placeholder="השם של מי שדיברת איתו"/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><Inp label="קומה / דירה" value={f.unit} onChange={v=>set("unit",v)} placeholder="קומה 3 · דירה 1"/><Inp label="תאריך" type="date" value={f.date} onChange={v=>set("date",v)}/></div>
 
     </>)}
     {sec("service","🧾","סוג השירות",serviceLabel(f)||"לא נבחר",f.exterminate||f.services.length?"ok":"req",<div>
@@ -2805,7 +2813,7 @@ function ensureLogCustomer(newLog,customers,setCustomers){
   const ph=String(newLog.phone||"").replace(/\D/g,"").slice(-9);
   const ex=ph.length>=9?(customers||[]).find(c=>!c.deleted&&String(c.phone||"").replace(/\D/g,"").slice(-9)===ph):null;
   if(ex){ newLog.customerId=ex.id; return; }
-  const nc={id:nextId(customers),name:newLog.clientName.trim(),contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
+  const nc={id:nextId(customers),name:newLog.clientName.trim(),contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",extraContacts:newLog.placePhone?[{role:"טלפון המקום",name:"",phone:newLog.placePhone}]:[],pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
   setCustomers(cs=>[...cs,nc]); newLog.customerId=nc.id; setTimeout(()=>showToast("👤 "+nc.name+" נשמר גם בלקוחות"),300);
 }
 function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],setCustomers,maintenance=[]}){
@@ -2834,7 +2842,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||null,customerId:data.customerId||prefillAppt?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||""};
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls]);
     if(prefillAppt) setAppointments(as=>as.map(a=>a.id===prefillAppt.id?{...a,status:"בוצע",executionLog:newLog}:a));
@@ -4547,7 +4555,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||""};
+    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||""};
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
     if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog,customerId:a.customerId||newLog.customerId||null}:a));
@@ -5571,6 +5579,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const [showExistingSearch,setShowExistingSearch]=useState(false);
+  const [showAsk,setShowAsk]=useState(false);
   const [existingId,setExistingId]=useState(initialCustomer?initialCustomer.id:null);
   const [doSchedule,setDoSchedule]=useState(draft0?!!draft0.doSchedule:!!initialDate);
   const [schedWorker,setSchedWorker]=useState(draft0&&draft0.schedWorker!=null?draft0.schedWorker:(initialWorker||""));
@@ -5712,11 +5721,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       {existingId!=null&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
       {isShared?<div style={{marginBottom:4}}><Inp label="🏢 שם במסמכים (ועד הבית)" value={docNameShown} onChange={v=>setF(x=>({...x,docName:v,docNameEdited:true}))} placeholder="ועד הבית"/></div>
         :<Inp label="🏢 שם העסק / המוסד (למסמכים) — לא חובה" value={f.bizName} onChange={v=>set("bizName",v)} placeholder="למשל: גן ילדים השקמה, מסעדת השף. לקוח פרטי — להשאיר ריק"/>}
-      <G2><Inp label={isShared||String(f.bizName||"").trim()?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label="טלפון *" value={f.phone} onChange={v=>set("phone",v)}/></G2>
+      <G2><Inp label={isShared||String(f.bizName||"").trim()?"שם איש הקשר *":"שם הלקוח *"} value={f.name} onChange={v=>set("name",v)}/><Inp label={isShared||String(f.bizName||"").trim()?"טלפון איש הקשר *":"טלפון *"} value={f.phone} onChange={v=>set("phone",v)}/></G2>
       {(isShared||String(f.bizName||"").trim())&&<div style={{fontSize:12,color:"#1e40af",marginTop:-6,marginBottom:10}}>במסמכים יופיע "{clientNameForDocs()}", ו{f.name?<b>{f.name}</b>:"איש הקשר"} כאיש קשר.</div>}
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
       <div style={{marginBottom:12}}>
-        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר נוספים <span style={{fontSize:11}}>(דייר, בעל הדירה, מנהל, שכן…)</span></label>
+        <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר / טלפונים נוספים <span style={{fontSize:11}}>(טלפון המקום, דייר, בעל הדירה, מנהל…)</span></label>
         {(f.extraContacts||[]).map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.2fr auto",gap:6,marginBottom:6}}>
           {["role","name","phone"].map(k=><input key={k} value={c[k]||""} onChange={e=>set("extraContacts",f.extraContacts.map((x,j)=>j===i?{...x,[k]:e.target.value}:x))} placeholder={{role:"תפקיד",name:"שם",phone:"טלפון"}[k]} style={{width:"100%",boxSizing:"border-box",padding:"8px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",direction:k==="phone"?"ltr":"rtl",textAlign:"right"}}/>)}
           <button type="button" onClick={()=>set("extraContacts",f.extraContacts.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:"#b91c1c",borderRadius:8,width:34,cursor:"pointer"}}>✕</button>
@@ -5992,6 +6001,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
 
   // With side guidance panel (used in the full-page tab)
   const guide=INTAKE_GUIDANCE[f.propertyType]||INTAKE_GUIDANCE["default"];
+  if(!showGuidance||custOnly||(typeof window!=="undefined"&&window.innerWidth<1000)) return <div>{formBody}
+    {showGuidance&&!custOnly&&<button type="button" title="מה לשאול את הלקוח" onClick={()=>setShowAsk(true)} style={{position:"fixed",left:14,bottom:84,zIndex:60,width:44,height:44,borderRadius:"50%",border:"1px solid #fcd34d",background:"#fffbeb",fontSize:20,boxShadow:"0 2px 8px rgba(0,0,0,.15)",cursor:"pointer"}}>💡</button>}
+    {showAsk&&<Modal title="💡 מה לשאול את הלקוח" onClose={()=>setShowAsk(false)} width={460}>
+      <div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>לפי סוג נכס: <b>{f.propertyType}</b></div>
+      <ul style={{margin:0,paddingRight:18,fontSize:14,lineHeight:1.8}}>{guide.map((q,i)=><li key={i}>{q}</li>)}</ul>
+      {allPests().some(p=>(PEST_GUIDANCE[p]||[]).length)&&<div style={{marginTop:10}}><b style={{fontSize:13}}>🛡️ הנחיות הכנה לפי מזיק</b>{allPests().map(p=>(PEST_GUIDANCE[p]||[]).length?<div key={p} style={{marginTop:6}}><span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>🐛 {p}</span><ul style={{margin:0,paddingRight:16,fontSize:13,lineHeight:1.7}}>{PEST_GUIDANCE[p].map((t,i)=><li key={i}>{t}</li>)}</ul></div>:null)}</div>}
+    </Modal>}
+  </div>;
   const selectedPests=allPests();
   // gather unique pest-guidance lines for chosen pests
   const pestTips=[];
