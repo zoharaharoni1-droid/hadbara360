@@ -165,7 +165,7 @@ const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", pa
 // כתובת לניווט (Waze) — בלי דירה/קומה/כניסה, שמבלבלים את הניווט
 function navAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>x&&!/^(דירה|קומה|כניסה|דירת)\s/.test(x)).join(", "); }
 // "קומה 3 · דירה 1 · כניסה א׳"
-function unitLine(o){ o=o||{}; const fl=o.floor&&o.floor!=="—"?(o.floor==="קרקע"?"קומת קרקע":"קומה "+o.floor):""; return [fl,o.aptNum?"דירה "+o.aptNum:"",o.entrance?"כניסה "+o.entrance:""].filter(Boolean).join(" · "); }
+function unitLine(o){ o=o||{}; const fl=o.floor&&o.floor!=="—"?(o.floor==="קרקע"?"קומת קרקע":(String(o.floor).startsWith("-")?"קומה מינוס "+String(o.floor).slice(1):"קומה "+o.floor)):""; return [fl,o.aptNum?"דירה "+o.aptNum:"",o.entrance?"כניסה "+o.entrance:""].filter(Boolean).join(" · "); }
 // מחלץ דירה/קומה מכתובת ישנה ("טייבר 21, דירה 1, גבעתיים")
 function unitFromAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>/^(דירה|קומה|כניסה)\s/.test(x)).join(" · "); }
 // טלפון שהודבק בפורמט בינלאומי (+972 54-455-5116) → 054-455-5116
@@ -699,8 +699,8 @@ function scopeFromProperty(p){
   } else if(t){ out.push(t); if(p.hasYard) out.push("חצר / גינה"); }
   return out;
 }
-const PROPERTY_TYPES = ["דירה","בית פרטי","בניין משותף","עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"];
-const FLOORS = ["קרקע","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"];
+const PROPERTY_TYPES = ["דירה","בית פרטי","בניין משותף","עסק","חנות","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"];
+const FLOORS = ["","-4","-3","-2","-1","קרקע","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","מעל 20"];
 const ROOMS_OPTIONS = ["1","2","3","4","5","6","7","8","9","10+"];
 const BUILDING_NUMS = ["","..."].concat(Array.from({length:150},(_,i)=>String(i+1))).concat(["151+"]);
 const APT_NUMS = ["","..."].concat(Array.from({length:100},(_,i)=>String(i+1))).concat(["101+"]);
@@ -5667,7 +5667,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   };
   const isUnit=f.propertyType==="דירה"||f.propertyType==="בית פרטי";
   const isApt=f.propertyType==="דירה";
-  const isBiz=["עסק","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"].includes(f.propertyType);
+  const isBiz=["עסק","חנות","מחסן","משרד","מסעדה","גן ילדים","מוסד חינוך","מלון"].includes(f.propertyType)||(!!f.propertyType&&!PROPERTY_TYPES.includes(f.propertyType));
   const autoDocName=()=>("ועד הבית "+[f.street,f.buildingNum].filter(Boolean).join(" ")).trim();
   const docNameShown=f.docNameEdited?f.docName:autoDocName();
   const isBizClient=f.clientKind==="biz"||isShared;
@@ -5702,9 +5702,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       name:placeForCustomer(),contactName:contactForDocs(),phone:f.phone,email:f.email,
       address:addr||f.city||"—",
       city:f.city,street:f.street,buildingNum:f.buildingNum,aptNum:f.aptNum,entrance:f.entrance||"",
-      propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
-      floor:isApt||isBiz?f.floor:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
+      propertyType:f.propertyType,rooms:isUnit?f.rooms:"",levels:isShared?"":(f.levels||"1"),floors:f.floors,sewers:f.sewers,
+      floor:isApt||isBiz?f.floor:"",aptNum:isApt||isBiz?f.aptNum:"",hasYard:isShared?true:f.hasYard,buildingAreas:f.buildingAreas,underground:isShared?f.underground:"0",propertyNotes:f.propertyNotes||"",
       status:f.status,notes:f.notes,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),
+      addrMore:String(f.addrMore||"").trim(),buildingCode:f.buildingCode||"",parking:f.parking??null,elevator:f.elevator??null,
       pestType:pestLabel(),pests:allPests(),lastPrice:f.price,source:f.source||"",
       bizName:isBizClient&&clientNameForDocs()!==placeForCustomer()?clientNameForDocs():"", placeName:isBizClient?String(f.placeName||"").trim():"", taxId:isBizClient?String(f.taxId||"").trim():"",
       ...(existingId!=null?{id:existingId}:{totalPaid:0,lastTreatment:""}),
@@ -5720,9 +5721,9 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         workerId:parseInt(schedWorker),workerName:w?.name||"",
         date:f.prefDate,time:f.allDay?"07:00":f.timeFrom,timeWindow,
         pestType:pestLabel(),pests:allPests(),
-        price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),
+        price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:[unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),isBiz&&f.aptNum?"יחידה "+f.aptNum:"",String(f.addrMore||"").trim()].filter(Boolean).join(" · "),addrMore:String(f.addrMore||"").trim(),
         buildingAreas:f.buildingAreas,
-        propertyType:f.propertyType,rooms:isShared?"":f.rooms,levels:isShared?"":(f.levels||"1"),floor:isApt||isBiz?f.floor:"",floors:f.floors,hasYard:isShared?true:f.hasYard,sewers:f.sewers,
+        propertyType:f.propertyType,rooms:isUnit?f.rooms:"",levels:isShared?"":(f.levels||"1"),floor:isApt||isBiz?f.floor:"",floors:f.floors,hasYard:isShared?true:f.hasYard,sewers:f.sewers,
         status:"ממתין",executionLog:null,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),rawMsg:f.rawMsg||"",
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
@@ -5754,7 +5755,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   };
   React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
     const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
-    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||prev.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})})); },[]);
+    setF(prev=>({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:c.notes||prev.notes||"",status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})})); },[]);
   React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
   const formBody=<div>
     {DK&&restored&&!draftEmpty&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
@@ -5800,14 +5801,16 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           <input list="h360-streets" value={f.street||""} onChange={e=>handleAddressChange("street",e.target.value)} placeholder="לדוגמה: הרצל 12" autoComplete="off" style={ADDR_INPUT}/>
           <datalist id="h360-streets">{ilStreets.map(st=><option key={st} value={st+" "}/>)}</datalist></div>
       </G2>
+      {!f.propertyType&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>קומה ומספר דירה / חנות יופיעו אחרי שתבחר סוג נכס למטה.</div>}
       {isApt&&<G2>
         <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
         <Sel label="מס׳ דירה" value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
       </G2>}
       {isBiz&&<G2>
-        <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
-        <div/>
+        <Sel label="קומה (מינוס = מתחת לקרקע)" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
+        <Inp label="מס׳ חנות / יחידה (לא חובה)" value={f.aptNum||""} onChange={v=>set("aptNum",v)} placeholder="למשל: 12"/>
       </G2>}
+      <Inp label="📌 פרטים נוספים לכתובת (לא חובה)" value={f.addrMore||""} onChange={v=>set("addrMore",v)} placeholder="למשל: קניון סינמה סיטי, ליד הכניסה הצפונית"/>
       {(isApt||isShared)&&<G2>
         <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
         <div/>
@@ -6625,7 +6628,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         const box=(t,rows)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:CLR.surface,borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:CLR.primary,margin:"4px 0 2px"}}>{t}</div>{r}</div>:null; };
         const tel=p=>"tel:"+String(p||"").replace(/[^\d+]/g,"");
         const isBizC=!!c.contactName; const docN=c.bizName||c.name;
-        const unit=[c.entrance&&"כניסה "+c.entrance,c.floor&&"קומה "+c.floor,c.aptNum&&"דירה "+c.aptNum].filter(Boolean).join(" · ");
+        const unit=[c.entrance&&"כניסה "+c.entrance,c.floor&&(c.floor==="קרקע"?"קומת קרקע":String(c.floor).startsWith("-")?"קומה מינוס "+String(c.floor).slice(1):"קומה "+c.floor),c.aptNum&&((c.propertyType==="דירה"?"דירה ":"יחידה ")+c.aptNum)].filter(Boolean).join(" · ");
         const nav=navAddr(c.address||"");
         return <>
           {box(isBizC?"🏢 פרטי העסק / המוסד":"👤 פרטי הלקוח",[
@@ -6637,7 +6640,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             row("ח.פ / ע.מ",c.taxId),
             ...(c.extraContacts||[]).filter(x=>x&&(x.name||x.phone)).map((x,i)=>row([x.role||"איש קשר נוסף",x.name].filter(Boolean).join(" · "),x.phone||"—",x.phone?tel(x.phone):null)),
           ])}
-          {box("📍 כתובת",[row("כתובת",c.address),row("כניסה / קומה / דירה",unit)])}
+          {box("📍 כתובת",[row("כתובת",c.address),row(isBizC||c.propertyType==="חנות"?"קומה / יחידה":"כניסה / קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":"")])}
           {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}>
             <a href={"https://waze.com/ul?q="+encodeURIComponent(nav)+"&navigate=yes"} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#e0f7ff",color:"#0369a1",fontWeight:700,textDecoration:"none",fontSize:13}}>🚙 Waze</a>
             <a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#ecfdf5",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>🗺️ Google Maps</a>
@@ -6645,7 +6648,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           </div>}
           {box("🏠 פרטי הנכס",[
             row("סוג נכס",c.propertyType),
-            row("חדרים",c.rooms),
+            row("חדרים",["דירה","בית פרטי"].includes(c.propertyType)?c.rooms:""),
             row("מפלסים",c.levels&&String(c.levels)!=="1"?c.levels:""),
             row("קומות בבניין",c.floors),
             row("קומות מרתף",c.underground&&String(c.underground)!=="0"?c.underground:""),
@@ -11035,7 +11038,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="109";
+const APP_BUILD="110";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
