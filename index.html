@@ -7945,92 +7945,152 @@ function SiteMapEditor({zones,stations,onZones,onStations}){
 
 // ═══ ✏️ ציור מפה של המקום — חדרים, מדפים, שירותים, דלתות + מיקום התחנות ═══
 const DRAW_W=1000, DRAW_H=700;
-const DRAW_SYMS=[
-  ["room","▭","חדר / אזור",220,160],["shelf","▤","מדף",180,30],["wall","▬","קיר",240,10],
-  ["door","🚪","דלת",50,50],["window","🪟","חלון",60,30],["wc","🚻","שירותים",80,80],["sink","🚰","כיור",60,50],
-  ["oven","🔥","תנור / כיריים",80,60],["fridge","❄️","מקרר / קירור",70,70],["table","🍽️","שולחן",90,60],["closet","🗄️","ארון",80,40],
-  ["stairs","🪜","מדרגות",80,80],["trash","🗑️","פח / אשפה",50,50],["drain","⭕","ניקוז",40,40],["cashier","💰","קופה",70,50],["box","📦","מחסן / סחורה",90,70],["text","🔤","כיתוב",160,40],
+const DRAW_GROUPS=[
+  ["🏠 מבנה",[["room","▭","חדר / אזור",220,160],["wall","▬","קיר",240,10],["door","🚪","דלת",50,50],["window","🪟","חלון",60,30],["stairs","🪜","מדרגות",80,80],["elevator","🛗","מעלית",60,60],["column","⬛","עמוד",30,30],["entry","🚶","כניסה",60,50],["exit","🚨","יציאת חירום",60,50],["shaft","🕳️","פיר / שוחה",50,50]]],
+  ["🍳 מטבח ומזון",[["oven","🔥","תנור / כיריים",80,60],["fridge","❄️","מקרר / קירור",70,70],["freezer","🧊","מקפיא",70,70],["sink","🚰","כיור",60,50],["dish","🫧","מדיח",60,60],["worktop","🔪","משטח עבודה",140,50],["shelf","▤","מדף",180,30],["box","📦","מחסן / סחורה",90,70],["pallet","🟫","משטח / פלטה",80,80],["flour","🌾","שקים / חומרי גלם",70,60],["bread","🥖","מאפים / לחם",70,60],["trash","🗑️","פח / אשפה",50,50]]],
+  ["💼 משרד ובית",[["office","💼","משרד",90,70],["desk","🖥️","שולחן כתיבה",90,60],["chair","🪑","כיסא",40,40],["table","🍽️","שולחן",90,60],["sofa","🛋️","ספה",110,50],["bed","🛏️","מיטה",90,110],["closet","🗄️","ארון",80,40],["wc","🚻","שירותים",80,80],["shower","🚿","מקלחת",70,70],["laundry","🧺","כביסה",60,60],["tv","📺","טלוויזיה",60,30],["plant","🪴","עציץ",40,40],["cashier","💰","קופה",70,50],["kids","🧸","פינת ילדים",90,80]]],
+  ["🌳 חוץ ותשתיות",[["tree","🌳","עץ",70,70],["garden","🌿","גינה / ערוגה",140,80],["parking","🅿️","חניה",90,120],["car","🚗","רכב",90,50],["drain","⭕","ניקוז",40,40],["sewer","🕳️","ביוב",50,50],["ac","🌬️","מזגן",70,40],["elec","⚡","לוח חשמל",50,50],["gas","⛽","גז",50,50],["water","💧","ברז / מים",40,40],["fence","🚧","גדר",220,14],["pool","🏊","בריכה",160,90]]],
+  ["✍️ כללי",[["text","🔤","כיתוב",160,40],["arrow","➡️","חץ",70,40],["warn","⚠️","סכנה / זהירות",50,50],["nest","🐝","קן / מוקד",50,50],["burrow","🐀","מחילה / פעילות",50,50],["droppings","🔸","הפרשות",40,40]]],
 ];
-const symOf=k=>DRAW_SYMS.find(x=>x[0]===k)||DRAW_SYMS[0];
+const DRAW_SYMS=DRAW_GROUPS.flatMap(g=>g[1]);
+const symOf=(k,it)=>{ if(k==="custom") return ["custom",(it&&it.ic)||"⭐",(it&&it.label)||"סמל",70,60]; return DRAW_SYMS.find(x=>x[0]===k)||DRAW_SYMS[0]; };
+const ROOM_LABELS=["מטבח","משרד","מחסן","שירותים","חדר אשפה","חדר קירור","מסדרון","לובי","סלון","חדר שינה","מרפסת","חצר","חניה","חדר מכונות","אולם","חדר אוכל","מעבדה","קבלה"];
+const ROOM_COLORS=[["#f8fafc","אפור"],["#eff6ff","כחול"],["#f0fdf4","ירוק"],["#fefce8","צהוב"],["#fff1f2","ורוד"],["#faf5ff","סגול"],["#fff7ed","כתום"]];
+const DRAW_LAYER=k=>k==="room"||k==="garden"||k==="parking"||k==="pool"?0:k==="wall"||k==="fence"||k==="shelf"||k==="worktop"?1:k==="text"?3:2;
+// צורה וצבע לכל סוג תחנה (במפה ובהדפסה)
+const DEV_STYLE={bait:{shape:"sq",fill:"#92400e",stroke:"#451a03",txt:"#fff"},rtrap:{shape:"dia",fill:"#475569",stroke:"#0f172a",txt:"#fff"},glue:{shape:"sq",fill:"#fde047",stroke:"#a16207",txt:"#713f12"},
+  roach:{shape:"hex",fill:"#fecaca",stroke:"#b91c1c",txt:"#7f1d1d"},fly:{shape:"cir",fill:"#bfdbfe",stroke:"#1d4ed8",txt:"#1e3a8a"},moth:{shape:"tri",fill:"#fbcfe8",stroke:"#be185d",txt:"#831843"},
+  beetle:{shape:"tri",fill:"#bbf7d0",stroke:"#15803d",txt:"#14532d"},other:{shape:"cir",fill:"#fff7ed",stroke:"#c2410c",txt:"#9a3412"}};
+const devStyle=s=>{ const k=(s&&s.type)||"bait"; return DEV_STYLE[k]||(String(k).startsWith("c:")?{shape:"cir",fill:"#ede9fe",stroke:"#6d28d9",txt:"#4c1d95"}:DEV_STYLE.other); };
+function devShapePts(shape,x,y,r){ if(shape==="dia") return `${x},${y-r-3} ${x+r+3},${y} ${x},${y+r+3} ${x-r-3},${y}`; if(shape==="tri") return `${x},${y-r-4} ${x+r+3},${y+r-1} ${x-r-3},${y+r-1}`;
+  if(shape==="hex") return [0,1,2,3,4,5].map(i=>{ const a=Math.PI/3*i; return (x+(r+1)*Math.cos(a)).toFixed(1)+","+(y+(r+1)*Math.sin(a)).toFixed(1); }).join(" "); return ""; }
+function devMarkSvg(s,on){ const st=devStyle(s); const x=s.mx,y=s.my,r=18; const esc=v=>String(v??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+  const fill=on?"#f59e0b":st.fill; const sh=st.shape==="sq"?`<rect x="${x-r}" y="${y-r}" width="${2*r}" height="${2*r}" rx="5" fill="${fill}" stroke="${st.stroke}" stroke-width="3"/>`:st.shape==="cir"?`<circle cx="${x}" cy="${y}" r="${r+1}" fill="${fill}" stroke="${st.stroke}" stroke-width="3"/>`:`<polygon points="${devShapePts(st.shape,x,y,r)}" fill="${fill}" stroke="${st.stroke}" stroke-width="3"/>`;
+  return sh+`<text x="${x}" y="${y+(st.shape==="tri"?8:5)}" text-anchor="middle" font-size="13" font-weight="800" fill="${on?"#fff":st.txt}">${esc(s.num)}</text>`; }
+function DevMark({s,on}){ const st=devStyle(s); const x=s.mx,y=s.my,r=18; const fill=on?"#f59e0b":st.fill;
+  return <>{st.shape==="sq"?<rect x={x-r} y={y-r} width={2*r} height={2*r} rx="5" fill={fill} stroke={st.stroke} strokeWidth="3"/>:st.shape==="cir"?<circle cx={x} cy={y} r={r+1} fill={fill} stroke={st.stroke} strokeWidth="3"/>:<polygon points={devShapePts(st.shape,x,y,r)} fill={fill} stroke={st.stroke} strokeWidth="3"/>}
+    <text x={x} y={y+(st.shape==="tri"?8:5)} textAnchor="middle" fontSize="13" fontWeight="800" fill={on?"#fff":st.txt} pointerEvents="none">{s.num}</text></>; }
+function devLegendItems(devs){ const seen=new Map(); (devs||[]).forEach(s=>{ const k=(s.type||"bait"); if(!seen.has(k)) seen.set(k,s); }); return [...seen.values()]; }
+function drawItemSvg(it,esc){ const [k,ic]=symOf(it.k,it);
+  if(k==="text") return `<text x="${it.x+it.w/2}" y="${it.y+it.h/2+7}" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">${esc(it.label||"")}</text>`;
+  if(k==="room") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="${it.color||"#f8fafc"}" stroke="#334155" stroke-width="4"/><text x="${it.x+it.w/2}" y="${it.y+24}" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">${esc(it.label||"")}</text>`;
+  if(k==="wall") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="#334155"/>`;
+  if(k==="fence") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="#fff" stroke="#a16207" stroke-width="3" stroke-dasharray="10 6"/>`;
+  if(k==="shelf"||k==="worktop") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="${k==="shelf"?"#cbd5e1":"#e7e5e4"}" stroke="#64748b" stroke-width="2"/><text x="${it.x+it.w/2}" y="${it.y+it.h/2+5}" text-anchor="middle" font-size="13" fill="#334155">${esc(it.label||(k==="shelf"?"מדף":"משטח"))}</text>`;
+  const big=k==="garden"||k==="parking"||k==="pool";
+  return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" rx="6" fill="${big?(k==="garden"?"#f0fdf4":k==="pool"?"#e0f2fe":"#f8fafc"):"#fff"}" stroke="#94a3b8" stroke-width="2"/><text x="${it.x+it.w/2}" y="${it.y+it.h/2+8}" text-anchor="middle" font-size="${Math.max(12,Math.min(it.w,it.h,90)*0.5)}">${ic}</text>${it.label?`<text x="${it.x+it.w/2}" y="${it.y+it.h+16}" text-anchor="middle" font-size="13" fill="#334155">${esc(it.label)}</text>`:""}`; }
 // SVG סטטי (להדפסה בתיק)
 function drawingSvg(zone,stations,maxW){
-  const items=((zone&&zone.drawing&&zone.drawing.items)||[]);
+  const items=[...((zone&&zone.drawing&&zone.drawing.items)||[])].sort((a,b)=>DRAW_LAYER(a.k)-DRAW_LAYER(b.k));
   const esc=x=>String(x??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
-  const body=items.map(it=>{ const [k,ic]=symOf(it.k);
-    if(k==="text") return `<text x="${it.x+it.w/2}" y="${it.y+it.h/2+7}" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">${esc(it.label||"")}</text>`;
-    if(k==="room") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="#f8fafc" stroke="#334155" stroke-width="4"/><text x="${it.x+it.w/2}" y="${it.y+24}" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">${esc(it.label||"")}</text>`;
-    if(k==="wall") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="#334155"/>`;
-    if(k==="shelf") return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" fill="#cbd5e1" stroke="#64748b" stroke-width="2"/><text x="${it.x+it.w/2}" y="${it.y+it.h/2+5}" text-anchor="middle" font-size="13" fill="#334155">${esc(it.label||"מדף")}</text>`;
-    return `<rect x="${it.x}" y="${it.y}" width="${it.w}" height="${it.h}" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="2"/><text x="${it.x+it.w/2}" y="${it.y+it.h/2+8}" text-anchor="middle" font-size="${Math.min(it.w,it.h)*0.5}">${ic}</text>${it.label?`<text x="${it.x+it.w/2}" y="${it.y+it.h+16}" text-anchor="middle" font-size="13" fill="#334155">${esc(it.label)}</text>`:""}`; }).join("");
-  const devs=(stations||[]).filter(s=>s.zone===zone.id&&s.mx!=null).map(s=>`<g><circle cx="${s.mx}" cy="${s.my}" r="17" fill="#fff7ed" stroke="#c2410c" stroke-width="3"/><text x="${s.mx}" y="${s.my+5}" text-anchor="middle" font-size="13" font-weight="800" fill="#9a3412">${esc(s.num)}</text></g>`).join("");
-  return `<svg viewBox="0 0 ${DRAW_W} ${DRAW_H}" style="width:100%;max-width:${maxW||900}px;border:1px solid #cbd5e1;border-radius:8px;background:#fff" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="g" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#f1f5f9" stroke-width="1"/></pattern></defs><rect width="${DRAW_W}" height="${DRAW_H}" fill="url(#g)"/>${body}${devs}</svg>`;
+  const body=items.map(it=>drawItemSvg(it,esc)).join("");
+  const zd=(stations||[]).filter(s=>s.zone===zone.id&&s.mx!=null);
+  const devs=zd.map(s=>`<g>${devMarkSvg(s,false)}</g>`).join("");
+  const leg=devLegendItems(zd); const legend=leg.length?`<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:4px">${leg.map(s=>`<span style="display:inline-flex;align-items:center;gap:4px"><svg width="26" height="26" viewBox="0 0 44 44">${devMarkSvg({...s,mx:22,my:22,num:""},false)}</svg>${esc(devType(s).label)}</span>`).join("")}</div>`:"";
+  return `<svg viewBox="0 0 ${DRAW_W} ${DRAW_H}" style="width:100%;max-width:${maxW||900}px;border:1px solid #cbd5e1;border-radius:8px;background:#fff" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="g" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#f1f5f9" stroke-width="1"/></pattern></defs><rect width="${DRAW_W}" height="${DRAW_H}" fill="url(#g)"/>${body}${devs}</svg>${legend}`;
 }
 function SiteDrawEditor({zone,stations,onSave,onClose}){
   const [items,setItems]=useState(()=>JSON.parse(JSON.stringify((zone.drawing&&zone.drawing.items)||[])));
   const [devs,setDevs]=useState(()=>(stations||[]).map(s=>({...s})));
   const [sel,setSel]=useState(null); // {t:"i",id} | {t:"d",num}
   const [placing,setPlacing]=useState(null); // num of device to place
-  const svg=React.useRef(null); const drag=React.useRef(null);
+  const [grp,setGrp]=useState(0); const [cust,setCust]=useState(null);
+  const svg=React.useRef(null); const drag=React.useRef(null); const hit=React.useRef(false);
   const zDevs=devs.filter(s=>s.zone===zone.id);
   const pt=e=>{ const r=svg.current.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*DRAW_W, y:(e.clientY-r.top)/r.height*DRAW_H}; };
   const snap=v=>Math.round(v/10)*10;
-  const addSym=k=>{ const [,,label,w,h]=symOf(k); const id="i"+Date.now().toString(36)+Math.random().toString(36).slice(2,4);
-    const n=items.length; const it={id,k,x:snap(80+(n*40)%600),y:snap(80+(n*30)%400),w,h,label:k==="room"?"חדר":k==="text"?"כיתוב":""}; setItems(a=>[...a,it]); setSel({t:"i",id}); };
-  const down=(e,target)=>{ e.stopPropagation(); const p=pt(e);
+  const newId=()=>"i"+Date.now().toString(36)+Math.random().toString(36).slice(2,4);
+  const addSym=(k,extra)=>{ const [,,label,w,h]=symOf(k,extra); const id=newId();
+    const n=items.length; const it={id,k,x:snap(80+(n*40)%600),y:snap(80+(n*30)%400),w,h,label:k==="room"?"חדר":k==="text"?"כיתוב":"",...(extra||{})}; setItems(a=>[...a,it]); setSel({t:"i",id}); };
+  const down=(e,target)=>{ e.stopPropagation(); hit.current=true; const p=pt(e);
     if(target.t==="i"){ const it=items.find(x=>x.id===target.id); drag.current={t:"i",id:target.id,mode:target.mode||"move",ox:p.x-it.x,oy:p.y-it.y,sx:it.x,sy:it.y,sw:it.w,sh:it.h,px:p.x,py:p.y}; }
     else { const d=devs.find(x=>x.num===target.num); drag.current={t:"d",num:target.num,ox:p.x-d.mx,oy:p.y-d.my}; }
     setSel(target.t==="i"?{t:"i",id:target.id}:{t:"d",num:target.num});
-    try{ e.currentTarget.setPointerCapture&&svg.current.setPointerCapture(e.pointerId); }catch(_){}
+    try{ svg.current.setPointerCapture(e.pointerId); }catch(_){}
   };
   const move=e=>{ const d=drag.current; if(!d) return; const p=pt(e);
-    if(d.t==="i") setItems(a=>a.map(it=>{ if(it.id!==d.id) return it; if(d.mode==="resize") return {...it,w:Math.max(10,snap(d.sw+(p.x-d.px))),h:Math.max(10,snap(d.sh+(p.y-d.py)))}; return {...it,x:Math.max(0,Math.min(DRAW_W-it.w,snap(p.x-d.ox))),y:Math.max(0,Math.min(DRAW_H-it.h,snap(p.y-d.oy)))}; }));
+    if(d.t==="i") setItems(a=>a.map(it=>{ if(it.id!==d.id) return it;
+      if(String(d.mode).startsWith("rs")){ const dx=p.x-d.px, dy=p.y-d.py; const c=d.mode.slice(2); let x=d.sx,y=d.sy,w=d.sw,h=d.sh;
+        if(c.includes("e")) w=d.sw+dx; if(c.includes("s")) h=d.sh+dy; if(c.includes("w")){ w=d.sw-dx; x=d.sx+dx; } if(c.includes("n")){ h=d.sh-dy; y=d.sy+dy; }
+        w=Math.max(10,snap(w)); h=Math.max(10,snap(h)); if(c.includes("w")) x=d.sx+d.sw-w; if(c.includes("n")) y=d.sy+d.sh-h;
+        x=Math.max(0,x); y=Math.max(0,y); w=Math.min(w,DRAW_W-x); h=Math.min(h,DRAW_H-y); return {...it,x,y,w,h}; }
+      return {...it,x:Math.max(0,Math.min(DRAW_W-it.w,snap(p.x-d.ox))),y:Math.max(0,Math.min(DRAW_H-it.h,snap(p.y-d.oy)))}; }));
     else setDevs(a=>a.map(s=>s.num===d.num?{...s,mx:Math.round(Math.max(15,Math.min(DRAW_W-15,p.x-d.ox))),my:Math.round(Math.max(15,Math.min(DRAW_H-15,p.y-d.oy)))}:s));
   };
   const up=()=>{ drag.current=null; };
-  const bgClick=e=>{ if(placing!=null){ const p=pt(e); setDevs(a=>a.map(s=>s.num===placing?{...s,mx:Math.round(p.x),my:Math.round(p.y)}:s)); setSel({t:"d",num:placing});
+  const bgClick=e=>{ if(hit.current){ hit.current=false; return; } // סיום גרירה של פריט — לא מבטלים את הבחירה
+    if(placing!=null){ const p=pt(e); setDevs(a=>a.map(s=>s.num===placing?{...s,mx:Math.round(p.x),my:Math.round(p.y)}:s)); setSel({t:"d",num:placing});
       const next=zDevs.find(s=>s.num!==placing&&s.mx==null); setPlacing(next?next.num:null); return; } setSel(null); };
   const selItem=sel&&sel.t==="i"?items.find(x=>x.id===sel.id):null;
   const selDev=sel&&sel.t==="d"?devs.find(x=>x.num===sel.num):null;
   const updSel=patch=>setItems(a=>a.map(x=>x.id===sel.id?{...x,...patch}:x));
+  const resizeBy=(dw,dh)=>{ if(!selItem) return; const w=Math.max(10,Math.min(DRAW_W-selItem.x,selItem.w+dw)), h=Math.max(10,Math.min(DRAW_H-selItem.y,selItem.h+dh)); updSel({w,h}); };
   const save=()=>{ onSave({...zone,drawing:{items,updatedAt:new Date().toISOString()}},devs); };
   const unplaced=zDevs.filter(s=>s.mx==null);
   const btn={border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"6px 9px",fontSize:13,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
+  const sbtn={...btn,padding:"4px 8px",fontSize:12};
+  const sorted=[...items].sort((a,b)=>DRAW_LAYER(a.k)-DRAW_LAYER(b.k));
+  const legend=devLegendItems(zDevs);
   return <Modal title={"✏️ מפה — "+zone.name} onClose={()=>{ if(confirm("לשמור את השינויים במפה?")) save(); onClose(); }} width={1000}>
-    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>{DRAW_SYMS.map(([k,ic,l])=><button key={k} type="button" onClick={()=>addSym(k)} style={btn}>{ic} {l}</button>)}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>{DRAW_GROUPS.map((g,i)=><button key={i} type="button" onClick={()=>setGrp(i)} style={{...sbtn,borderRadius:20,background:grp===i?"#1a5c3a":"#fff",color:grp===i?"#fff":"#334155",borderColor:grp===i?"#1a5c3a":"#cbd5e1",fontWeight:700}}>{g[0]}</button>)}</div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+      {DRAW_GROUPS[grp][1].map(([k,ic,l])=><button key={k} type="button" onClick={()=>addSym(k)} style={btn}>{ic} {l}</button>)}
+      <button type="button" onClick={()=>setCust(c=>c?null:{ic:"",label:""})} style={{...btn,borderStyle:"dashed",color:"#1a5c3a"}}>➕ סמל אחר</button>
+    </div>
+    {cust&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"6px 8px"}}>
+      <input value={cust.ic} onChange={e=>setCust(c=>({...c,ic:e.target.value}))} placeholder="אימוג׳י 🏬" style={{width:80,padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:16,textAlign:"center"}}/>
+      <input value={cust.label} onChange={e=>setCust(c=>({...c,label:e.target.value}))} placeholder="שם — למשל: חדר שרתים" style={{flex:1,minWidth:120,padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:14,fontFamily:"inherit"}}/>
+      <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{["🏬","🏭","🏫","🏥","⛪","🧰","🔧","🖨️","☕","🍷","🥩","🐟","🧀","🥫","🛒","🧯","🚰","🪣","🔒","🐈","🐕","🕊️"].map(x=><button key={x} type="button" onClick={()=>setCust(c=>({...c,ic:x}))} style={{border:"none",background:cust.ic===x?"#bbf7d0":"transparent",fontSize:18,cursor:"pointer",borderRadius:6,padding:"1px 3px"}}>{x}</button>)}</div>
+      <Btn sm onClick={()=>{ if(!cust.ic.trim()) return alert("בחר או הקלד אימוג׳י"); addSym("custom",{ic:cust.ic.trim(),label:cust.label.trim()}); setCust(null); }}>הוסף</Btn>
+    </div>}
     <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",marginBottom:8,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"6px 8px",fontSize:13}}>
       <b>🪤 תחנות:</b>
-      {zDevs.map(s=><button key={s.num} type="button" onClick={()=>{ if(s.mx==null){ setPlacing(s.num); } else setSel({t:"d",num:s.num}); }} style={{...btn,padding:"4px 8px",background:placing===s.num?"#f59e0b":s.mx!=null?"#ecfdf5":"#fff",color:placing===s.num?"#fff":"#0f172a"}}>{devType(s).icon}{s.num}{s.mx!=null?" ✓":""}</button>)}
+      {zDevs.map(s=>{ const st=devStyle(s); return <button key={s.num} type="button" onClick={()=>{ if(s.mx==null){ setPlacing(s.num); } else setSel({t:"d",num:s.num}); }} style={{...btn,padding:"4px 8px",background:placing===s.num?"#f59e0b":s.mx!=null?"#ecfdf5":"#fff",color:placing===s.num?"#fff":"#0f172a",display:"inline-flex",alignItems:"center",gap:4}}><svg width="18" height="18" viewBox="0 0 44 44"><DevMark s={{...s,mx:22,my:22,num:""}}/></svg>{s.num}{s.mx!=null?" ✓":""}</button>; })}
       {!zDevs.length&&<span style={{color:"#64748b"}}>אין תחנות באזור הזה — מוסיפים בחלון האחזקה ("מה מציבים")</span>}
       {placing!=null&&<span style={{color:"#b45309",fontWeight:700}}>👆 לחץ על המפה כדי להציב את {placing}</span>}
       {!placing&&unplaced.length>0&&<button type="button" onClick={()=>setPlacing(unplaced[0].num)} style={{...btn,background:"#c2410c",color:"#fff",border:"none"}}>📍 הצב את כולן לפי הסדר</button>}
     </div>
-    {(selItem||selDev)&&<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8,background:"#f1f5f9",borderRadius:10,padding:"6px 8px"}}>
-      {selItem&&<><span style={{fontSize:13}}>{symOf(selItem.k)[1]} {symOf(selItem.k)[2]}</span>
+    {/* גובה קבוע — כדי שהמפה לא תקפוץ כשבוחרים פריט */}
+    <div style={{height:92,marginBottom:8,overflow:"hidden"}}>
+    {(selItem||selDev)?<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",alignContent:"flex-start",background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:10,padding:"6px 8px",height:"100%",boxSizing:"border-box",overflowY:"auto"}}>
+      {selItem&&<><span style={{fontSize:13,fontWeight:700}}>{symOf(selItem.k,selItem)[1]} {symOf(selItem.k,selItem)[2]}</span>
         <input value={selItem.label||""} onChange={e=>updSel({label:e.target.value})} placeholder="שם / כיתוב (למשל: מטבח, מדף קמח)" style={{flex:1,minWidth:140,padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:14,fontFamily:"inherit"}}/>
-        <button type="button" style={btn} onClick={()=>updSel({w:selItem.h,h:selItem.w})}>⟲ סובב</button>
-        <button type="button" style={btn} onClick={()=>{ const id="i"+Date.now().toString(36); setItems(a=>[...a,{...selItem,id,x:Math.min(DRAW_W-selItem.w,selItem.x+20),y:Math.min(DRAW_H-selItem.h,selItem.y+20)}]); setSel({t:"i",id}); }}>⧉ שכפל</button>
-        <button type="button" style={{...btn,color:"#dc2626"}} onClick={()=>{ setItems(a=>a.filter(x=>x.id!==selItem.id)); setSel(null); }}>🗑️ מחק</button></>}
-      {selDev&&<><span style={{fontSize:13}}>{devType(selDev).icon} {devType(selDev).label} {selDev.num}{selDev.location?" · "+selDev.location:""}</span>
-        <button type="button" style={{...btn,color:"#dc2626"}} onClick={()=>{ setDevs(a=>a.map(s=>s.num===selDev.num?{...s,mx:null,my:null}:s)); setSel(null); }}>הורד מהמפה</button></>}
-    </div>}
-    <div style={{fontSize:11,color:"#64748b",marginBottom:4}}>גוררים כדי להזיז · המשולש הכתום בפינה מגדיל/מקטין · לחיצה על פריט — עריכת שם, סיבוב, שכפול ומחיקה</div>
-    <svg ref={svg} viewBox={`0 0 ${DRAW_W} ${DRAW_H}`} onPointerMove={move} onPointerUp={up} onPointerLeave={up} onClick={bgClick}
+        <span style={{display:"inline-flex",gap:3,alignItems:"center",fontSize:12}}>רוחב<button type="button" style={sbtn} onClick={()=>resizeBy(-20,0)}>−</button><button type="button" style={sbtn} onClick={()=>resizeBy(20,0)}>+</button></span>
+        <span style={{display:"inline-flex",gap:3,alignItems:"center",fontSize:12}}>גובה<button type="button" style={sbtn} onClick={()=>resizeBy(0,-20)}>−</button><button type="button" style={sbtn} onClick={()=>resizeBy(0,20)}>+</button></span>
+        <button type="button" style={sbtn} onClick={()=>updSel({w:selItem.h,h:selItem.w})}>⟲ סובב</button>
+        <button type="button" style={sbtn} onClick={()=>{ const id=newId(); setItems(a=>[...a,{...selItem,id,x:Math.min(DRAW_W-selItem.w,selItem.x+20),y:Math.min(DRAW_H-selItem.h,selItem.y+20)}]); setSel({t:"i",id}); }}>⧉ שכפל</button>
+        <button type="button" style={{...sbtn,color:"#dc2626"}} onClick={()=>{ setItems(a=>a.filter(x=>x.id!==selItem.id)); setSel(null); }}>🗑️ מחק</button>
+        <button type="button" style={sbtn} onClick={()=>setSel(null)}>✓ סיום</button>
+        {selItem.k==="room"&&<div style={{width:"100%",display:"flex",flexWrap:"nowrap",overflowX:"auto",gap:4,alignItems:"center",paddingBottom:2}}>
+          {ROOM_LABELS.map(l=><button key={l} type="button" onClick={()=>updSel({label:l})} style={{...sbtn,borderRadius:16,background:selItem.label===l?"#dcfce7":"#fff"}}>{l}</button>)}
+          <span style={{fontSize:12,marginRight:6,whiteSpace:"nowrap"}}>צבע:</span>{ROOM_COLORS.map(([c,n])=><button key={c} type="button" title={n} onClick={()=>updSel({color:c})} style={{flexShrink:0,width:24,height:24,borderRadius:6,background:c,border:(selItem.color||"#f8fafc")===c?"2px solid #1a5c3a":"1px solid #94a3b8",cursor:"pointer"}}/>)}
+        </div>}</>}
+      {selDev&&<><span style={{fontSize:13,display:"inline-flex",alignItems:"center",gap:4}}><svg width="20" height="20" viewBox="0 0 44 44"><DevMark s={{...selDev,mx:22,my:22,num:""}}/></svg>{devType(selDev).label} {selDev.num}{selDev.location?" · "+selDev.location:""}</span>
+        <input value={selDev.location||""} onChange={e=>{ const v=e.target.value; setDevs(a=>a.map(s=>s.num===selDev.num?{...s,location:v}:s)); }} placeholder="מיקום מדויק (למשל: מתחת לכיור)" style={{flex:1,minWidth:140,padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:14,fontFamily:"inherit"}}/>
+        <button type="button" style={{...sbtn,color:"#dc2626"}} onClick={()=>{ setDevs(a=>a.map(s=>s.num===selDev.num?{...s,mx:null,my:null}:s)); setSel(null); }}>הורד מהמפה</button>
+        <button type="button" style={sbtn} onClick={()=>setSel(null)}>✓ סיום</button></>}
+    </div>:<div style={{fontSize:12,color:"#64748b",padding:"6px 2px"}}>👆 לוחצים על פריט כדי לערוך אותו (שם, גודל, צבע, סיבוב). גוררים כדי להזיז · העיגולים הכתומים בפינות מגדילים/מקטינים.</div>}
+    </div>
+    <svg ref={svg} viewBox={`0 0 ${DRAW_W} ${DRAW_H}`} onPointerDown={()=>{ hit.current=false; }} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClick={bgClick}
       style={{width:"100%",border:"1px solid #cbd5e1",borderRadius:8,background:"#fff",touchAction:"none",cursor:placing!=null?"crosshair":"default",userSelect:"none"}}>
       <defs><pattern id="dg" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0H0V50" fill="none" stroke="#eef2f7" strokeWidth="1"/></pattern></defs>
       <rect width={DRAW_W} height={DRAW_H} fill="url(#dg)"/>
-      {items.map(it=>{ const [k,ic]=symOf(it.k); const on=sel&&sel.t==="i"&&sel.id===it.id;
-        const common={onPointerDown:e=>{ if(placing!=null) return; down(e,{t:"i",id:it.id}); },onClick:e=>{ if(placing==null) e.stopPropagation(); },style:{cursor:placing!=null?"crosshair":"move"}};
+      {sorted.map(it=>{ const [k,ic]=symOf(it.k,it); const on=sel&&sel.t==="i"&&sel.id===it.id; const so=on?"#f59e0b":null;
+        const common={onPointerDown:e=>{ if(placing!=null) return; down(e,{t:"i",id:it.id}); },style:{cursor:placing!=null?"crosshair":"move"}};
+        const big=k==="garden"||k==="parking"||k==="pool";
         return <g key={it.id}>
-          {k==="text"?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill="transparent" stroke={on?"#f59e0b":"none"} strokeDasharray="6 4" {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+7} textAnchor="middle" fontSize="22" fontWeight="700" fill="#0f172a" pointerEvents="none">{it.label}</text></>
-          :k==="room"?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill="#f8fafc" fillOpacity=".6" stroke={on?"#f59e0b":"#334155"} strokeWidth="4" {...common}/><text x={it.x+it.w/2} y={it.y+24} textAnchor="middle" fontSize="18" fontWeight="700" fill="#334155" pointerEvents="none">{it.label}</text></>
-          :k==="wall"?<rect x={it.x} y={it.y} width={it.w} height={it.h} fill={on?"#f59e0b":"#334155"} {...common}/>
-          :k==="shelf"?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill="#cbd5e1" stroke={on?"#f59e0b":"#64748b"} strokeWidth="2" {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+5} textAnchor="middle" fontSize="13" fill="#334155" pointerEvents="none">{it.label||"מדף"}</text></>
-          :<><rect x={it.x} y={it.y} width={it.w} height={it.h} rx="6" fill="#fff" stroke={on?"#f59e0b":"#94a3b8"} strokeWidth="2" {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+8} textAnchor="middle" fontSize={Math.min(it.w,it.h)*0.5} pointerEvents="none">{ic}</text>{it.label&&<text x={it.x+it.w/2} y={it.y+it.h+16} textAnchor="middle" fontSize="13" fill="#334155" pointerEvents="none">{it.label}</text>}</>}
-          {on&&<path d={`M${it.x+it.w} ${it.y+it.h} l-26 0 l26 -26 z`} fill="#f59e0b" style={{cursor:"nwse-resize"}} onPointerDown={e=>down(e,{t:"i",id:it.id,mode:"resize"})} onClick={e=>e.stopPropagation()}/>}
+          {k==="text"?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill="transparent" stroke={so||"none"} strokeDasharray="6 4" strokeWidth="3" {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+7} textAnchor="middle" fontSize="22" fontWeight="700" fill="#0f172a" pointerEvents="none">{it.label}</text></>
+          :k==="room"?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill={it.color||"#f8fafc"} fillOpacity=".8" stroke={so||"#334155"} strokeWidth="4" {...common}/><text x={it.x+it.w/2} y={it.y+24} textAnchor="middle" fontSize="18" fontWeight="700" fill="#334155" pointerEvents="none">{it.label}</text></>
+          :k==="wall"?<rect x={it.x} y={it.y} width={it.w} height={it.h} fill={so||"#334155"} {...common}/>
+          :k==="fence"?<rect x={it.x} y={it.y} width={it.w} height={it.h} fill="#fff" stroke={so||"#a16207"} strokeWidth="3" strokeDasharray="10 6" {...common}/>
+          :(k==="shelf"||k==="worktop")?<><rect x={it.x} y={it.y} width={it.w} height={it.h} fill={k==="shelf"?"#cbd5e1":"#e7e5e4"} stroke={so||"#64748b"} strokeWidth={on?3:2} {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+5} textAnchor="middle" fontSize="13" fill="#334155" pointerEvents="none">{it.label||(k==="shelf"?"מדף":"משטח")}</text></>
+          :<><rect x={it.x} y={it.y} width={it.w} height={it.h} rx="6" fill={big?(k==="garden"?"#f0fdf4":k==="pool"?"#e0f2fe":"#f8fafc"):"#fff"} stroke={so||"#94a3b8"} strokeWidth={on?3:2} {...common}/><text x={it.x+it.w/2} y={it.y+it.h/2+8} textAnchor="middle" fontSize={Math.max(12,Math.min(it.w,it.h,90)*0.5)} pointerEvents="none">{ic}</text>{it.label&&<text x={it.x+it.w/2} y={it.y+it.h+16} textAnchor="middle" fontSize="13" fill="#334155" pointerEvents="none">{it.label}</text>}</>}
         </g>; })}
-      {zDevs.filter(s=>s.mx!=null).map(s=>{ const on=sel&&sel.t==="d"&&sel.num===s.num; return <g key={s.num} onPointerDown={e=>down(e,{t:"d",num:s.num})} onClick={e=>e.stopPropagation()} style={{cursor:"move"}}>
-        <circle cx={s.mx} cy={s.my} r="19" fill={on?"#f59e0b":"#fff7ed"} stroke="#c2410c" strokeWidth="3"/><text x={s.mx} y={s.my+5} textAnchor="middle" fontSize="13" fontWeight="800" fill="#9a3412" pointerEvents="none">{s.num}</text></g>; })}
+      {selItem&&placing==null&&[["nw",selItem.x,selItem.y],["ne",selItem.x+selItem.w,selItem.y],["sw",selItem.x,selItem.y+selItem.h],["se",selItem.x+selItem.w,selItem.y+selItem.h]].map(([c,x,y])=>
+        <circle key={c} cx={x} cy={y} r="15" fill="#f59e0b" stroke="#fff" strokeWidth="3" style={{cursor:(c==="nw"||c==="se")?"nwse-resize":"nesw-resize"}} onPointerDown={e=>down(e,{t:"i",id:selItem.id,mode:"rs"+c})}/>)}
+      {zDevs.filter(s=>s.mx!=null).map(s=>{ const on=sel&&sel.t==="d"&&sel.num===s.num; return <g key={s.num} onPointerDown={e=>down(e,{t:"d",num:s.num})} style={{cursor:"move"}}><DevMark s={s} on={on}/></g>; })}
     </svg>
+    {legend.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:10,fontSize:12,color:"#334155",marginTop:6}}>{legend.map(s=><span key={s.type||"bait"} style={{display:"inline-flex",alignItems:"center",gap:4}}><svg width="22" height="22" viewBox="0 0 44 44"><DevMark s={{...s,mx:22,my:22,num:""}}/></svg>{devType(s).label}</span>)}</div>}
     <div style={{display:"flex",gap:8,marginTop:10}}>
       <Btn style={{flex:2}} onClick={()=>{save();onClose();}}>💾 שמור מפה</Btn>
       <Btn v="ghost" style={{flex:1}} onClick={onClose}>ביטול</Btn>
@@ -11226,7 +11286,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="116";
+const APP_BUILD="117";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
