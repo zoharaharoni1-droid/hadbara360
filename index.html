@@ -237,6 +237,16 @@ function tmpAuthClient(){
   return window.supabase.createClient(SUPA_URL, SUPA_KEY, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:'h360-admin-tmp'}});
 }
 
+// ✈️ כניסה גם בלי רשת: אחרי כניסה מוצלחת שומרים במכשיר רק "טביעת אצבע" מוצפנת של הסיסמה (PBKDF2), לא את הסיסמה עצמה
+async function offPwdHash(pwd,salt){ const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(pwd)),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:150000,hash:'SHA-256'},k,256); return Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+async function saveOfflineCred(username,password,profile){ try{ const salt=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
+  const all=JSON.parse(localStorage.getItem('h360_offcred')||'{}'); all[String(username).trim().toLowerCase()]={salt,hash:await offPwdHash(password,salt),profile,at:Date.now()}; localStorage.setItem('h360_offcred',JSON.stringify(all)); }catch(e){} }
+async function offlineLogin(username,password){ const all=JSON.parse(localStorage.getItem('h360_offcred')||'{}'); const c=all[String(username).trim().toLowerCase()];
+  if(!c) throw new Error('אין רשת — ובמכשיר הזה עוד לא נכנסת עם המשתמש הזה. צריך להתחבר פעם אחת עם רשת.');
+  if(await offPwdHash(password,c.salt)!==c.hash) throw new Error('שם משתמש או סיסמה שגויים');
+  return c.profile; }
+const isNetErr=e=>!navigator.onLine||/fetch|network|Failed to fetch|Load failed|NetworkError|שגיאת חיבור לשרת|timeout/i.test(String((e&&e.message)||e||""));
 function roleLabel(r){ return r==="מנהל" ? "מנהל ראשי" : r; }
 // מי יכול לקבל שיבוץ הדברה: מדביר, או כל עובד שסומן "גם מדביר" (למשל המנהל הראשי)
 // היסטוריית שינויים בתור — כל עריכה נשמרת עם הגרסה הקודמת, כדי שמנהל/פקידה יוכלו להחזיר
@@ -359,15 +369,20 @@ function LoginScreen({onLogin}){
   const [password,setPassword]=React.useState('');
   const [error,setError]=React.useState('');
   const [loading,setLoading]=React.useState(false);
+  const [showPwd,setShowPwd]=React.useState(false);
 
   const doLogin=async()=>{
     if(!username||!password){setError('נא למלא שם משתמש וסיסמה');return;}
     setLoading(true);setError('');
+    const tryOffline=async()=>{ const prof=await offlineLogin(username,password); window.__h360OffPwd={u:username,p:password}; onLogin({...prof,offline:true}); };
     try{
-      if(!sb){setError('שגיאת חיבור לשרת (Supabase לא נטען)');setLoading(false);return;}
-      const data = await secureLogin(username, password);
+      if(!sb||!navigator.onLine){ await tryOffline(); return; }
+      const data = await Promise.race([secureLogin(username, password), new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),15000))]);
+      saveOfflineCred(username,password,data);
       onLogin(data);
-    }catch(e){setError(e?.message||'שגיאת חיבור');setLoading(false);}
+    }catch(e){
+      if(isNetErr(e)){ try{ await tryOffline(); return; }catch(e2){ setError(e2?.message||'אין חיבור'); setLoading(false); return; } }
+      setError(e?.message||'שגיאת חיבור');setLoading(false);}
   };
 
   return(
@@ -386,10 +401,15 @@ function LoginScreen({onLogin}){
         </div>
         <div style={{textAlign:"right",marginBottom:24}}>
           <label style={{display:"block",fontSize:13,fontWeight:600,color:"#374151",marginBottom:6}}>סיסמה</label>
-          <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+          <div style={{position:"relative"}}>
+          <input type={showPwd?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)}
             onKeyDown={e=>e.key==='Enter'&&doLogin()}
-            placeholder="הכנס סיסמה"
-            style={{width:"100%",padding:"12px 16px",borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+            placeholder="הכנס סיסמה" autoComplete="current-password"
+            style={{width:"100%",padding:"12px 16px",paddingLeft:52,borderRadius:10,border:"1.5px solid #e2e8f0",fontSize:15,outline:"none",boxSizing:"border-box"}}/>
+          <button type="button" onClick={()=>setShowPwd(v=>!v)} title={showPwd?"הסתר סיסמה":"הצג סיסמה"} aria-label={showPwd?"הסתר סיסמה":"הצג סיסמה"}
+            style={{position:"absolute",left:6,top:"50%",transform:"translateY(-50%)",border:"none",background:"none",fontSize:20,cursor:"pointer",padding:"4px 8px",lineHeight:1}}>{showPwd?"🙈":"👁️"}</button>
+          </div>
+          {!navigator.onLine&&<div style={{fontSize:12,color:"#b45309",marginTop:6}}>✈️ אין רשת — אפשר להיכנס עם משתמש שכבר נכנס במכשיר הזה. הנתונים יסונכרנו כשהרשת תחזור.</div>}
         </div>
         {error&&<div style={{background:"#fef2f2",color:"#dc2626",borderRadius:8,padding:"10px 16px",fontSize:13,marginBottom:16,textAlign:"right"}}>{error}</div>}
         <button onClick={doLogin} disabled={loading}
@@ -11446,7 +11466,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="123";
+const APP_BUILD="124";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -11503,9 +11523,18 @@ function App(){
   // בלי סשן מאובטח תקף — חוזרים למסך הכניסה
   React.useEffect(()=>{
     if(!sb) return;
-    sb.auth.getSession().then(({data})=>{ if(!data.session) { setAuthUser(null); try{localStorage.removeItem('crm_auth');}catch{} } });
-    const {data:sub} = sb.auth.onAuthStateChange((ev, session)=>{ if(ev==='SIGNED_OUT' || !session){ setAuthUser(null); try{localStorage.removeItem('crm_auth');}catch{} } });
-    return ()=>{ try{sub.subscription.unsubscribe();}catch{} };
+    // בלי רשת (מצב טיסה) לא מנתקים — ממשיכים לעבוד, והסנכרון יקרה כשהרשת תחזור
+    const kick=()=>{ setAuthUser(null); try{localStorage.removeItem('crm_auth');}catch{} };
+    const offline=()=>!navigator.onLine;
+    // יש רשת ואין סשן: אם נכנסו עכשיו בלי רשת — מתחברים ברקע עם מה שהוקלד; אחרת חוזרים למסך הכניסה
+    const check=async()=>{ if(offline()) return; try{ const {data,error}=await sb.auth.getSession(); if(data.session) return; if(error&&isNetErr(error)) return;
+        const c=window.__h360OffPwd; if(c){ const prof=await secureLogin(c.u,c.p); saveOfflineCred(c.u,c.p,prof); window.__h360OffPwd=null; setAuthUser(a=>{ const nu={...(a||{}),...prof,offline:false}; try{localStorage.setItem('crm_auth',JSON.stringify(nu));}catch{} return nu; }); return; }
+        kick(); }catch(e){ if(!isNetErr(e)) kick(); } };
+    check();
+    const {data:sub} = sb.auth.onAuthStateChange((ev, session)=>{ if(ev==='SIGNED_OUT'&&!offline()&&!window.__h360OffPwd) kick(); });
+    const onOnline=()=>setTimeout(check,1500);
+    window.addEventListener('online',onOnline);
+    return ()=>{ try{sub.subscription.unsubscribe();}catch{} window.removeEventListener('online',onOnline); };
   },[]);
 
   // Map authUser to legacy user object (used after all hooks)

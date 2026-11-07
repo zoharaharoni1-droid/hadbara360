@@ -1,7 +1,7 @@
 // הדברה 360 — Service Worker v2
 // תכונות: cache-first, offline queue, auto-update
 
-const VERSION = 'hadbara360-v123';
+const VERSION = 'hadbara360-v124';
 const ASSETS = [
   '/hadbara360/',
   '/hadbara360/index.html',
@@ -159,6 +159,8 @@ self.addEventListener('fetch', e => {
 
   // ── Supabase API calls ──────────────────────────────────────────────────
   if (url.hostname.includes('supabase.co')) {
+    // כניסה / חידוש סשן — לא "מזייפים" תשובה כשאין רשת (זה מה שניתק את המשתמש במצב טיסה)
+    if (url.pathname.startsWith('/auth/') || url.pathname.startsWith('/functions/')) return;
     // Only queue write operations (POST/PATCH/DELETE/PUT)
     if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(e.request.method)) {
       e.respondWith(
