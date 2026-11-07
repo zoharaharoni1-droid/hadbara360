@@ -8251,6 +8251,44 @@ function matFromName0(name,reg){
   return r?{name,reg:r[2],holder:r[1],form:r[3],active:r[4],targets:r[5],expiry:r[6]}:{name,reg:"",holder:l.mfr||"",form:l.method||"",active:l.active||"",targets:(l.targets||[]).join(", "),expiry:""};
 }
 
+// ─── 📚 תיק מלא להדפסה: התיק + כל התוויות / SDS / תעודות רישום (ומסמכי החברה) בקובץ PDF אחד ───
+let __pdflib=null;
+function loadPdfLib(){ if(window.PDFLib) return Promise.resolve(window.PDFLib); if(__pdflib) return __pdflib;
+  __pdflib=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'; sc.onload=()=>res(window.PDFLib); sc.onerror=()=>{__pdflib=null; rej(new Error('טעינת כלי ה-PDF נכשלה'));}; document.head.appendChild(sc); }); return __pdflib; }
+async function fetchDocBytes(d){ const u=await signedUrl(d.path,600); if(!u) throw new Error("no url"); const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status); return {bytes:new Uint8Array(await r.arrayBuffer()),type:String(r.headers.get("content-type")||d.type||"").toLowerCase()}; }
+async function buildPestBook(m,{workers=[],execLogs=[],companyDocs=[],matNames=null,withCompany=true,onStep}={}){
+  const {PDFDocument}=await loadPdfLib(); const step=t=>{ try{ onStep&&onStep(t); }catch(e){} };
+  step("מכין את התיק…");
+  const baseBlob=await htmlPdfBlob(await pestFileHtml(m,{workers,execLogs,companyDocs,inline:true}));
+  const parts=[];
+  (m.fileMaterials||[]).filter(x=>!matNames||matNames.includes(x.name)).forEach(x=>MATLIB_DOCS.forEach(([k,l])=>{ if(x[k]&&x[k].path) parts.push({group:x.name,title:l.replace(/^\S+\s/,""),doc:x[k]}); }));
+  if(withCompany) (companyDocs||[]).forEach(d=>{ if(d&&d.path) parts.push({group:"מסמכי החברה",title:d.kind||d.name||"מסמך",doc:d}); });
+  const items=[]; let i=0;
+  for(const p of parts){ i++; step(`מצרף מסמכים ${i}/${parts.length}…`);
+    try{ const {bytes,type}=await fetchDocBytes(p.doc); const nm=String(p.doc.name||p.doc.path||"").toLowerCase();
+      const isPdf=/pdf/.test(type)||/\.pdf$/.test(nm)||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44);
+      if(isPdf){ const src=await PDFDocument.load(bytes,{ignoreEncryption:true}); items.push({...p,src,pages:src.getPageCount()}); }
+      else if(/png|jpe?g/.test(type)||/\.(png|jpe?g)$/.test(nm)) items.push({...p,img:bytes,png:/png/.test(type)||/\.png$/.test(nm),pages:1});
+      else items.push({...p,fail:"סוג קובץ שלא ניתן לצרף — נמצא כקישור בתיק"}); }
+    catch(e){ items.push({...p,fail:"לא הצלחתי לפתוח את הקובץ — נמצא כקישור בתיק"}); } }
+  const base=await PDFDocument.load(await baseBlob.arrayBuffer()); const basePages=base.getPageCount();
+  const esc=x=>String(x??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+  const idxHtml=offset=>{ let pg=offset; const rows=items.map(it=>{ const at=it.fail?"—":String(pg+1); if(!it.fail) pg+=it.pages;
+      return `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-weight:700">${esc(it.group)}</td><td style="padding:6px 8px;border:1px solid #e5e7eb">${esc(it.title)}${it.fail?`<div style="font-size:11px;color:#b45309">${esc(it.fail)}</div>`:""}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:700">${at}</td></tr>`; }).join("");
+    return `<h1 style="color:#1a5c3a;font-size:22px;margin-bottom:6px">📚 נספח החומרים — ${esc(m.customerName||"")}</h1><div style="font-size:13px;color:#475569;margin-bottom:12px">גיליונות בטיחות (SDS), תוויות ותעודות רישום של התכשירים שבשימוש במקום — מודפסים כאן כדי שיהיו זמינים גם בלי רשת.</div>
+      <table style="font-size:13px"><tr><th style="padding:6px 8px;background:#1a5c3a;color:#fff;text-align:right">תכשיר</th><th style="padding:6px 8px;background:#1a5c3a;color:#fff;text-align:right">מסמך</th><th style="padding:6px 8px;background:#1a5c3a;color:#fff">עמוד</th></tr>${rows||`<tr><td colspan="3" style="padding:10px;text-align:center;color:#94a3b8">לא צורפו עדיין מסמכים לחומרים</td></tr>`}</table>`; };
+  step("מסדר את הספר…");
+  let idxPages=1, idx=null;
+  for(let t=0;t<3;t++){ const b=await htmlPdfBlob(idxHtml(basePages+idxPages)); idx=await PDFDocument.load(await b.arrayBuffer()); if(idx.getPageCount()===idxPages) break; idxPages=idx.getPageCount(); }
+  const out=await PDFDocument.create();
+  (await out.copyPages(base,base.getPageIndices())).forEach(pg=>out.addPage(pg));
+  (await out.copyPages(idx,idx.getPageIndices())).forEach(pg=>out.addPage(pg));
+  for(const it of items){ if(it.fail) continue;
+    if(it.src){ try{ (await out.copyPages(it.src,it.src.getPageIndices())).forEach(pg=>out.addPage(pg)); }catch(e){} }
+    else { try{ const im=it.png?await out.embedPng(it.img):await out.embedJpg(it.img); const W=595.28,H=841.89,M=24; const sc=Math.min((W-2*M)/im.width,(H-2*M)/im.height); const w=im.width*sc,h=im.height*sc; const pg=out.addPage([W,H]); pg.drawImage(im,{x:(W-w)/2,y:(H-h)/2,width:w,height:h}); }catch(e){} } }
+  const bytes=await out.save(); return {blob:new Blob([bytes],{type:"application/pdf"}),items,pages:out.getPageCount()};
+}
+
 // ─── 📄 תוכן תיק ההדברה ───────────────────────────────────────────────
 async function imgDataUrl(path){ try{ const u=await signedUrl(path); if(!u) return ""; const b=await (await fetch(u)).blob(); return await new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(""); fr.readAsDataURL(b); }); }catch(e){ return ""; } }
 async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=false}={}){
@@ -8375,6 +8413,11 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
   const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
   const [prev,setPrev]=useState(""); const [showPrev,setShowPrev]=useState(true);
   const [openMats,setOpenMats]=useState(false); const [openDocs,setOpenDocs]=useState(false);
+  const [book,setBook]=useState(null); // {pick:[names], company:true, step, res}
+  const makeBook=async()=>{ persist(); setBook(b=>({...b,step:"מתחיל…",res:null}));
+    try{ const res=await buildPestBook(cur,{workers,execLogs,companyDocs:docs,matNames:book.pick,withCompany:book.company,onStep:t=>setBook(b=>b&&{...b,step:t})}); setBook(b=>b&&{...b,step:"",res}); }
+    catch(e){ alert("הכנת התיק נכשלה: "+(e.message||e)); setBook(b=>b&&{...b,step:""}); } };
+  const bookName="תיק הדברה מלא - "+m.customerName+".pdf";
   const hdr=(open,label,extra,onClick)=><button type="button" onClick={onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:8,textAlign:"right",border:"none",background:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}><b style={{flex:1,fontSize:15}}>{label}</b>{extra}<span style={{color:"#64748b",fontSize:13}}>{open?"▲ סגור":"▼ פתח"}</span></button>;
   React.useEffect(()=>{ let on=true; const t=setTimeout(()=>{ pestFileHtml(cur,{workers,execLogs,companyDocs:docs}).then(h=>on&&setPrev(h)).catch(()=>{}); },300); return ()=>{on=false;clearTimeout(t);}; },[JSON.stringify(mats),docs.length]);
   const missing=[!(m.stations||[]).length&&"מיפוי תחנות",(m.zones||[]).some(z=>z.drawing&&z.drawing.draft)&&"🚧 מפה בבנייה (לא מוצגת ללקוח עד שתסמן שהיא מוכנה)",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",mats.some(x=>!x.label)&&"תווית לחלק מהחומרים",false].filter(Boolean);
@@ -8424,9 +8467,33 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
       <CompanyDocsEditor docs={docs} setDocs={setDocs}/>
       </div>}
     </div>
+    {book&&<div style={{...sec,border:"2px solid #1a5c3a"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><b style={{flex:1,fontSize:15}}>📚 תיק מלא להדפסה</b><button type="button" onClick={()=>setBook(null)} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button></div>
+      <div style={{fontSize:12,color:"#475569",marginBottom:8}}>קובץ PDF אחד: התיק, אחריו דף תוכן, ואחריו כל התוויות, גיליונות הבטיחות ותעודות הרישום — מוכן להדפסה במכה אחת (לתיק פיזי שזמין גם בלי רשת).</div>
+      {!book.res&&!book.step&&<>
+        {mats.map(x=>{ const n=MATLIB_DOCS.filter(([k])=>x[k]).length; const on=book.pick.includes(x.name); return <label key={x.name} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:14,cursor:"pointer"}}>
+          <input type="checkbox" checked={on} onChange={()=>setBook(b=>({...b,pick:on?b.pick.filter(y=>y!==x.name):[...b.pick,x.name]}))} style={{width:18,height:18}}/>
+          <span style={{flex:1}}>{x.name}</span><span style={{fontSize:12,color:n?"#15803d":"#b45309"}}>{n?n+" מסמכים":"אין מסמכים מצורפים"}</span></label>; })}
+        {docs.some(d=>d&&d.path)&&<label style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:14,cursor:"pointer",borderTop:"1px solid #e2e8f0",marginTop:4}}><input type="checkbox" checked={book.company} onChange={()=>setBook(b=>({...b,company:!b.company}))} style={{width:18,height:18}}/><span style={{flex:1}}>מסמכי החברה (ביטוח וכו׳)</span><span style={{fontSize:12,color:"#64748b"}}>{docs.filter(d=>d&&d.path).length}</span></label>}
+        <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+          <button type="button" onClick={()=>setBook(b=>({...b,pick:mats.map(x=>x.name)}))} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>סמן הכל</button>
+          <button type="button" onClick={()=>setBook(b=>({...b,pick:[]}))} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>נקה</button>
+          <Btn style={{flex:1}} onClick={makeBook}>⚙️ הכן את התיק המלא</Btn>
+        </div></>}
+      {book.step&&<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {book.step}</div>}
+      {book.res&&<>
+        <div style={{fontSize:13,marginBottom:8}}>✅ מוכן — {book.res.pages} עמודים.{book.res.items.some(x=>x.fail)?<span style={{color:"#b45309"}}> {book.res.items.filter(x=>x.fail).length} קבצים לא נכנסו (רשום בדף התוכן).</span>:null}</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn style={{flex:"1 1 140px"}} onClick={()=>{ const u=URL.createObjectURL(book.res.blob); const w=window.open(u,"_blank"); if(!w) saveBlobAs(book.res.blob,bookName); }}>🖨️ פתח והדפס</Btn>
+          <Btn v="secondary" style={{flex:"1 1 120px"}} onClick={()=>saveBlobAs(book.res.blob,bookName)}>⬇️ הורד</Btn>
+          <Btn v="secondary" style={{flex:"1 1 160px"}} onClick={async()=>{ const file=new File([book.res.blob],bookName,{type:"application/pdf"}); try{ if(navigator.canShare&&navigator.canShare({files:[file]})) await navigator.share({files:[file],title:bookName}); else saveBlobAs(book.res.blob,bookName); }catch(e){ if(e&&e.name!=="AbortError") saveBlobAs(book.res.blob,bookName); } }}>📤 שלח לאיש הקשר</Btn>
+        </div>
+        <button type="button" onClick={()=>setBook(b=>({...b,res:null}))} style={{marginTop:6,border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↺ בחר חומרים אחרים</button></>}
+    </div>}
     {busy?<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      <Btn style={{flex:"1 1 180px"}} onClick={()=>{persist();openPrintAsync("תיק הדברה — "+m.customerName,pestFileHtml(cur,{workers,execLogs,companyDocs:docs}));}}>📄 פתח תיק להדפסה / PDF</Btn>
+      <Btn style={{flex:"1 1 100%"}} onClick={()=>setBook({pick:mats.map(x=>x.name),company:true,step:"",res:null})}>📚 תיק מלא להדפסה — כולל תוויות, SDS ותעודות (קובץ אחד)</Btn>
+      <Btn v="secondary" style={{flex:"1 1 180px"}} onClick={()=>{persist();openPrintAsync("תיק הדברה — "+m.customerName,pestFileHtml(cur,{workers,execLogs,companyDocs:docs}));}}>📄 התיק בלבד (בלי מסמכי החומרים)</Btn>
       <Btn v="secondary" style={{flex:"1 1 160px"}} onClick={sharePdf}>📤 שלח לאיש הקשר</Btn>
       <Btn v="ghost" onClick={()=>{persist();onClose();}}>💾 שמור וסגור</Btn>
     </div>}
@@ -11355,7 +11422,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="120";
+const APP_BUILD="121";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
