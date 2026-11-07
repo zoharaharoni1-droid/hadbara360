@@ -1815,6 +1815,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
   const updateField=(name,field,val)=>{
     onChange(selected.map(m=>m.name===name?{...m,[field]:val}:m));
     if(field==="batch"||field==="method"||field==="active"||field==="maker") chemMemSave(name,{[field]:val});
+    if(field==="batch") saveMatLibBatch(name,val);
     if(field==="dose"&&val){ const L=chemMemLoad()[name]||{}; const byPest={...(L.byPest||{})}; (pests||[]).forEach(p=>{byPest[p]=val;}); chemMemSave(name,{byPest,doses:[...new Set([...(L.doses||[]),val])]}); }
   };
   const toggleArea=(m,a)=>{ const cur=m.areas||[]; updateField(m.name,"areas",cur.includes(a)?cur.filter(x=>x!==a):[...cur,a]); };
@@ -2250,7 +2251,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   // 🧪 הערכה של המדביר (החומרים שלי) — מספר האצווה משם נכנס לבד
   const kitW=(prefillAppt&&workers.find(w=>w.id===prefillAppt.workerId))||(worker&&(workers.find(w=>String(w.id)===String(worker.id))||worker))||{};
   const kit=Array.isArray(kitW.chemKit)?kitW.chemKit:[];
-  const chemMem=React.useMemo(()=>{ const m=chemMemory(execLogs); kit.forEach(k=>{ if(!k||!k.name) return; m[k.name]={...(m[k.name]||{}),...Object.fromEntries(Object.entries(k).filter(([kk,v])=>v&&["batch","method","active","reg","maker","cat"].includes(kk)))}; }); return m; },[execLogs,JSON.stringify(kit)]);
+  const chemMem=React.useMemo(()=>{ const m=chemMemory(execLogs); kit.forEach(k=>{ if(!k||!k.name) return; m[k.name]={...(m[k.name]||{}),...Object.fromEntries(Object.entries(k).filter(([kk,v])=>v&&["batch","method","active","reg","maker","cat"].includes(kk)))}; });
+    // מספר האצווה האחרון שנרשם (ביומן, בתיק הדברה או ב"החומרים שלי") — גובר
+    const L=matLibGet(); Object.keys(L).forEach(n=>{ if(L[n]&&L[n].batch) m[n]={...(m[n]||{}),batch:L[n].batch}; }); return m; },[execLogs,JSON.stringify(kit)]);
   // Auto-detect worker from appointment
   const apptWorker = prefillAppt ? workers.find(w=>w.id===prefillAppt.workerId) : null;
   const defaultWorker = apptWorker || worker || {};
@@ -8051,6 +8054,51 @@ async function saveCompanyDocs(list){
   const {error}=await sb.storage.from('contracts').upload(name,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false});
   if(error) throw error;
 }
+// 📚 מאגר החומרים המשותף: SDS / תווית / תעודת רישום / מספר אצווה — נשמר פעם אחת ונכנס לכל התיקים והיומנים הבאים
+const MATLIB_DOCS=[["sds","📄 SDS / MSDS (גיליון בטיחות)"],["label","🏷️ תווית"],["regCert","📜 תעודת רישום"]];
+function matLibGet(){ try{ const v=JSON.parse(localStorage.getItem("h360_matlib")||"{}"); return v&&typeof v==="object"?v:{}; }catch(e){ return {}; } }
+async function loadMatLib(){
+  if(!sb) return matLibGet();
+  const {data,error}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}});
+  if(error||!data) return matLibGet();
+  const f=data.filter(x=>/^matlib-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return matLibGet();
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return matLibGet();
+  try{ const v=JSON.parse(await r.data.text()); const loc=matLibGet();
+    // שינויים מקומיים חדשים יותר (שעוד לא עלו) גוברים
+    Object.keys(loc).forEach(k=>{ const R=v[k]||{}, L=loc[k]||{}; v[k]=(L.updatedAt||0)>=(R.updatedAt||0)?{...R,...L}:{...L,...R}; });
+    localStorage.setItem("h360_matlib",JSON.stringify(v)); return v; }catch(e){ return matLibGet(); }
+}
+let __matLibQ=Promise.resolve();
+function saveMatLibEntry(name,patch){
+  if(!name) return Promise.resolve();
+  const loc=matLibGet(); loc[name]={...(loc[name]||{}),...patch,updatedAt:Math.max(Date.now(),((loc[name]||{}).updatedAt||0)+1)};
+  try{ localStorage.setItem("h360_matlib",JSON.stringify(loc)); }catch(e){}
+  try{ window.dispatchEvent(new Event("h360-matlib")); }catch(e){}
+  if(!sb) return Promise.resolve();
+  __matLibQ=__matLibQ.then(async()=>{ const cur=await loadMatLib().catch(()=>matLibGet());
+    const name2="company/matlib-"+String(Date.now()).padStart(15,"0")+".json";
+    await sb.storage.from('contracts').upload(name2,new Blob([JSON.stringify(cur)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }).catch(()=>{});
+  return __matLibQ;
+}
+const __matLibT={};
+function saveMatLibBatch(name,batch){ if(!name) return; clearTimeout(__matLibT[name]); __matLibT[name]=setTimeout(()=>saveMatLibEntry(name,{batch:String(batch||"").trim()}),1200); }
+function useMatLib(){
+  const [lib,setLib]=useState(()=>matLibGet());
+  React.useEffect(()=>{ let on=true; loadMatLib().then(v=>on&&setLib({...v})).catch(()=>{}); const h=()=>setLib({...matLibGet()}); window.addEventListener("h360-matlib",h); return ()=>{on=false;window.removeEventListener("h360-matlib",h);}; },[]);
+  return lib;
+}
+// זיהוי סוג הקובץ לפי השם
+function matDocKind(fname){ const n=String(fname||"").toLowerCase();
+  if(/m?sds|safety|גיליון|גליון|בטיחות|fds|fiche/.test(n)) return "sds";
+  if(/label|תווית|תוית|etiket|leaflet|עלון/.test(n)) return "label";
+  if(/רישום|registration|regist|cert|תעודה|היתר|permit|אישור/.test(n)) return "regCert";
+  return ""; }
+// השוואת שם חומר לשם קובץ — גם בעברית וגם באנגלית ("Delta Super" ↔ "דלתא סופר")
+function nameSkel(t){ let x=String(t||"").toLowerCase();
+  if(/[א-ת]/.test(x)){ const H={"ב":"b","ג":"g","ד":"d","ז":"z","ט":"t","ת":"t","כ":"k","ך":"k","ק":"k","ל":"l","מ":"m","ם":"m","נ":"n","ן":"n","ס":"s","ש":"s","פ":"p","ף":"p","צ":"ts","ץ":"ts","ר":"r"}; x=[...x].map(c=>H[c]||"").join(""); }
+  x=x.replace(/m?sds|label|registration|certificate|safety|data|sheet/g," ").replace(/ph/g,"p").replace(/ch/g,"").replace(/sh/g,"s").replace(/[v]/g,"b").replace(/f/g,"p").replace(/[cq]/g,"k").replace(/x/g,"ks").replace(/j/g,"g").replace(/[^a-z]/g,"").replace(/[aeiouyhw]/g,"").replace(/(.)\1+/g,"$1");
+  return x; }
+function fileMatchesMat(fname,matName){ const f=String(fname||"").replace(/\.[a-z0-9]+$/i,""); if(matName&&f.includes(matName)) return 3; const a=nameSkel(matName),b=nameSkel(f); return a.length>=3&&b.includes(a)?2:0; }
 function CompanyDocsEditor({docs,setDocs}){
   const [kind,setKind]=useState(COMPANY_DOC_KINDS[0]); const [exp,setExp]=useState(""); const [busy,setBusy]=useState(false);
   const add=async e=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy(true);
@@ -8083,8 +8131,12 @@ function firstAidFor(active){
 }
 function regRowFor(reg,name){ return (reg||[]).find(r=>r[0]===name)||null; }
 function matFromName(name,reg,maintAll){
+  const L=matLibGet()[name]||{}; const fromLib={}; ["sds","label","regCert","batch"].forEach(k=>{ if(L[k]) fromLib[k]=L[k]; });
   // אם החומר כבר מתועד בתיק אחר — לוקחים משם (כולל SDS ותווית שהועלו)
-  for(const m of (maintAll||[])) { const x=(m.fileMaterials||[]).find(y=>y.name===name&&(y.sds||y.label)); if(x) return {...x}; }
+  for(const m of (maintAll||[])) { const x=(m.fileMaterials||[]).find(y=>y.name===name&&(y.sds||y.label)); if(x) return {...x,...fromLib}; }
+  const base=matFromName0(name,reg); return {...base,...fromLib};
+}
+function matFromName0(name,reg){
   const r=regRowFor(reg,name); const l=(CHEMICALS||[]).find(c=>c.name===name)||{};
   return r?{name,reg:r[2],holder:r[1],form:r[3],active:r[4],targets:r[5],expiry:r[6]}:{name,reg:"",holder:l.mfr||"",form:l.method||"",active:l.active||"",targets:(l.targets||[]).join(", "),expiry:""};
 }
@@ -8112,7 +8164,7 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
     maps+=`<div style="page-break-inside:avoid;margin:10px 0"><div style="font-weight:700;margin-bottom:4px">🗺️ ${esc(z.name)}</div><div style="position:relative;display:inline-block;max-width:100%"><img src="${src}" style="max-width:100%;max-height:520px;display:block;border:1px solid #ddd"/>${pins}</div></div>`; }
   const stRows=(zones.length?[...zones,{id:"",name:"כללי"}]:[{id:"",name:""}]).map(z=>{ const items=stations.filter(s=>z.id?s.zone===z.id:(!s.zone||!zones.some(q=>q.id===s.zone))); if(!items.length) return "";
     return items.map((s,i)=>`<tr>${i===0?`<td style="${td};font-weight:700" rowspan="${items.length}">${esc(z.name||"—")}</td>`:""}<td style="${td};text-align:center;font-weight:700">${devType(s).icon} ${esc(s.num)}</td><td style="${td}">${esc(devType(s).label)}</td><td style="${td}">${esc(s.location||"")}</td></tr>`).join(""); }).join("");
-  const matRows=[]; for(const x of mats){ const docs=[]; if(x.label) docs.push("תווית: "+await link(x.label)); if(x.sds) docs.push("SDS: "+await link(x.sds));
+  const matRows=[]; for(const x of mats){ const docs=[]; if(x.label) docs.push("תווית: "+await link(x.label)); if(x.sds) docs.push("SDS: "+await link(x.sds)); if(x.regCert) docs.push("תעודת רישום: "+await link(x.regCert)); if(x.batch) docs.push("אצווה: "+esc(x.batch));
     matRows.push(`<tr><td style="${td};font-weight:700">${esc(x.name)}</td><td style="${td}">${esc(x.reg||"—")}</td><td style="${td}">${esc(x.holder||"")}</td><td style="${td}">${esc(x.form||"")}</td><td style="${td};font-size:11px">${esc(x.active||"")}</td><td style="${td};font-size:11px">${esc(x.targets||"")}</td><td style="${td};white-space:nowrap">${esc(x.expiry||"")}</td><td style="${td};font-size:11px">${docs.join("<br>")||"<span style='color:#b45309'>יש לצרף SDS ותווית</span>"}</td></tr>`); }
   const aid=[...new Set(mats.flatMap(x=>firstAidFor(x.active)))];
   const cdocs=[]; for(const d of companyDocs){ cdocs.push(`<tr><td style="${td};font-weight:700">${esc(d.kind)}</td><td style="${td}">${await link(d)}</td><td style="${td}">${d.expiry?fmtDate(d.expiry):"—"}</td></tr>`); }
@@ -8179,7 +8231,11 @@ function openPrintAsync(title,htmlPromise){
 }
 function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose}){
   const reg=useRegProducts();
+  const lib=useMatLib();
   const [mats,setMats]=useState(()=>m.fileMaterials||[]);
+  // משלים מהמאגר מה שחסר (לא דורס מה שכבר בתיק)
+  React.useEffect(()=>{ setMats(ms=>{ let ch=false; const n=ms.map(x=>{ const L=lib[x.name]; if(!L) return x; const y={...x}; ["sds","label","regCert","batch"].forEach(k=>{ if(!y[k]&&L[k]){ y[k]=L[k]; ch=true; } }); return y; }); return ch?n:ms; }); },[lib]);
+  const [drag,setDrag]=useState(null); const [ask,setAsk]=useState([]);
   const [docs,setDocs]=useState(()=>lsGet("h360_company_docs",[]));
   const [q,setQ]=useState(""); const [busy,setBusy]=useState("");
   React.useEffect(()=>{ loadCompanyDocs().then(setDocs).catch(()=>{}); },[]);
@@ -8188,7 +8244,18 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
   const sugg=[...new Set([...used,...kit])].filter(n=>n&&!mats.some(x=>x.name===n));
   const add=name=>{ if(!name||mats.some(x=>x.name===name)) return; setMats(ms=>[...ms,matFromName(name,reg,maintenance)]); setQ(""); };
   const hits=q.trim().length>=2?reg.filter(r=>r[0].includes(q.trim())||String(r[4]).toLowerCase().includes(q.trim().toLowerCase())).slice(0,8):[];
-  const upFor=async(i,key,e)=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy("מעלה…"); try{ const p=await uploadToContracts(file,"sds"); setMats(ms=>ms.map((x,j)=>j===i?{...x,[key]:p}:x)); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(""); };
+  const putDoc=async(name,key,file)=>{ const p=await uploadToContracts(file,"sds"); setMats(ms=>ms.map(x=>x.name===name?{...x,[key]:p}:x)); await saveMatLibEntry(name,{[key]:p}); };
+  const upFor=async(i,key,e)=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy("מעלה…"); try{ await putDoc(mats[i].name,key,file); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(""); };
+  // גרירה / בחירה של כמה קבצים ביחד — מזהה לבד מה SDS, מה תווית ומה תעודת רישום (ולאיזה חומר, אם גוררים על הרשימה כולה)
+  const dropFiles=async(files,matName)=>{ files=[...(files||[])].filter(f=>f&&f.size); if(!files.length) return; const left=[];
+    setBusy("מעלה "+files.length+" קבצים…");
+    for(const f of files){ let mn=matName;
+      if(!mn){ const sc=mats.map(x=>[x.name,fileMatchesMat(f.name,x.name)]).filter(z=>z[1]>0).sort((a,b)=>b[1]-a[1]); if(sc.length&&(sc.length===1||sc[0][1]>sc[1][1])) mn=sc[0][0]; else if(mats.length===1) mn=mats[0].name; }
+      const k=matDocKind(f.name); const cur=mats.find(x=>x.name===mn)||{};
+      if(mn&&k){ try{ await putDoc(mn,k,f); }catch(err){ alert("העלאה נכשלה ("+f.name+"): "+(err.message||err)); } }
+      else left.push({file:f,mat:mn||"",kind:k||(mn?((MATLIB_DOCS.find(([kk])=>!cur[kk])||[])[0]||""):"")}); }
+    setBusy(""); if(left.length) setAsk(a=>[...a,...left]); };
+  const dz=key=>({onDragOver:e=>{ e.preventDefault(); e.stopPropagation(); if(drag!==key) setDrag(key); },onDragLeave:e=>{ e.stopPropagation(); setDrag(null); },onDrop:e=>{ e.preventDefault(); e.stopPropagation(); setDrag(null); dropFiles(e.dataTransfer.files,key==="__all"?"":key); }});
   const persist=()=>{ onSave({...m,fileMaterials:mats}); };
   const cur={...m,fileMaterials:mats};
   const sharePdf=async()=>{ persist(); setBusy("מכין PDF…"); try{ const html=await pestFileHtml(cur,{workers,execLogs,companyDocs:docs,inline:true}); const b=await htmlPdfBlob(html); const name="תיק הדברה - "+m.customerName+".pdf"; const file=new File([b],name,{type:"application/pdf"});
@@ -8197,7 +8264,7 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
   const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
   const [prev,setPrev]=useState(""); const [showPrev,setShowPrev]=useState(true);
   React.useEffect(()=>{ let on=true; const t=setTimeout(()=>{ pestFileHtml(cur,{workers,execLogs,companyDocs:docs}).then(h=>on&&setPrev(h)).catch(()=>{}); },300); return ()=>{on=false;clearTimeout(t);}; },[JSON.stringify(mats),docs.length]);
-  const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",false].filter(Boolean);
+  const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",mats.some(x=>!x.label)&&"תווית לחלק מהחומרים",false].filter(Boolean);
   return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10}}>תיק דיגיטלי שנשאר אצל איש הקשר במקום: פרטי המקום והחברה, רישיונות המדבירים, היתרים וביטוח, מפת תחנות, רשימת החומרים עם מספר רישום, תווית ו-SDS, הוראות בטיחות ועזרה ראשונה, ויומן הביקורים. מתעדכן לבד אחרי כל ביקור.</div>
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
@@ -8205,16 +8272,29 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
       <button type="button" onClick={()=>setShowPrev(v=>!v)} style={{width:"100%",textAlign:"right",border:"none",background:"#f0f9f4",padding:"10px 12px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",color:"#1a5c3a"}}>👁️ התיק המלא {showPrev?"▲":"▼"}</button>
       {showPrev&&(prev?<iframe title="תצוגת תיק" srcDoc={'<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{margin:0;padding:14px;direction:rtl;color:#111}table{width:100%;border-collapse:collapse}img,svg{max-width:100%}a{color:#1d4ed8}</style></head><body>'+prev+'</body></html>'} style={{width:"100%",height:520,border:"none",display:"block",background:"#fff"}}/>:<div style={{padding:20,textAlign:"center",color:"#94a3b8"}}>⏳ טוען…</div>)}
     </div>
-    <div style={sec}>
-      <div style={{fontWeight:800,marginBottom:6}}>🧪 חומרים בתיק ({mats.length})</div>
-      {mats.map((x,i)=><div key={x.name} style={{border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+    <div style={{...sec,...(drag==="__all"?{outline:"3px dashed #16a34a",background:"#f0fdf4"}:{})}} {...dz("__all")}>
+      <div style={{fontWeight:800,marginBottom:2}}>🧪 חומרים בתיק ({mats.length})</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>💡 אפשר לגרור כמה קבצים ביחד — על חומר מסוים, או על כל הרשימה (המערכת מזהה לפי שם הקובץ איזה חומר ואם זה SDS / תווית / תעודת רישום). מה שמעלים נשמר במאגר ונכנס לבד לכל תיק הדברה הבא.</div>
+      {ask.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>❓ לא הצלחתי לזהות לבד — בחר לכל קובץ:</div>
+        {ask.map((a,ai)=><div key={ai} style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",padding:"4px 0",borderTop:ai?"1px solid #fde68a":"none"}}>
+          <span style={{fontSize:12,fontWeight:700,flex:"1 1 160px",wordBreak:"break-all"}}>📎 {a.file.name}</span>
+          <select value={a.mat} onChange={e=>setAsk(q=>q.map((z,j)=>j===ai?{...z,mat:e.target.value}:z))} style={{...fld,padding:"5px 6px",fontSize:12}}><option value="">— איזה חומר? —</option>{mats.map(x=><option key={x.name} value={x.name}>{x.name}</option>)}</select>
+          <select value={a.kind} onChange={e=>setAsk(q=>q.map((z,j)=>j===ai?{...z,kind:e.target.value}:z))} style={{...fld,padding:"5px 6px",fontSize:12}}><option value="">— מה זה? —</option>{MATLIB_DOCS.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+          <button type="button" disabled={!a.mat||!a.kind} onClick={async()=>{ setBusy("מעלה…"); try{ await putDoc(a.mat,a.kind,a.file); setAsk(q=>q.filter((_,j)=>j!==ai)); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(""); }} style={{border:"none",background:a.mat&&a.kind?CLR.primary:"#cbd5e1",color:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>שמור</button>
+          <button type="button" onClick={()=>setAsk(q=>q.filter((_,j)=>j!==ai))} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>✕</button>
+        </div>)}
+      </div>}
+      {mats.map((x,i)=><div key={x.name} {...dz(x.name)} style={{border:drag===x.name?"2px dashed #16a34a":"1px solid #e2e8f0",background:drag===x.name?"#f0fdf4":"#fff",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
         <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b>{x.name}</b><button type="button" onClick={()=>setMats(ms=>ms.filter((_,j)=>j!==i))} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>הסר</button></div>
         <div style={{fontSize:12,color:"#475569"}}>{[x.reg&&"רישום "+x.reg,x.holder,x.form,x.active].filter(Boolean).join(" · ")||"לא נמצא במאגר הרישום — אפשר לצרף את התווית"}</div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
-          {[["sds","📄 SDS (גיליון בטיחות)"],["label","🏷️ תווית"]].map(([k,l])=>x[k]?<span key={k} style={{fontSize:12,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"4px 8px"}}>✓ {l} <button type="button" onClick={()=>openDataFile(x[k])} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer"}}>פתח</button><button type="button" onClick={()=>setMats(ms=>ms.map((y,j)=>j===i?{...y,[k]:null}:y))} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>✕</button></span>
+          {MATLIB_DOCS.map(([k,l])=>x[k]?<span key={k} style={{fontSize:12,background:"#ecfdf5",border:"1px solid #a7f3d0",borderRadius:8,padding:"4px 8px"}}>✓ {l} <button type="button" onClick={()=>openDataFile(x[k])} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer"}}>פתח</button><button type="button" onClick={()=>{ setMats(ms=>ms.map((y,j)=>j===i?{...y,[k]:null}:y)); if(confirm("להוריד את הקובץ גם מהמאגר (כדי שלא ייכנס לתיקים הבאים)?")) saveMatLibEntry(x.name,{[k]:null}); }} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer"}}>✕</button></span>
             :<label key={k} style={{fontSize:12,border:"1.5px dashed #cbd5e1",borderRadius:8,padding:"4px 8px",cursor:"pointer"}}><input type="file" accept=".pdf,image/*" onChange={e=>upFor(i,k,e)} style={{display:"none"}}/>+ {l}</label>)}
+          <label style={{fontSize:12,border:"1.5px dashed #16a34a",color:"#166534",borderRadius:8,padding:"4px 8px",cursor:"pointer"}}><input type="file" multiple accept=".pdf,image/*" onChange={e=>{ const fl=[...(e.target.files||[])]; e.target.value=""; dropFiles(fl,x.name); }} style={{display:"none"}}/>📂 כמה קבצים ביחד</label>
           <a href={"https://www.google.com/search?q="+encodeURIComponent(x.name+" גיליון בטיחות SDS "+(x.holder||""))} target="_blank" rel="noopener" style={{fontSize:12,padding:"4px 8px",color:"#1d4ed8"}}>🔎 חפש SDS ברשת</a>
         </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}><span style={{fontSize:12,color:"#475569"}}>מספר אצווה:</span><input value={x.batch||""} onChange={e=>{ const v=e.target.value; setMats(ms=>ms.map((y,j)=>j===i?{...y,batch:v}:y)); saveMatLibBatch(x.name,v); chemMemSave(x.name,{batch:v}); }} placeholder="נשמר לכל היומנים והתיקים הבאים" style={{...fld,padding:"5px 8px",fontSize:13,flex:1,maxWidth:240}}/></div>
       </div>)}
       {sugg.length>0&&<div style={{margin:"6px 0"}}><div style={{fontSize:12,color:"#64748b",marginBottom:4}}>מהביקורים במקום ומ"החומרים שלי":</div><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{sugg.map(n=><button key={n} type="button" onClick={()=>add(n)} style={{padding:"5px 10px",borderRadius:20,border:"1.5px dashed "+CLR.primary,background:"#fff",color:CLR.primary,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ {n}</button>)}</div></div>}
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔎 חיפוש תכשיר במאגר הרשמי (שם או חומר פעיל)…" style={{...fld,width:"100%",marginTop:6}}/>
@@ -10604,9 +10684,9 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
   const save=(k,extra={})=>setWorkers(ws=>ws.map(x=>String(x.id)===String(wid)?{...x,chemKit:k,...extra}:x));
   const infoOf=name=>{ const r=byName[name]; const l=CHEMICALS.find(c=>c.name===name)||{}; const m=mem[name]||{};
     const cat=r?regCat(r):(m.cat||(l.method==="ג'ל"?"gel":l.method==="תחנת האכלה"?"rodent":"spray"));
-    return {active:(r&&r[4])||l.active||m.active||"",reg:(r&&r[2])||m.reg||"",maker:(r&&r[1])||l.mfr||m.maker||"",cat,method:m.method||(cat==="gel"?"ג'ל":cat==="rodent"?"תחנת האכלה":"ריסוס"),batch:m.batch||""}; };
+    return {active:(r&&r[4])||l.active||m.active||"",reg:(r&&r[2])||m.reg||"",maker:(r&&r[1])||l.mfr||m.maker||"",cat,method:m.method||(cat==="gel"?"ג'ל":cat==="rodent"?"תחנת האכלה":"ריסוס"),batch:(matLibGet()[name]||{}).batch||m.batch||""}; };
   const add=(name,batch)=>{ if(!name||kit.some(k=>k.name===name)) return; const inf=infoOf(name); save([...kit,{name,batch:batch||inf.batch||"",expiry:"",method:KIT_METHODS.includes(inf.method)?inf.method:"ריסוס",active:inf.active,reg:inf.reg,maker:inf.maker,cat:inf.cat}]); setQ(""); };
-  const upd=(i,k,v)=>save(kit.map((x,j)=>j===i?{...x,[k]:v}:x));
+  const upd=(i,k,v)=>{ save(kit.map((x,j)=>j===i?{...x,[k]:v}:x)); if(k==="batch"&&kit[i]) saveMatLibBatch(kit[i].name,v); };
   const sugg=q.trim().length>=2?allNames.filter(n=>elNorm(n).includes(elNorm(q))&&!kit.some(k=>k.name===n)).slice(0,8):[];
   // הקלטה / הקלדה חופשית: "סיפרמטרין אצווה 12345, פרוג'ל אצווה 778"
   const fromText=t=>{ const N=elNorm(t); const found=[]; const cands=[...allNames].sort((a,b)=>b.length-a.length); let N2=N;
@@ -11146,7 +11226,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="115";
+const APP_BUILD="116";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
