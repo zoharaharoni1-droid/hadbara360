@@ -620,7 +620,7 @@ const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["ד�
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
 // ── מוצרי הדברה (לא כימיים): מלכודות, תחנות ניטור ואמצעי מניעה
 const DEVICE_TYPES = [
-  {g:"מכרסמים",items:["תיבת האכלה כולל רעלים","מילוי רעל בתיבה קיימת","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
+  {g:"מכרסמים",items:["תיבת האכלה כולל רעלים","מילוי רעל בתיבה קיימת","פיתיון בבור ביוב","פיתיון במחילה","פיתיון במקום אחר","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
   {g:"חרקים",items:["תחנת ניטור לתיקנים","מלכודת פרומונים לעש מזון","מלכודת פרומונים לעש בגדים","מלכודת אור UV לזבובים","החלפת משטח דבק במלכודת אור","מלכודת זבובים (פיתיון)","מלכודת יתושים","מלכודת דבק לנחשים / עקרבים"]},
   {g:"מניעה",items:["אטימת פתחים (צמר פלדה / קצף)","דוקרנים נגד יונים","רשת נגד יונים"]},
 ];
@@ -638,7 +638,11 @@ const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g
 const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.every(g=>parseFloat(r[g.k])===0); };
 const reentryLines = r => { const sh=reentryShown(r); if(sh.length&&sh.every(g=>parseFloat(r[g.k])===0)) return ["אין צורך לצאת מהמקום"]; return sh.map(g=>g.l+": "+hrsLabel(r[g.k])); };
 // תחנות/תיבות האכלה: חדשות שהובאו + מילוי של קיימות
-const stationsText = m => { const n=parseInt(m&&m.stationsNew)||0, r=parseInt(m&&m.stationsRefill)||0; if(n||r) return [n?n+" תיבות האכלה חדשות":"",r?"מילוי "+r+" תיבות קיימות":""].filter(Boolean).join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
+// פיזור רעל למכרסמים: תיבות חדשות / מילוי קיימות / בורות ביוב / מחילות / אחר — ממקום אחד לכל היומן
+const RODENT_SPOTS=[["stationsNew","🆕 תיבות חדשות שהבאתי","תיבת האכלה כולל רעלים","",n=>n+" תיבות האכלה חדשות"],["stationsRefill","🔄 מילוי תיבות קיימות","מילוי רעל בתיבה קיימת","",n=>"מילוי "+n+" תיבות קיימות"],
+  ["sewers","🕳️ בורות ביוב","פיתיון בבור ביוב","בורות ביוב",n=>"פיתיון ב-"+n+" בורות ביוב"],["burrows","🐀 מחילות","פיתיון במחילה","מחילות",n=>"פיתיון ב-"+n+" מחילות"],["otherQty","📍 אחר","פיתיון במקום אחר","",(n,m)=>"פיתיון ב-"+n+" "+((m&&m.otherPlace)||"מקומות נוספים")]];
+const rodentSpotsOn=m=>m&&(m.method==="תחנת האכלה"||m.cat==="rodent"||RODENT_SPOTS.some(([k])=>parseInt(m[k])>0));
+const stationsText = m => { const parts=RODENT_SPOTS.map(([k,,,,txt])=>{ const n=parseInt(m&&m[k])||0; return n?txt(n,m):""; }).filter(Boolean); if(parts.length) return parts.join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
 // ── הנחיות ללקוח — כפתורים מוכנים
 const INSTR_BASE = [
   "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
@@ -1901,18 +1905,25 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               </select>
             </div>
           </div>
-          {m.method==="תחנת האכלה"&&(()=>{ const cnt=(field,label,hint)=>{ const v=parseInt(m[field])||0; const upd=nv=>{ const o={...m,[field]:String(Math.max(0,nv))}; o.stations=String((parseInt(o.stationsNew)||0)+(parseInt(o.stationsRefill)||0)||""); onChange(selected.map(x=>x.name===m.name?o:x)); };
-              return <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0"}}>
-                <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:700,color:"#1e40af"}}>{label}<span style={{display:"block",fontSize:11,fontWeight:400,color:"#64748b"}}>{hint}</span></span>
-                <span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}><button type="button" onClick={()=>upd(v-1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
-                <input type="number" inputMode="numeric" value={m[field]||""} placeholder="0" onChange={e=>upd(parseInt(e.target.value)||0)} style={{width:54,padding:"7px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:16,textAlign:"center",fontWeight:700}}/>
-                <button type="button" onClick={()=>upd(v+1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button></span>
+          {rodentSpotsOn(m)&&(()=>{ const setN=(field,nv)=>{ const o={...m,[field]:String(Math.max(0,nv))}; if(o[field]==="0") o[field]="";
+              o.stations=String(RODENT_SPOTS.reduce((t,[k])=>t+(parseInt(o[k])||0),0)||"");
+              // אזורי יישום — מסמנים לבד בורות ביוב / מחילות
+              const auto=new Set(o.autoAreas||[]); let areas=[...(o.areas||[])];
+              RODENT_SPOTS.forEach(([k,,,area])=>{ if(!area) return; const on=(parseInt(o[k])||0)>0; if(on&&!areas.includes(area)){ areas.push(area); auto.add(area); } if(!on&&auto.has(area)){ areas=areas.filter(x=>x!==area); auto.delete(area); } });
+              o.areas=areas; o.autoAreas=[...auto]; onChange(selected.map(x=>x.name===m.name?o:x)); };
+            const cnt=(field,label,hint)=>{ const v=parseInt(m[field])||0;
+              return <div key={field} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #dbeafe"}}>
+                <span style={{flex:"1 1 auto",minWidth:0,fontSize:14,fontWeight:700,color:v?"#1e40af":"#475569"}}>{label}{hint&&<span style={{display:"block",fontSize:11,fontWeight:400,color:"#64748b"}}>{hint}</span>}</span>
+                <span style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}><button type="button" onClick={()=>setN(field,v-1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>−</button>
+                <input type="number" inputMode="numeric" value={m[field]||""} placeholder="0" onChange={e=>setN(field,parseInt(e.target.value)||0)} style={{width:54,padding:"7px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:16,textAlign:"center",fontWeight:700}}/>
+                <button type="button" onClick={()=>setN(field,v+1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button></span>
               </div>; };
-            const legacyOnly=!m.stationsNew&&!m.stationsRefill&&m.stations;
+            const legacyOnly=!RODENT_SPOTS.some(([k])=>m[k])&&m.stations;
+            const hints={stationsNew:"נכנס לבד ל\"מוצרי הדברה\" כתיבת האכלה כולל רעלים",stationsRefill:"תיבות שכבר היו במקום — רק מילוי רעל",sewers:"מסמן לבד גם באזורי היישום ובמוצרי ההדברה",burrows:"מסמן לבד גם באזורי היישום ובמוצרי ההדברה",otherQty:""};
             return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 תיבות האכלה (אפשר גם וגם)</div>
-              {cnt("stationsNew","🆕 תיבות חדשות שהבאתי","נכנס אוטומטית ל\"מוצרי הדברה\" כתיבת האכלה כולל רעלים")}
-              {cnt("stationsRefill","🔄 מילוי תיבות קיימות","תיבות שכבר היו במקום — רק מילוי רעל")}
+              <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 איפה הנחתי את הרעל? (אפשר כמה ביחד)</div>
+              {RODENT_SPOTS.map(([k,l])=>cnt(k,l,hints[k]))}
+              {(parseInt(m.otherQty)||0)>0&&<input value={m.otherPlace||""} onChange={e=>onChange(selected.map(x=>x.name===m.name?{...x,otherPlace:e.target.value}:x))} placeholder="איפה? למשל: חללי קירות, גג, מרזבים" style={{width:"100%",marginTop:4,padding:"8px 10px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"}}/>}
               {legacyOnly&&<div style={{fontSize:12,color:"#64748b"}}>ביומן הישן נרשמו {m.stations} תחנות</div>}
             </div>; })()}
           <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
@@ -2345,17 +2356,27 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     }
   },[matKey,pestKey]);
   // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
-  const newBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsNew)||0),0);
-  const refillBoxes=f.materials.filter(m=>m.method==="תחנת האכלה").reduce((s0,m)=>s0+(parseInt(m.stationsRefill)||0),0);
+  const spotTotals=RODENT_SPOTS.map(([k])=>f.materials.reduce((s0,m)=>s0+(parseInt(m[k])||0),0));
+  const newBoxes=spotTotals[0], refillBoxes=spotTotals[1];
   React.useEffect(()=>{
-    const BOX="תיבת האכלה כולל רעלים", REF="מילוי רעל בתיבה קיימת";
-    setF(x=>{ let dv=x.devices.map(d=>d.type==="תיבת הכלה כולל רעלים"?{...d,type:BOX}:d);
+    setF(x=>{ let dv=x.devices.map(d=>d.type==="תיבת הכלה כולל רעלים"?{...d,type:"תיבת האכלה כולל רעלים"}:d);
       const sync=(type,n)=>{ const i=dv.findIndex(d=>d.type===type);
-        if(n>0){ if(i<0) dv.push({type,qty:n,location:"",auto:true}); else if(dv[i].auto) dv[i]={...dv[i],qty:n}; }
+        if(n>0){ if(i<0) dv.push({type,qty:n,location:"",auto:true}); else dv[i]={...dv[i],qty:n,auto:true}; }
         else if(i>=0&&dv[i].auto) dv.splice(i,1); };
-      sync(BOX,newBoxes); sync(REF,refillBoxes);
+      RODENT_SPOTS.forEach(([,,dt],i)=>sync(dt,spotTotals[i]));
+      const op=x.materials.map(m=>m.otherPlace).filter(Boolean).join(", "); const oi=dv.findIndex(d=>d.type==="פיתיון במקום אחר"); if(oi>=0&&op&&(!dv[oi].location||dv[oi].auto)) dv[oi]={...dv[oi],location:op};
       return JSON.stringify(dv)===JSON.stringify(x.devices)?x:{...x,devices:dv}; });
-  },[newBoxes,refillBoxes]);
+  },[spotTotals.join(","),f.materials.map(m=>m.otherPlace||"").join("|")]);
+  // ולהפך: סימנת ב"מוצרי הדברה" (למשל 4 תיבות) — נכנס לבד לחומר הרעל, בלי לסמן שוב
+  const devKey=JSON.stringify((f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt===d.type)).map(d=>[d.type,d.qty]));
+  React.useEffect(()=>{ const dvs=(f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt===d.type)&&(parseInt(d.qty)||0)>0); if(!dvs.length) return;
+    setF(x=>{ const ri=x.materials.findIndex(m=>rodentSpotsOn(m)); if(ri<0) return x; let mats=[...x.materials]; let ch=false;
+      dvs.forEach(d=>{ const sp=RODENT_SPOTS.find(([,,dt])=>dt===d.type); const k=sp[0]; const tot=mats.reduce((t,m)=>t+(parseInt(m[k])||0),0); const dq=parseInt(d.qty)||0; if(dq===tot) return;
+        let ti=mats.findIndex(m=>(parseInt(m[k])||0)>0); if(ti<0) ti=ri;
+        const o={...mats[ti]}; const nv=Math.max(0,(parseInt(o[k])||0)+dq-tot); o[k]=nv?String(nv):""; o.stations=String(RODENT_SPOTS.reduce((t,[kk])=>t+(parseInt(o[kk])||0),0)||"");
+        if(sp[3]&&nv>0&&!(o.areas||[]).includes(sp[3])){ o.areas=[...(o.areas||[]),sp[3]]; o.autoAreas=[...(o.autoAreas||[]),sp[3]]; } mats[ti]=o; ch=true; });
+      return ch?{...x,materials:mats}:x; });
+  },[devKey,f.materials.map(m=>m.name+(rodentSpotsOn(m)?"r":"")).join("|")]);
   const elRef=React.useRef(null);
   const applySmart=r=>{
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
@@ -2665,7 +2686,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         f.materials.filter(m=>!String(m.active||"").trim()).forEach(m=>add("chem","חומר פעיל — "+m.name));
         f.materials.filter(m=>m.method!=="ג'ל"&&m.method!=="תחנת האכלה"&&!String(m.dose||"").trim()).forEach(m=>add("chem","מינון — "+m.name));
         f.materials.filter(m=>!(m.areas||[]).length).forEach(m=>add("chem","אזורי יישום — "+m.name));
-        f.materials.filter(m=>m.method==="תחנת האכלה"&&!m.stationsNew&&!m.stationsRefill&&!m.stations).forEach(m=>add("chem","כמה תיבות (חדשות / מילוי) — "+m.name));
+        f.materials.filter(m=>m.method==="תחנת האכלה"&&!RODENT_SPOTS.some(([k])=>m[k])&&!m.stations).forEach(m=>add("chem","איפה הנחת את הרעל (תיבות / ביוב / מחילות) — "+m.name));
         if(f.exterminate&&!REENTRY_GROUPS.some(g=>f.reentry[g.k])) add("reentry","זמן מחוץ למקום");
         if(!f.instructions.length) add("instr","הנחיות ללקוח");
         if(!String(f.notes||"").trim()) add("notes","הערות / תיאור הטיפול");
@@ -11422,7 +11443,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="121";
+const APP_BUILD="122";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
