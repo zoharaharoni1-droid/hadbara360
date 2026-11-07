@@ -2266,6 +2266,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     placePhone:    initialData?.placePhone    || "",
     freeText:      initialData?.freeText      || "",
     customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
+    maintenanceId: initialData?.maintenanceId ?? prefillAppt?.maintenanceId ?? null,
     phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || ""),
     address:       initialData?.address!=null&&initialData?.unit!=null ? initialData.address : navAddr(initialData?.address || prefillAppt?.address || ""),
     unit:          initialData?.unit ?? (prefillAppt?.unit || unitLine({floor:prefillAppt?.floor,aptNum:prefillAppt?.aptNum||(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).aptNum,entrance:prefillAppt?.entrance}) || unitFromAddr(initialData?.address || prefillAppt?.address || "")),
@@ -2882,7 +2883,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   // הגעה מ"לקוח חדש → יומן ביצוע עכשיו"
   React.useEffect(()=>{ const c=window.__h360PendingExec; if(!c) return; window.__h360PendingExec=null;
     setPrefillAppt(null); setSavedLog(null);
-    setExtracted({clientName:custDocName(c),contactName:c.contactName||"",placeName:c.placeName||(c.contactName?c.name:""),clientKind:c.contactName?"biz":"private",taxId:c.taxId||"",customerId:c.id,phone:c.phone||"",address:[c.street&&(c.street+(c.buildingNum?" "+c.buildingNum:"")),c.city].filter(Boolean).join(", ")||c.address||"",unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||"",structureType:c.propertyType||"",date:todayStr()});
+    setExtracted({clientName:custDocName(c),contactName:c.contactName||"",placeName:c.placeName||(c.contactName?c.name:""),clientKind:c.contactName?"biz":"private",taxId:c.taxId||"",customerId:c.id,phone:c.phone||"",address:[c.street&&(c.street+(c.buildingNum?" "+c.buildingNum:"")),c.city].filter(Boolean).join(", ")||c.address||"",unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||"",structureType:c.propertyType||"",date:todayStr(),...(c.__maintId!=null?{maintenanceId:c.__maintId}:{})});
     setFormKey(k=>k+1); setMode("new"); },[]);
   const [autoInv,setAutoInv]=useState(false);
   const saveDocTab=rec=>{ const saved={...rec,id:nextId(finance||[])}; setFinance&&setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x)); return saved; };
@@ -8289,7 +8290,7 @@ function openPrintAsync(title,htmlPromise){
   htmlPromise.then(html=>{ w.document.open(); w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;}body{padding:28px;color:#111;direction:rtl;background:#fff;}table{width:100%;border-collapse:collapse;}a{color:#1d4ed8}@media print{.noprint{display:none;}body{padding:10px;}h2{page-break-after:avoid}tr{page-break-inside:avoid}}.btnbar{position:fixed;top:10px;left:10px;display:flex;gap:8px;}.btnbar button{padding:8px 16px;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700;}</style></head><body><div class="btnbar noprint"><button onclick="window.print()" style="background:#1a5c3a;color:#fff;">🖨️ הדפס / שמור PDF</button><button onclick="window.close()" style="background:#eee;color:#333;">סגור</button></div><div style="margin-top:48px;">${html}</div></body></html>`); w.document.close(); })
     .catch(e=>{ w.document.body.innerHTML="<p style='padding:30px'>שגיאה: "+(e.message||e)+"</p>"; });
 }
-function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose}){
+function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,onNewExec}){
   const reg=useRegProducts();
   const lib=useMatLib();
   const [mats,setMats]=useState(()=>m.fileMaterials||[]);
@@ -8327,6 +8328,7 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose})
   const missing=[!(m.stations||[]).length&&"מיפוי תחנות",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",mats.some(x=>!x.label)&&"תווית לחלק מהחומרים",false].filter(Boolean);
   return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10}}>תיק דיגיטלי שנשאר אצל איש הקשר במקום: פרטי המקום והחברה, רישיונות המדבירים, היתרים וביטוח, מפת תחנות, רשימת החומרים עם מספר רישום, תווית ו-SDS, הוראות בטיחות ועזרה ראשונה, ויומן הביקורים. מתעדכן לבד אחרי כל ביקור.</div>
+    {onNewExec&&<button type="button" onClick={()=>{ persist(); onNewExec(m); }} style={{width:"100%",marginBottom:10,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה <span style={{fontWeight:400,fontSize:12}}>({maintLogs(m,execLogs).length} יומנים בתיק)</span></button>}
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
     <div style={{border:"1px solid #e2e8f0",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
       <button type="button" onClick={()=>setShowPrev(v=>!v)} style={{width:"100%",textAlign:"right",border:"none",background:"#f0f9f4",padding:"10px 12px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",color:"#1a5c3a"}}>👁️ התיק המלא {showPrev?"▲":"▼"}</button>
@@ -8398,6 +8400,13 @@ function maintVisitDates(m, fromIso, toIso){
   return out;
 }
 function maintDaysLeft(m){ if(!m.endDate) return null; const t=new Date(todayStr()+"T12:00:00"), e=new Date(m.endDate+"T12:00:00"); return Math.round((e-t)/86400000); }
+// לקוח מתוך חוזה אחזקה / תיק הדברה — כדי שיופיע ב"לקוחות" ובחיפוש של יומן ביצוע
+function maintToCustomer(m){ const cs=maintContacts(m).filter(c=>c&&(c.name||c.phone)); const a=(m.city||m.street)?m:splitAddr(m.address);
+  const pt=/מסעדה/.test(m.type||"")?"מסעדה":/גן ילדים/.test(m.type||"")?"גן ילדים":/מלון/.test(m.type||"")?"מלון":/בניין משותף/.test(m.type||"")?"בניין משותף":/וילה|דירת גן/.test(m.type||"")?"בית פרטי":/עסק|מוסד|ממסד/.test(m.type||"")?"עסק":"";
+  const biz=!!(cs[0]&&cs[0].name&&cs[0].name.trim()!==String(m.customerName||"").trim());
+  return {name:String(m.customerName||"").trim(),...(biz?{contactName:cs[0].name,placeName:String(m.customerName||"").trim()}:{}),phone:(cs[0]||{}).phone||m.phone||"",
+    contacts:cs.slice(biz?1:0).map(c=>({name:c.name||"",phone:c.phone||"",role:c.role||""})),city:a.city||"",street:a.street||"",buildingNum:a.houseNum||"",addrDetails:a.addrMore||"",address:m.address||joinAddr(a),
+    propertyType:pt,status:"פעיל",notes:"",source:"אחזקה",maintenanceId:m.id}; }
 function maintLogs(m, execLogs){ return (execLogs||[]).filter(l=>!l.deleted&&(String(l.maintenanceId)===String(m.id)||(!l.maintenanceId&&m.customerName&&String(l.clientName||"").trim()===String(m.customerName).trim()))).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))); }
 // יוצר תורים חסרים לחוזים עם שיבוץ אוטומטי (עד X ימים קדימה)
 function maintSchedule(maintenance, appointments, workers, horizonDays=62){
@@ -8640,6 +8649,9 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
   const [histFor,setHistFor]=useState(null);
   const [reportFor,setReportFor]=useState(null);
   const [fileFor,setFileFor]=useState(null);
+  // 📋 יומן ביצוע ישר מהאחזקה / מתיק ההדברה — מקושר לחוזה (נכנס לתיק ולהיסטוריה)
+  const execForMaint=m=>{ const c=(customers||[]).find(x=>!x.deleted&&m.customerId!=null&&String(x.id)===String(m.customerId))||{...maintToCustomer(m)};
+    window.__h360PendingExec={...c,__maintId:m.id}; setFileFor(null); window.__h360Nav&&window.__h360Nav("execlog"); };
   const [reportMonth,setReportMonth]=useState(()=>todayStr().slice(0,7));
   const runSchedule=(list,silent)=>{ if(!setAppointments) return 0; const add=maintSchedule(list||maintenance,appointments,workers); if(add.length) setAppointments(as=>{let out=[...as];add.forEach(a=>{ if(!out.some(x=>String(x.maintenanceId)===String(a.maintenanceId)&&x.date===a.date)) out.push({...a,id:nextId(out)}); });return out;}); if(!silent) alert(add.length?`📅 שובצו ${add.length} ביקורים ביומן`:"כל הביקורים כבר משובצים"); return add.length; };
   React.useEffect(()=>{ if(maintenance.some(m=>m.autoSchedule)) runSchedule(maintenance,true); },[maintenance.length]);
@@ -8719,6 +8731,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
             <button type="button" onClick={()=>setReportFor(m)} style={{flex:1,border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>📄 דוח חודשי</button>
             <button type="button" onClick={()=>setFileFor(m)} style={{flex:1,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📁 תיק הדברה</button>
           </div>
+          <button type="button" onClick={()=>execForMaint(m)} style={{width:"100%",marginBottom:8,border:"1.5px solid #1a5c3a",background:"#f0fdf4",color:"#1a5c3a",borderRadius:8,padding:"7px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה</button>
           {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
           </div>}
@@ -8750,7 +8763,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
         {visits.length===0?<div style={{color:CLR.muted,fontSize:13}}>אין ביקורים משובצים</div>:
           <div style={{display:"flex",flexDirection:"column",gap:4}}>{visits.slice(0,30).map(a=><div key={a.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"6px 10px",background:CLR.surface,borderRadius:8}}><span>{fmtDate(a.date)} {a.time||""}</span><span style={{color:CLR.muted}}>{a.workerName} · {a.status}</span></div>)}</div>}
       </Modal>;})()}
-    {fileFor&&<PestFileModal m={maintenance.find(x=>x.id===fileFor.id)||fileFor} maintenance={maintenance} workers={workers} execLogs={execLogs} onSave={nm=>setMaintenance(ms=>ms.map(x=>x.id===nm.id?{...x,fileMaterials:nm.fileMaterials}:x))} onClose={()=>setFileFor(null)}/>}
+    {fileFor&&<PestFileModal m={maintenance.find(x=>x.id===fileFor.id)||fileFor} maintenance={maintenance} workers={workers} execLogs={execLogs} onSave={nm=>setMaintenance(ms=>ms.map(x=>x.id===nm.id?{...x,fileMaterials:nm.fileMaterials}:x))} onClose={()=>setFileFor(null)} onNewExec={mm=>execForMaint(mm)}/>}
     {reportFor&&<Modal title={"📄 דוח חודשי — "+reportFor.customerName} onClose={()=>setReportFor(null)} width={420}>
       <Inp label="חודש" type="month" value={reportMonth} onChange={v=>setReportMonth(v)}/>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:12}}>{maintLogs(reportFor,execLogs).filter(l=>String(l.date||"").startsWith(reportMonth)).length} ביקורים בחודש הזה</div>
@@ -11286,7 +11299,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="117";
+const APP_BUILD="118";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -11441,6 +11454,19 @@ function App(){
 
   const [notes,setNotes]=useLS("notes", []);
   const [maintenance,setMaintenance]=useLS("maintenance", []);
+  // כל מקום שנכנס לאחזקה / תיק הדברה — נכנס גם ל"לקוחות" (ומקושר אליו), כדי שיימצא בחיפוש וביומן ביצוע
+  React.useEffect(()=>{ const t=setTimeout(()=>{ try{
+    const norm=v=>String(v||"").replace(/["'״׳]/g,"").replace(/\s+/g," ").trim(); const dig=v=>String(v||"").replace(/\D/g,"");
+    const links={}; const add=[]; let cs=[...(customers||[])];
+    (maintenance||[]).forEach(m=>{ if(!m||m.deleted||!norm(m.customerName)) return;
+      if(m.customerId!=null&&cs.some(c=>!c.deleted&&String(c.id)===String(m.customerId))) return;
+      const mc=maintToCustomer(m); const ph=dig(mc.phone);
+      let hit=cs.find(c=>!c.deleted&&String(c.maintenanceId)===String(m.id))||cs.find(c=>!c.deleted&&[c.name,c.placeName].some(n=>norm(n)&&norm(n)===norm(m.customerName))&&(!mc.city||!c.city||norm(c.city)===norm(mc.city)))||(ph.length>=9?cs.find(c=>!c.deleted&&dig(c.phone)===ph&&[c.name,c.placeName,c.contactName].some(n=>norm(n)&&norm(m.customerName).includes(norm(n).split(" ")[0]))):null);
+      if(!hit){ const now=new Date().toISOString(); hit={...mc,id:nextId([...cs,...add]),createdAt:now,updatedAt:now}; add.push(hit); cs.push(hit); }
+      links[m.id]=hit.id; });
+    if(add.length) setCustomers(c0=>[...c0,...add.filter(a=>!c0.some(x=>String(x.id)===String(a.id)))]);
+    if(Object.keys(links).length) setMaintenance(ms=>ms.map(m=>links[m.id]!=null&&String(m.customerId)!==String(links[m.id])?{...m,customerId:links[m.id]}:m));
+  }catch(e){} },3000); return ()=>clearTimeout(t); },[JSON.stringify((maintenance||[]).map(m=>[m.id,m.customerName,m.customerId,m.deleted])),(customers||[]).length]);
   const [projects,setProjects]=useLS("projects", []);
   const [collabs,setCollabs]=useLS("collabs", []);
   const [scheduledMsgs,setScheduledMsgs]=useLS("scheduledMsgs", []);
