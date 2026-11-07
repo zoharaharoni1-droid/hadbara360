@@ -620,7 +620,7 @@ const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["ד�
 const nextExecNum=(logs)=>{ let mx=1000; for(const l of (logs||[])){ const n=parseInt(l&&l.docNum,10); if(String(n)===String(l&&l.docNum)&&n>mx) mx=n; } return String(mx+1); };
 // ── מוצרי הדברה (לא כימיים): מלכודות, תחנות ניטור ואמצעי מניעה
 const DEVICE_TYPES = [
-  {g:"מכרסמים",items:["תיבת האכלה כולל רעלים","מילוי רעל בתיבה קיימת","פיתיון בבור ביוב","פיתיון במחילה","פיתיון במקום אחר","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
+  {g:"מכרסמים",items:["תיבת האכלה כולל רעלים","מלכודת דבק","מלכודת דבק ספר","מלכודת דבק בתיבה","מלכודת קפיץ","מלכודת קפיץ בתיבה","מלכודת כלוב","תחנת האכלה ריקה (ניטור)"]},
   {g:"חרקים",items:["תחנת ניטור לתיקנים","מלכודת פרומונים לעש מזון","מלכודת פרומונים לעש בגדים","מלכודת אור UV לזבובים","החלפת משטח דבק במלכודת אור","מלכודת זבובים (פיתיון)","מלכודת יתושים","מלכודת דבק לנחשים / עקרבים"]},
   {g:"מניעה",items:["אטימת פתחים (צמר פלדה / קצף)","דוקרנים נגד יונים","רשת נגד יונים"]},
 ];
@@ -639,8 +639,10 @@ const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.ever
 const reentryLines = r => { const sh=reentryShown(r); if(sh.length&&sh.every(g=>parseFloat(r[g.k])===0)) return ["אין צורך לצאת מהמקום"]; return sh.map(g=>g.l+": "+hrsLabel(r[g.k])); };
 // תחנות/תיבות האכלה: חדשות שהובאו + מילוי של קיימות
 // פיזור רעל למכרסמים: תיבות חדשות / מילוי קיימות / בורות ביוב / מחילות / אחר — ממקום אחד לכל היומן
-const RODENT_SPOTS=[["stationsNew","🆕 תיבות חדשות שהבאתי","תיבת האכלה כולל רעלים","",n=>n+" תיבות האכלה חדשות"],["stationsRefill","🔄 מילוי תיבות קיימות","מילוי רעל בתיבה קיימת","",n=>"מילוי "+n+" תיבות קיימות"],
-  ["sewers","🕳️ בורות ביוב","פיתיון בבור ביוב","בורות ביוב",n=>"פיתיון ב-"+n+" בורות ביוב"],["burrows","🐀 מחילות","פיתיון במחילה","מחילות",n=>"פיתיון ב-"+n+" מחילות"],["otherQty","📍 אחר","פיתיון במקום אחר","",(n,m)=>"פיתיון ב-"+n+" "+((m&&m.otherPlace)||"מקומות נוספים")]];
+// רק תיבה חדשה שהבאתי היא "מוצר" (פיזי) — מילוי / ביוב / מחילות הם לא מוצרים
+const RODENT_SPOTS=[["stationsNew","🆕 תיבות חדשות שהבאתי","תיבת האכלה כולל רעלים","",n=>n+" תיבות האכלה חדשות"],["stationsRefill","🔄 מילוי תיבות קיימות",null,"",n=>"מילוי "+n+" תיבות קיימות"],
+  ["sewers","🕳️ בורות ביוב",null,"בורות ביוב",n=>"פיתיון ב-"+n+" בורות ביוב"],["burrows","🐀 מחילות",null,"מחילות",n=>"פיתיון ב-"+n+" מחילות"],["otherQty","📍 אחר",null,"",(n,m)=>"פיתיון ב-"+n+" "+((m&&m.otherPlace)||"מקומות נוספים")]];
+const NOT_PRODUCT_DEVS=new Set(["מילוי רעל בתיבה קיימת","פיתיון בבור ביוב","פיתיון במחילה","פיתיון במקום אחר"]);
 const rodentSpotsOn=m=>m&&(m.method==="תחנת האכלה"||m.cat==="rodent"||RODENT_SPOTS.some(([k])=>parseInt(m[k])>0));
 const stationsText = m => { const parts=RODENT_SPOTS.map(([k,,,,txt])=>{ const n=parseInt(m&&m[k])||0; return n?txt(n,m):""; }).filter(Boolean); if(parts.length) return parts.join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
 // ── הנחיות ללקוח — כפתורים מוכנים
@@ -1919,7 +1921,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
                 <button type="button" onClick={()=>setN(field,v+1)} style={{width:36,height:36,borderRadius:8,border:"1px solid #bfdbfe",background:"#fff",fontSize:18,cursor:"pointer"}}>+</button></span>
               </div>; };
             const legacyOnly=!RODENT_SPOTS.some(([k])=>m[k])&&m.stations;
-            const hints={stationsNew:"נכנס לבד ל\"מוצרי הדברה\" כתיבת האכלה כולל רעלים",stationsRefill:"תיבות שכבר היו במקום — רק מילוי רעל",sewers:"מסמן לבד גם באזורי היישום ובמוצרי ההדברה",burrows:"מסמן לבד גם באזורי היישום ובמוצרי ההדברה",otherQty:""};
+            const hints={stationsNew:"מוצר — נכנס לבד ל\"מוצרי הדברה\" כתיבת האכלה כולל רעלים",stationsRefill:"תיבות שכבר היו במקום — רק מילוי רעל",sewers:"מסמן לבד גם באזורי היישום",burrows:"מסמן לבד גם באזורי היישום",otherQty:""};
             return <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
               <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 איפה הנחתי את הרעל? (אפשר כמה ביחד)</div>
               {RODENT_SPOTS.map(([k,l])=>cnt(k,l,hints[k]))}
@@ -2363,13 +2365,14 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       const sync=(type,n)=>{ const i=dv.findIndex(d=>d.type===type);
         if(n>0){ if(i<0) dv.push({type,qty:n,location:"",auto:true}); else dv[i]={...dv[i],qty:n,auto:true}; }
         else if(i>=0&&dv[i].auto) dv.splice(i,1); };
-      RODENT_SPOTS.forEach(([,,dt],i)=>sync(dt,spotTotals[i]));
-      const op=x.materials.map(m=>m.otherPlace).filter(Boolean).join(", "); const oi=dv.findIndex(d=>d.type==="פיתיון במקום אחר"); if(oi>=0&&op&&(!dv[oi].location||dv[oi].auto)) dv[oi]={...dv[oi],location:op};
+      RODENT_SPOTS.forEach(([,,dt],i)=>{ if(dt) sync(dt,spotTotals[i]); });
+      // מה שלא מוצר (מילוי רעל, ביוב, מחילות) — לא נשאר ב"מוצרי הדברה"
+      dv=dv.filter(d=>!(NOT_PRODUCT_DEVS.has(d.type)&&(d.auto||RODENT_SPOTS.some(([k],i)=>i>0&&spotTotals[i]>0))));
       return JSON.stringify(dv)===JSON.stringify(x.devices)?x:{...x,devices:dv}; });
-  },[spotTotals.join(","),f.materials.map(m=>m.otherPlace||"").join("|")]);
+  },[spotTotals.join(",")]);
   // ולהפך: סימנת ב"מוצרי הדברה" (למשל 4 תיבות) — נכנס לבד לחומר הרעל, בלי לסמן שוב
-  const devKey=JSON.stringify((f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt===d.type)).map(d=>[d.type,d.qty]));
-  React.useEffect(()=>{ const dvs=(f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt===d.type)&&(parseInt(d.qty)||0)>0); if(!dvs.length) return;
+  const devKey=JSON.stringify((f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt&&dt===d.type)).map(d=>[d.type,d.qty]));
+  React.useEffect(()=>{ const dvs=(f.devices||[]).filter(d=>RODENT_SPOTS.some(([,,dt])=>dt&&dt===d.type)&&(parseInt(d.qty)||0)>0); if(!dvs.length) return;
     setF(x=>{ const ri=x.materials.findIndex(m=>rodentSpotsOn(m)); if(ri<0) return x; let mats=[...x.materials]; let ch=false;
       dvs.forEach(d=>{ const sp=RODENT_SPOTS.find(([,,dt])=>dt===d.type); const k=sp[0]; const tot=mats.reduce((t,m)=>t+(parseInt(m[k])||0),0); const dq=parseInt(d.qty)||0; if(dq===tot) return;
         let ti=mats.findIndex(m=>(parseInt(m[k])||0)>0); if(ti<0) ti=ri;
@@ -2398,7 +2401,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.boxesNew||r.boxesRefill){ const bi=mats.findIndex(m=>m.method==="תחנת האכלה");
         if(bi>=0){ const m0={...mats[bi]}; if(r.boxesNew) m0.stationsNew=String(r.boxesNew); if(r.boxesRefill) m0.stationsRefill=String(r.boxesRefill); m0.stations=String((parseInt(m0.stationsNew)||0)+(parseInt(m0.stationsRefill)||0)); mats[bi]=m0; }
         else { const put=(type,n)=>{ if(!n) return; const k=devices.findIndex(d=>d.type===type); const loc=(r.spots||[]).join(", "); if(k>=0) devices[k]={...devices[k],qty:n,location:devices[k].location||loc}; else devices.push({type,qty:n,location:loc}); };
-          put("תיבת האכלה כולל רעלים",r.boxesNew); put("מילוי רעל בתיבה קיימת",r.boxesRefill); } }
+          put("תיבת האכלה כולל רעלים",r.boxesNew); } }
       if((r.spots||[]).length) devices=devices.map(d=>/תיבת (?:האכלה|הכלה)|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
       nx.materials=mats; nx.devices=devices;
       if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"}; else if(r.reentryAdults) nx.reentry={...x.reentry,adults:r.reentryAdults};
@@ -11443,7 +11446,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="122";
+const APP_BUILD="123";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
