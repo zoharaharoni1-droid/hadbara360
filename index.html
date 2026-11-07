@@ -8374,6 +8374,8 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
   const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
   const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
   const [prev,setPrev]=useState(""); const [showPrev,setShowPrev]=useState(true);
+  const [openMats,setOpenMats]=useState(false); const [openDocs,setOpenDocs]=useState(false);
+  const hdr=(open,label,extra,onClick)=><button type="button" onClick={onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:8,textAlign:"right",border:"none",background:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}><b style={{flex:1,fontSize:15}}>{label}</b>{extra}<span style={{color:"#64748b",fontSize:13}}>{open?"▲ סגור":"▼ פתח"}</span></button>;
   React.useEffect(()=>{ let on=true; const t=setTimeout(()=>{ pestFileHtml(cur,{workers,execLogs,companyDocs:docs}).then(h=>on&&setPrev(h)).catch(()=>{}); },300); return ()=>{on=false;clearTimeout(t);}; },[JSON.stringify(mats),docs.length]);
   const missing=[!(m.stations||[]).length&&"מיפוי תחנות",(m.zones||[]).some(z=>z.drawing&&z.drawing.draft)&&"🚧 מפה בבנייה (לא מוצגת ללקוח עד שתסמן שהיא מוכנה)",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",mats.some(x=>!x.label)&&"תווית לחלק מהחומרים",false].filter(Boolean);
   return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
@@ -8382,10 +8384,11 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
     <div style={{border:"1px solid #e2e8f0",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
       <button type="button" onClick={()=>setShowPrev(v=>!v)} style={{width:"100%",textAlign:"right",border:"none",background:"#f0f9f4",padding:"10px 12px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",color:"#1a5c3a"}}>👁️ התיק המלא {showPrev?"▲":"▼"}</button>
-      {showPrev&&(prev?<iframe title="תצוגת תיק" srcDoc={'<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{margin:0;padding:14px;direction:rtl;color:#111}table{width:100%;border-collapse:collapse}img,svg{max-width:100%}a{color:#1d4ed8}</style></head><body>'+prev+'</body></html>'} style={{width:"100%",height:520,border:"none",display:"block",background:"#fff"}}/>:<div style={{padding:20,textAlign:"center",color:"#94a3b8"}}>⏳ טוען…</div>)}
+      {showPrev&&(prev?<iframe title="תצוגת תיק" srcDoc={'<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;font-family:Arial,sans-serif}body{margin:0;padding:14px;direction:rtl;color:#111}table{width:100%;border-collapse:collapse}img,svg{max-width:100%}a{color:#1d4ed8}</style></head><body>'+prev+'</body></html>'} style={{width:"100%",height:"max(520px, 72vh)",border:"none",display:"block",background:"#fff"}}/>:<div style={{padding:20,textAlign:"center",color:"#94a3b8"}}>⏳ טוען…</div>)}
     </div>
-    <div style={{...sec,...(drag==="__all"?{outline:"3px dashed #16a34a",background:"#f0fdf4"}:{})}} {...dz("__all")}>
-      <div style={{fontWeight:800,marginBottom:2}}>🧪 חומרים בתיק ({mats.length})</div>
+    <div style={{...sec,...(drag==="__all"?{outline:"3px dashed #16a34a",background:"#f0fdf4"}:{})}} {...dz("__all")} onDragEnter={()=>setOpenMats(true)}>
+      {hdr(openMats,"🧪 חומרים בתיק ("+mats.length+")",mats.length?<span style={{fontSize:12,color:mats.some(x=>!x.sds||!x.label)?"#b45309":"#15803d"}}>{mats.some(x=>!x.sds||!x.label)?"⚠️ חסר SDS / תווית":"✓ הכל מצורף"}</span>:null,()=>setOpenMats(v=>!v))}
+      {openMats&&<div style={{marginTop:6}}>
       <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>💡 אפשר לגרור כמה קבצים ביחד — על חומר מסוים, או על כל הרשימה (המערכת מזהה לפי שם הקובץ איזה חומר ואם זה SDS / תווית / תעודת רישום). מה שמעלים נשמר במאגר ונכנס לבד לכל תיק הדברה הבא.</div>
       {ask.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 10px",marginBottom:8}}>
         <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>❓ לא הצלחתי לזהות לבד — בחר לכל קובץ:</div>
@@ -8412,11 +8415,14 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔎 חיפוש תכשיר במאגר הרשמי (שם או חומר פעיל)…" style={{...fld,width:"100%",marginTop:6}}/>
       {hits.map(r=><div key={r[0]+r[2]} onClick={()=>add(r[0])} style={{padding:"6px 8px",borderBottom:"1px solid #f1f5f9",cursor:"pointer",fontSize:13}}><b>{r[0]}</b> <span style={{color:"#64748b",fontSize:12}}>· {r[4]} · רישום {r[2]}</span></div>)}
       {q.trim().length>=2&&!hits.length&&<button type="button" onClick={()=>add(q.trim())} style={{marginTop:6,border:"1px solid #e2e8f0",background:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontFamily:"inherit"}}>+ הוסף "{q.trim()}" ידנית</button>}
+      </div>}
     </div>
     <div style={sec}>
-      <div style={{fontWeight:800,marginBottom:4}}>📎 מסמכים נוספים (לא חובה) — נכנסים לכל התיקים</div>
+      {hdr(openDocs,"📎 מסמכים נוספים — נכנסים לכל התיקים",<span style={{fontSize:12,color:"#64748b"}}>{docs.length?docs.length+" מסמכים":""}</span>,()=>setOpenDocs(v=>!v))}
+      {openDocs&&<div style={{marginTop:6}}>
       <div style={{fontSize:12,color:"#64748b",marginBottom:6}}>✅ רישיון המדביר שלך (מס׳ {COMPANY.licenseNum}, בתוקף עד {fmtDate(COMPANY.licenseExpiry)}) כבר נכנס אוטומטית לכל תיק. כאן אפשר להוסיף מה שעסק מסוים דורש — למשל ביטוח צד ג׳. רישיונות של עובדים נוספים נלקחים מכרטיס העובד.</div>
       <CompanyDocsEditor docs={docs} setDocs={setDocs}/>
+      </div>}
     </div>
     {busy?<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -11349,7 +11355,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="119";
+const APP_BUILD="120";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
