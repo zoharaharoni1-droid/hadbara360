@@ -4114,6 +4114,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       <div style={{...row,cursor:"default",marginBottom:0}}><span style={{fontSize:18}}>🕐</span><span style={{flex:1,fontWeight:700}}>{fmtDate(appt.date)} · {isAllDay(appt)?ALL_DAY_TW:<span dir="ltr" style={{whiteSpace:"nowrap",display:"inline-block"}}>{appt.timeWindow||appt.time||""}</span>}</span><ProgressBadge prog={prog}/></div>
     </div>
     {onEditFull&&onSaveEdit&&appt.kind!=="free"&&!editMode&&<button type="button" onClick={()=>onEditFull(appt)} style={{width:"100%",marginBottom:12,padding:"12px",borderRadius:12,border:"1.5px solid #1a5c3a",background:"#fff",color:"#1a5c3a",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✏️ עריכת התור — כל הפרטים (לקוח, מזיקים, שעה / כל היום…)</button>}
+    {appt.kind!=="free"&&!editMode&&(()=>{ const ps=Array.isArray(appt.pests)&&appt.pests.length?appt.pests:String(appt.pestType||"").split(/\s*[,،+]\s*/).filter(Boolean); return ps.length&&buildPrepOnlyText({name:"",pests:ps})?<button type="button" onClick={()=>sendPrepWA(appt.contactName||appt.customerName,appt.phone||((customers||[]).find(c=>c.id===appt.customerId)||{}).phone,ps)} style={{width:"100%",marginBottom:12,padding:"10px",borderRadius:12,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1e40af",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי ({ps.join(", ")})</button>:null; })()}
     {appt.kind==="free"&&<div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:14,padding:"12px 14px",marginBottom:12}}>
       <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:6}}>✍️ רישום מהיר</div>
       <div style={{whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.5,color:"#0f172a"}}>{appt.freeText||appt.rawMsg}</div>
@@ -5420,26 +5421,8 @@ const prepMerged=()=>{ const saved=PREP_STORE.get(); const defs=prepDefaults(); 
   const out=saved.map(x=>{ if(x.v===PREP_VER||x.edited) return x; const d=defs.find(dd=>dd.pest===x.pest); return d?{...d,id:x.id}:x; });
   defs.forEach(d=>{ if(!out.some(x=>x.pest===d.pest)) out.push(d); }); return out; };
 const prepFor=pest=>{ const L=prepMerged(); const P=String(pest||"").trim(); return L.find(x=>x.pest===P)||L.find(x=>(x.aliases||[]).includes(P))||L.find(x=>[x.pest,...(x.aliases||[])].some(a=>a.length>2&&P.includes(a))); };
-function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, address, company}){
-
-
-  const lines = [
-    "שלום *"+name+"* 👋",
-    "",
-    "קיבלנו את הזמנתך ואנחנו שמחים לאשר את הטיפול! 🦟",
-    "",
-    "━━━━━━━━━━━━━━━━━━━━",
-    "📋 *פרטי הביקור*",
-    "━━━━━━━━━━━━━━━━━━━━",
-  ];
-  if(address) lines.push("📍 כתובת: "+address);
-  if(date){ const [y,m,d]=date.split("-"); lines.push("📅 תאריך: "+d+"/"+m+"/"+y); }
-  if(allDay) lines.push("🕐 מועד הגעה: במהלך היום");
-  else if(timeFrom&&timeTo) lines.push("🕐 חלון הגעה: "+timeFrom+" – "+timeTo);
-  if(pests&&pests.length) lines.push("🔬 טיפול: "+pests.join(", "));
-  lines.push("");
-  lines.push("⚠️ *אנא אמתו שהכתובת נכונה — אם יש טעות נשמח שתיצרו קשר.*");
-
+function prepSectionLines(pests){
+  const lines=[];
   const seenP=new Set(); const relevantPests = pests.filter(p=>{ const e=prepFor(p); if(!e||seenP.has(e.pest)) return false; seenP.add(e.pest); return true; });
   if(relevantPests.length>0){
     relevantPests.forEach(pest=>{
@@ -5473,6 +5456,34 @@ function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, add
     lines.push("━━━━━━━━━━━━━━━━━━━━");
     lines.push("✅ *יעילות ההדברה תלויה בהכנת המקום ובשמירה על ההנחיות.*");
   }
+  return lines;
+}
+// 📋 הודעה עם ההנחיות בלבד (לפני / בזמן / אחרי) — לשליחה מהזמנת עבודה, מהיומן או מכל מקום
+function buildPrepOnlyText({name,pests}){ const sec=prepSectionLines(pests||[]); if(!sec.length) return "";
+  return ["שלום"+(name?" *"+String(name).trim().split(" ")[0]+"*":"")+" 👋","","לקראת ההדברה — ריכזנו עבורך מה חשוב לעשות לפני הטיפול, בזמן הטיפול ואחריו:",...sec,"","לשאלות נשמח לעמוד לרשותך 😊",COMPANY.name+" 🦟"].join("\n"); }
+function sendPrepWA(name,phone,pests){ const text=buildPrepOnlyText({name,pests}); if(!text) return alert("אין עדיין הנחיות למזיקים האלה — אפשר להוסיף ב'תבניות הודעה' ← 'לפני / בזמן / אחרי'");
+  const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972"); if(ph) window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(text),"_blank"); else shareText(text); }
+function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, address, company}){
+
+
+  const lines = [
+    "שלום *"+name+"* 👋",
+    "",
+    "קיבלנו את הזמנתך ואנחנו שמחים לאשר את הטיפול! 🦟",
+    "",
+    "━━━━━━━━━━━━━━━━━━━━",
+    "📋 *פרטי הביקור*",
+    "━━━━━━━━━━━━━━━━━━━━",
+  ];
+  if(address) lines.push("📍 כתובת: "+address);
+  if(date){ const [y,m,d]=date.split("-"); lines.push("📅 תאריך: "+d+"/"+m+"/"+y); }
+  if(allDay) lines.push("🕐 מועד הגעה: במהלך היום");
+  else if(timeFrom&&timeTo) lines.push("🕐 חלון הגעה: "+timeFrom+" – "+timeTo);
+  if(pests&&pests.length) lines.push("🔬 טיפול: "+pests.join(", "));
+  lines.push("");
+  lines.push("⚠️ *אנא אמתו שהכתובת נכונה — אם יש טעות נשמח שתיצרו קשר.*");
+
+  lines.push(...prepSectionLines(pests));
   lines.push("");
   lines.push("לשאלות נשמח לעמוד לרשותך 😊");
   lines.push(company.name+" 🦟");
@@ -6416,6 +6427,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מזיקים לטיפול (אפשר לבחור כמה)</label>
         <PestMultiPicker selected={f.pests} onChange={v=>set("pests",v)} customPest={f.customPest} setCustomPest={v=>set("customPest",v)}/>
+        {allPests().length>0&&<button type="button" onClick={()=>setShowWAConfirm("prep")} style={{marginTop:6,border:"1px dashed #93c5fd",background:"#eff6ff",color:"#1e40af",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי — {allPests().join(", ")}</button>}
       </div>
       <div>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>מחיר סופי שסוכם (₪)</label>
@@ -6505,7 +6517,11 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         if(!f.name||!f.phone) return alert("צריך שם וטלפון של הלקוח");
         if(allPests().length===0) return alert("צריך לבחור לפחות מזיק אחד");
         setShowWAConfirm(true);
-      }} style={{background:"#dcfce7",color:"#166534",border:"1px solid #86efac",whiteSpace:"nowrap"}}>💬 שלח ללקוח בוואטסאפ</Btn>}
+      }} style={{background:"#dcfce7",color:"#166534",border:"1px solid #86efac",whiteSpace:"nowrap"}}>💬 אישור הזמנה + הנחיות בוואטסאפ</Btn>}
+      {!custOnly&&<Btn v="secondary" onClick={()=>{
+        if(allPests().length===0) return alert("צריך לבחור לפחות מזיק אחד");
+        setShowWAConfirm("prep");
+      }} style={{background:"#eff6ff",color:"#1e40af",border:"1px solid #93c5fd",whiteSpace:"nowrap"}}>📋 שלח רק הנחיות לפני / בזמן / אחרי</Btn>}
       {onCancel&&<Btn v="ghost" full onClick={onCancel}>ביטול</Btn>}
     </div>
     {showExistingSearch&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setShowExistingSearch(false)} onSelect={c=>{
@@ -6527,9 +6543,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       const addr=fullAddress();
       const allP=allPests();
       const phone=(f.phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
-      const text=buildOrderConfirmText({name:f.name,pests:allP,date:f.prefDate,timeFrom:f.allDay?"":f.timeFrom,timeTo:f.allDay?"":f.timeTo,allDay:!!f.allDay,address:addr,company:COMPANY});
+      const prepOnly=showWAConfirm==="prep";
+      const text=prepOnly?(buildPrepOnlyText({name:f.name,pests:allP})||"אין עדיין הנחיות למזיקים שנבחרו — אפשר להוסיף ב'תבניות הודעה' ← 'לפני / בזמן / אחרי'."):buildOrderConfirmText({name:f.name,pests:allP,date:f.prefDate,timeFrom:f.allDay?"":f.timeFrom,timeTo:f.allDay?"":f.timeTo,allDay:!!f.allDay,address:addr,company:COMPANY});
       const waUrl="https://wa.me/"+phone+"?text="+encodeURIComponent(text);
-      return <Modal title="💬 שליחת אישור ללקוח בוואטסאפ" onClose={()=>setShowWAConfirm(false)} width={520}>
+      return <Modal title={prepOnly?"📋 הנחיות לפני / בזמן / אחרי — שליחה ללקוח":"💬 שליחת אישור ללקוח בוואטסאפ"} onClose={()=>setShowWAConfirm(false)} width={520}>
         <div style={{background:CLR.primaryLight,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13}}>
           <b>{f.name}</b>{" · "}{f.phone}{f.prefDate?" · "+fmtDate(f.prefDate)+" "+(f.allDay?ALL_DAY_TW:f.timeFrom+"–"+f.timeTo):""}
         </div>
@@ -11871,7 +11888,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="129";
+const APP_BUILD="130";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
