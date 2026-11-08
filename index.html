@@ -692,6 +692,130 @@ const INSTR_RODENT_BAIT = ["אין צורך לצאת מהבית ואין הגב�
 const isRodent = pests => /עכבר|חולד|מכרסם/.test((pests||[]).join(" "));
 const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרסם|נחש|יונ/.test(p));
 const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
+// ── 📜 מהות הטיפול, אחריות והנחיות — נוסחים מוכנים (לא נכנסים לבד: מסמנים V ואפשר לערוך בכל יומן) ──
+const TERMS_DEFAULT=[
+  {id:"g_spray",title:"מהות הטיפול ומסגרת האחריות",when:"spray",lines:[
+    "הטיפול כולל ריסוס יסודי לאורך הפאנלים, ספי הדלתות, הצוקל במטבח ופתחי הניקוז הגלויים. החומר נצמד למשטחים וקוטל חרקים שבאים איתו במגע.",
+    "הריסוס אינו מחסום פיזי: חרק מעופף שנכנס מחלון או ממרפסת פתוחים ימות רק אחרי שינחת על משטח מטופל.",
+    "הטיפול מתבצע באזורים הרגילים. מקומות נסתרים — פתחי מיזוג, תקרות גבס עם מערכות חשמל, שקעים וצנרת פנימית — שלא צוינו מראש דורשים גישה וחומרים מיוחדים. טיפול בהם בתקופת האחריות יינתן בעלות מוזלת (הגעה וחומרים בלבד), ואחרי תום תקופת האחריות — כהזמנת שירות חדשה."]},
+  {id:"g_safety",title:"הנחיות כניסה ושטיפה",when:"spray",lines:[
+    "יש לשהות מחוץ למקום עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן ב\"זמן מחוץ למקום\" (בדרך כלל כשעה).",
+    "מומלץ לא לשטוף את הרצפה 24 שעות, כדי שהחומר ייקבע היטב על המשטחים.",
+    "בבית עם תינוקות זוחלים או בעלי חיים: יש לשטוף את מרכז הרצפה במים וסבון מיד בתום זמן האוורור, לפני שהם חוזרים לרצפה. זה לא פוגע ביעילות הטיפול — החומר הפעיל נשאר לאורך הפאנלים ובחריצים שבהם נעים החרקים, ומרכז החדר נשאר נקי ובטוח למגע.",
+    "גם בשטיפות הבאות — לא לשפשף את הפאנלים ישירות."]},
+  {id:"p_american",title:"תיקן אמריקאי",m:["תיקן אמריקאי","תיקן אמריקני","ג'וק"],lines:[
+    "החומר על הפאנלים פועל במגע. התיקן מת תוך כמה דקות ועד כחצי שעה מהמגע בחומר. בזמן הזה הוא עלול להתרוצץ מהר או לפרפר — זה סימן שהחומר עובד.",
+    "הניקוזים מרוססים ישירות, כדי לקטול את האוכלוסייה שבתוכם. שימוש שוטף במים (מקלחות, כיורים) מדלל עם הזמן את החומר בצנרת, ולכן הופעה של תיקנים קטנים מהצנרת אחרי כמה שבועות מגיעה מתשתית הבניין ולא מכשל בטיפול. חידוש החומר בניקוזים בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — כהזמנה חדשה.",
+    "קומות ראשונות מחוברות ישירות לקו הביוב הראשי — מומלץ שוועד הבית יבצע הדברה תקופתית לבורות הבניין. בדירות קרקע הטיפול כולל גם את שוחות הביוב הצמודות לדירה, כדי לחסום את המעבר פנימה.",
+    "הצפה או עליית מי שפכים בשוחת הביוב שוטפות את החומר ומבטלות את פעולתו. טיפול חוזר בשוחות אחרי הצפה אינו כלול באחריות ויחויב בתשלום.",
+    "אם ידוע לכם על מקום מסוים שממנו יוצאים תיקנים (פתח מזגן, תקרה מונמכת) — ספרו למדביר בזמן הטיפול, כדי שיתאים את הטיפול."]},
+  {id:"p_german",title:"תיקן גרמני",m:["תיקן גרמני"],lines:[
+    "הטיפול נעשה בנקודות ג'ל ובמלכודות ניטור במקומות המסתור — מנועי מכשירי חשמל, צירי ארונות וכד'.",
+    "אין לשטוף, לנגב או לרסס חומרים ביתיים על נקודות הג'ל. התיקנים אוכלים את הפיתיון ומעבירים אותו למחבוא — כך מחוסלת המושבה.",
+    "בגלל עמידות המזיק וקצב הבקיעה מתיקי הביצים, ייתכן שיידרש ביקור נוסף להשלמת הטיפול וחידוש הפיתיונות. ביקור כזה בתקופת האחריות — בעלות מוזלת (הגעה וחומרים בלבד); אחרי תום תקופת האחריות — טיפול חדש במחיר מלא."]},
+  {id:"p_ants",title:"נמלים",m:["נמלים","נמלה"],not:["נמלת האש"],lines:[
+    "הטיפול משלב ריסוס לאורך הפאנלים ופיתיונות ג'ל שהפועלות מעבירות לקן — לחיסול המושבה והמלכה. התהליך נמשך מכמה ימים ועד שבועיים.",
+    "הריסוס דורש גישה חופשית לפאנלים. אזור שהיה חסום או עמוס בזמן הטיפול ולא רוסס — יטופל בביקור נפרד, בתקופת האחריות בעלות מוזלת.",
+    "נמלים שיוצאות ממקומות פנימיים — גופי תאורה, שקעים, סדקים בתקרה — מגיעות מתשתית שלא ניתן לאתר מראש. בתקופת האחריות יינתן טיפול נקודתי בעלות מוזלת (הגעה וחומרים); אחרי תום תקופת האחריות — כהזמנה חדשה."]},
+  {id:"p_fireant",title:"נמלת האש הקטנה",m:["נמלת האש","נמלת אש"],lines:[
+    "נמלת האש חיה במושבות ענק עם הרבה מלכות, ונכנסת גם מדירות ומחצרות סמוכות. מגע בפאנלים המרוססים קוטל אותן — ולכן נמלים מתות ליד הקירות (נראות כמו גרגירי חול) הן סימן שהחומר עובד.",
+    "החצר פתוחה לחדירה מגינות סמוכות. בחצר מתבצע ריסוס ופיזור בכל השטח, אבל אין אחריות על חדירה חוזרת לחצר. טיפול חוזר בחצר — גם בתקופת האחריות של הבית — הוא הזמנה נפרדת במחיר מלא."]},
+  {id:"p_fleas",title:"פרעושים",m:["פרעוש"],lines:[
+    "הריסוס על הרצפה קוטל מיד את הפרעושים הבוגרים ומאפס את השטח.",
+    "החומר לא נשאר פעיל לאורך זמן ולא חודר לגלמים שבתוך בדים. לכן האחריות מותנית בטיפול מלא במקור: טיפול וטרינרי בחיות המחמד, פינוי גורי חתולים או פגרים מהסביבה, כביסת מצעים ב-60 מעלות ושאיבה יסודית של ספות, מזרנים ושטיחים שלא ניתן לרסס.",
+    "התפרצות שנובעת ממקור שלא טופל אינה כלולה באחריות, והגעה חוזרת תחויב בתשלום."]},
+  {id:"p_food",title:"חרקי מזון",m:["מזיקי מזון","חרקי מזון","עש מזון","חיפושית","קמח"],lines:[
+    "הטיפול כולל ריסוס וניטור בארונות המטבח והמזווה, ומותנה בבדיקה יסודית וזריקה של כל מוצרי המזון היבש שפתוחים או נגועים (קטניות, קמחים, תבלינים וכד').",
+    "המשך פעילות ממקור שלא אותר — כמו שקי מזון לבעלי חיים, או מוצרים סגורים שחוררו על ידי המזיק — אינו כלול באחריות. ביקור נוסף לסריקה והשלמת טיפול בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — במחיר מלא."]},
+  {id:"p_silverfish",title:"דג הכסף",m:["דג הכסף","דג כסף","דגי כסף"],lines:[
+    "דג הכסף מסתתר בסדקים, מאחורי ארונות ופאנלים ובמקומות לחים. הטיפול מתבצע בריסוס בכל המקומות הנגישים — ככל שיותר מקומות פנויים ונגישים לריסוס, התוצאה טובה יותר.",
+    "החומר לא נשאר פעיל לזמן רב, ולכן ייתכן שיידרש טיפול נוסף. טיפול נוסף בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — כהזמנה חדשה.",
+    "מומלץ לצמצם לחות — לאוורר חדרים רטובים ולתקן נזילות. זה מקטין מאוד את הסיכוי שיחזור."]},
+  {id:"p_rodent_in",title:"מכרסמים בתוך הבית",m:["עכבר","חולד","מכרסם"],lines:[
+    "מכרסמים חשדנים מטבעם — בימים הראשונים הם עלולים לעקוף מלכודות או לגעת בהן בלי להיתפס.",
+    "הרעל בתיבות ההאכלה פועל בהשהיה של כמה ימים, כדי ששאר המכרסמים לא יחשדו בפיתיון. לכן מכרסם חי בימים שאחרי ההצבה — צפוי ותקין.",
+    "ביקור לבדיקת מלכודות, דריכה מחדש או פינוי מכרסם שנלכד — בתקופת האחריות בעלות מוזלת עבור ההגעה; אחרי תום תקופת האחריות — כהזמנה חדשה."]},
+  {id:"p_rodent_out",title:"מכרסמים בחצר / בבניין / בעסק",m:["עכבר","חולד","מכרסם"],lines:[
+    "תיבות ההאכלה מוצבות סביב המבנה, בחצר ובנקודות המעבר של המכרסמים, ובמידת הצורך גם בבורות ביוב ובמחילות.",
+    "הרעל פועל בהשהיה של כמה ימים, וירידה בפעילות נראית בדרך כלל תוך 7–14 ימים. מכרסם חי בימים הראשונים — צפוי ותקין.",
+    "אין להזיז, לפתוח או להרים את התיבות. תיבה שנפגעה או נעלמה — יש לעדכן אותנו.",
+    "שטחים פתוחים, גינות סמוכות ובורות ביוב משותפים הם מקור לחדירה חוזרת. טיפול חד-פעמי לא מונע הגעה של מכרסמים חדשים מבחוץ, ולכן מומלץ טיפול תקופתי (אחזקה).",
+    "מזון זמין — אשפה פתוחה, מזון לחיות, פירות שנפלו — מושך מכרסמים. מומלץ לסגור ולפנות."]},
+  {id:"p_wasps",title:"צרעות",m:["צרע"],lines:[
+    "הקן מטופל ישירות. פועלות שהיו מחוץ לקן בזמן הטיפול ימשיכו להגיע לאזור עוד 2–3 ימים, עד שהן מבינות שהמלכה חוסלה ומפסיקות לחזור לקן.",
+    "אין להתקרב לאזור הקן ואין להסיר אותו לפחות 3 ימים.",
+    "אם אחרי 3 ימים עדיין יש פעילות ערה ליד הקן — יש לעדכן אותנו ונגיע לטיפול חוזר."]},
+  {id:"p_flies",title:"זבובים",m:["זבוב"],lines:[
+    "הטיפול כולל ריסוס של משטחי הנחיתה ומקומות ההתרבות, ורוב הזבובים שבמקום ימותו בעקבותיו.",
+    "זבובים מגיעים מבחוץ וממשיכים להיכנס מחלונות ודלתות פתוחים, ולכן אין אחריות על חרקים מעופפים.",
+    "הכי חשוב לטפל במקור: לסגור פחי אשפה ולפנות אותם באופן קבוע. אם יש חדר אשפה או פח מתחת לחלון (למשל בקומה ראשונה) — יש לדאוג שגם הוא ייסגר ויטופל.",
+    "מומלץ להתקין רשתות בחלונות."]},
+  {id:"p_mosquito",title:"יתושים",m:["יתוש"],lines:[
+    "הטיפול כולל ריסוס של מקומות המנוחה של היתושים (קירות מוצלים, שיחים וצמחייה) ושל מקורות המים שנמצאו.",
+    "יתושים מתרבים במים עומדים. כל עוד המקור לא טופל — בור ביוב סתום, בור משאבה שלא הייתה אליו גישה, עדנית או כלי מוסתר עם מים עומדים — הטיפול יעזור לכמה ימים בלבד.",
+    "טיפול במקור פותר את הבעיה, אלא אם המקור נמצא אצל שכנים. לכן אין אחריות על יתושים.",
+    "יש לרוקן מים עומדים בחצר, בעציצים, במרזבים ובכלים פתוחים."]},
+  {id:"p_bedbugs",title:"פשפש המיטה",m:["פשפש"],lines:[
+    "הטיפול כולל ריסוס יסודי של המיטות, המזרנים, מסגרות המיטה, הספות והסדקים סביבם.",
+    "יש לכבס מצעים ובגדים ב-60 מעלות לפחות, ולייבש במייבש בחום גבוה.",
+    "פשפש המיטה עמיד, וביצים שבוקעות אחרי הטיפול מחייבות בדרך כלל טיפול נוסף כעבור כשבועיים.",
+    "אין להעביר רהיטים, מזרנים או בגדים מהבית המטופל למקום אחר — זה מפיץ את הנגיעות."]},
+];
+const termsText=t=>(t.lines||[]).map(l=>"• "+l).join("\n");
+function termsTpl(){ try{ const o=JSON.parse(localStorage.getItem("h360_terms_tpl")||"null"); if(Array.isArray(o)&&o.length) return o; }catch(e){} return TERMS_DEFAULT.map(t=>({...t,text:termsText(t)})); }
+async function loadTermsTpl(){ if(!sb) return termsTpl(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const f=(data||[]).filter(x=>/^terms-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return termsTpl();
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return termsTpl(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)&&v.length){ localStorage.setItem("h360_terms_tpl",JSON.stringify(v)); return v; } }catch(e){} return termsTpl(); }
+async function saveTermsTpl(list){ localStorage.setItem("h360_terms_tpl",JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-terms")); }catch(e){} if(!sb) return; const n="company/terms-"+String(Date.now()).padStart(15,"0")+".json"; await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
+function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect(()=>{ let on=true; loadTermsTpl().then(v=>on&&setL(v)); const h=()=>setL(termsTpl()); window.addEventListener("h360-terms",h); return ()=>{on=false;window.removeEventListener("h360-terms",h);}; },[]); return l; }
+const termsRelevant=(tpl,pests,hasSpray)=>{ const P=(pests||[]).join(" "); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(k))&&!(t.not||[]).some(k=>P.includes(k))); };
+// עריכת הנוסחים בהגדרות
+function TermsPicker({f,setF,pests,hasSpray}){
+  const tpl=useTermsTpl(); const [more,setMore]=useState(false);
+  const rel=termsRelevant(tpl,pests,hasSpray); const chosen=f.terms||[];
+  const list=[...rel,...(more?tpl.filter(t=>!rel.includes(t)):[]),...chosen.filter(c=>!tpl.some(t=>t.id===c.id)).map(c=>({...c}))];
+  const isOn=id=>chosen.some(c=>c.id===id);
+  const toggle=t=>setF(x=>{ const cs=x.terms||[]; return {...x,terms:cs.some(c=>c.id===t.id)?cs.filter(c=>c.id!==t.id):[...cs,{id:t.id,title:t.title,text:t.text}]}; });
+  const edit=(id,text)=>setF(x=>({...x,terms:(x.terms||[]).map(c=>c.id===id?{...c,text}:c)}));
+  return <div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. שום דבר לא נכנס לבד — מסמנים V על מה שרוצים, ואפשר לשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן ששולחים.</div>
+    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:10}}>
+      <b style={{fontSize:13}}>🛡️ תקופת האחריות:</b>
+      {[["","ללא"],["1","חודש"],["2","חודשיים"],["3","3 חודשים"],["6","חצי שנה"],["12","שנה"]].map(([v,l])=><button key={l} type="button" onClick={()=>setF(x=>({...x,warranty:v}))} style={{border:"1.5px solid "+(String(f.warranty||"")===v?"#16a34a":"#cbd5e1"),background:String(f.warranty||"")===v?"#dcfce7":"#fff",borderRadius:20,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>{l}</button>)}
+    </div>
+    {!list.length&&<div style={{fontSize:13,color:"#94a3b8",marginBottom:6}}>אין נוסח מוכן למזיקים שנבחרו{hasSpray?"":" (הנוסחים הכלליים מופיעים כשיש ריסוס)"}.</div>}
+    {list.map(t=>{ const on=isOn(t.id); const c=chosen.find(x=>x.id===t.id);
+      return <div key={t.id} style={{border:"1.5px solid "+(on?"#16a34a":"#e2e8f0"),background:on?"#f0fdf4":"#fff",borderRadius:10,marginBottom:6}}>
+        <button type="button" onClick={()=>toggle(t)} style={{width:"100%",display:"flex",gap:8,alignItems:"center",border:"none",background:"none",padding:"9px 10px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+          <span style={{width:22,height:22,borderRadius:6,border:"2px solid "+(on?"#16a34a":"#94a3b8"),background:on?"#16a34a":"#fff",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>{on?"✓":""}</span>
+          <b style={{flex:1,fontSize:14}}>{t.title}</b>{!on&&<span style={{fontSize:11,color:"#64748b"}}>לחץ להוספה</span>}</button>
+        {on&&<div style={{padding:"0 10px 10px"}}><textarea value={c.text} onChange={e=>edit(t.id,e.target.value)} rows={Math.min(12,Math.max(4,String(c.text||"").split("\n").length*2))} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit",lineHeight:1.6,background:"#fff"}}/>
+          {c.text!==t.text&&tpl.some(x=>x.id===t.id)&&<button type="button" onClick={()=>edit(t.id,(tpl.find(x=>x.id===t.id)||{}).text||"")} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↺ חזרה לנוסח המוכן</button>}</div>}
+      </div>; })}
+    <button type="button" onClick={()=>setMore(v=>!v)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{more?"פחות ▲":"+ עוד נוסחים (כל המזיקים)"}</button>
+  </div>;
+}
+function TermsTplEditor(){
+  const tpl=useTermsTpl(); const [list,setList]=useState(null); const [open,setOpen]=useState(null); const [busy,setBusy]=useState(false);
+  const L=list||tpl; const upd=(i,p)=>setList(L.map((t,j)=>j===i?{...t,...p}:t));
+  return <div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>הנוסחים האלה לא נכנסים לבד ליומן. ביומן הביצוע, בפרק "📜 מהות הטיפול ואחריות", מסמנים V על מה שרוצים — ואפשר לשנות את הטקסט לכל לקוח.</div>
+    {L.map((t,i)=><div key={t.id} style={{border:"1px solid "+CLR.border,borderRadius:10,marginBottom:6,background:"#fff"}}>
+      <button type="button" onClick={()=>setOpen(open===t.id?null:t.id)} style={{width:"100%",display:"flex",gap:8,alignItems:"center",border:"none",background:"none",padding:"9px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+        <b style={{flex:1,fontSize:14}}>{t.title}</b><span style={{fontSize:11,color:"#64748b"}}>{t.when==="spray"?"כשיש ריסוס":(t.m||[]).slice(0,2).join(", ")}</span><span>{open===t.id?"▲":"▼"}</span></button>
+      {open===t.id&&<div style={{padding:"0 12px 10px"}}>
+        <input value={t.title} onChange={e=>upd(i,{title:e.target.value})} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",fontWeight:700,marginBottom:6}}/>
+        <textarea value={t.text} onChange={e=>upd(i,{text:e.target.value})} rows={8} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",lineHeight:1.6}}/>
+        <div style={{display:"flex",gap:6,marginTop:4}}>
+          {TERMS_DEFAULT.find(d=>d.id===t.id)&&<button type="button" onClick={()=>{ const d=TERMS_DEFAULT.find(d=>d.id===t.id); upd(i,{title:d.title,text:termsText(d)}); }} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↺ חזרה לנוסח המקורי</button>}
+          {!TERMS_DEFAULT.find(d=>d.id===t.id)&&<button type="button" onClick={()=>setList(L.filter((_,j)=>j!==i))} style={{border:"1px solid #fecaca",background:"#fff",color:"#dc2626",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>🗑️ מחק נוסח</button>}
+        </div></div>}
+    </div>)}
+    <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+      <Btn v="secondary" sm onClick={()=>{ const id="c"+Date.now(); setList([...L,{id,title:"נוסח חדש",m:[],text:"• "}]); setOpen(id); }}>➕ נוסח חדש</Btn>
+      {list&&<Btn sm disabled={busy} onClick={async()=>{ setBusy(true); try{ await saveTermsTpl(list); setList(null); alert("✅ הנוסחים נשמרו"); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); }}>💾 שמור נוסחים</Btn>}
+    </div>
+  </div>;
+}
 // שירותים שאינם הדברה (ניטור, לכידה, יונים...) — נרשמים ביומן ביצוע ונשלחים ללקוח
 const OTHER_SERVICES = ["ניטור עקיצות / בדיקה","ניטור ואבחון מזיקים","פינוי קן יונים","הרחקת יונים (רשתות / דוקרנים)","לכידת נחשים","לכידת לטאות","פינוי פגר","בדיקת / מילוי תיבות האכלה","התקנת מלכודות / תחנות ניטור","אטימת פתחים ומניעה","ביקורת חוזרת (אחריות)","סקר מזיקים / ייעוץ לעסק"];
 const FINDINGS_QUICK = ["לא נמצאו סימני מזיקים","נמצאו סימני נוכחות של מזיקים","הממצאים אינם קשורים למזיקים","נדרשת הדברה — נתאם טיפול","מומלץ ניטור חוזר בעוד שבועיים","הוסברו ללקוח דרכי מניעה"];
@@ -1213,6 +1337,10 @@ function execLogHtml({company,docNum,log,chemicals}){
     ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
       <ul style="margin:0;padding-right:18px;font-size:13px;line-height:1.8;">${log.instructions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
+    ${(log.terms||[]).length?`<div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#f8fafc;">
+      <div style="font-weight:700;color:#1e293b;font-size:14px;margin-bottom:4px;">📜 מהות הטיפול, אחריות והנחיות</div>
+      ${log.warranty?`<div style="font-size:13px;margin-bottom:6px;"><b>תקופת האחריות:</b> ${String(log.warranty)==="12"?"שנה":String(log.warranty)==="6"?"חצי שנה":String(log.warranty)==="1"?"חודש":log.warranty+" חודשים"} מיום הטיפול</div>`:`<div style="font-size:13px;margin-bottom:6px;"><b>תקופת האחריות:</b> ללא אחריות</div>`}
+      ${log.terms.map(t=>`<div style="margin-top:8px;"><div style="font-weight:700;font-size:13px;color:#1a5c3a;margin-bottom:2px;">${String(t.title||"").replace(/[<>&]/g,"")}</div><div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;">${String(t.text||"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]))}</div></div>`).join("")}</div>`:""}
     ${log.safetyText?`<div style="border:2px solid #ef4444;border-radius:8px;padding:12px 14px;margin-bottom:14px;background:#fff5f5;">
       <div style="font-weight:700;color:#dc2626;font-size:13px;margin-bottom:6px;">⚠️ הנחיות בטיחות לדייר</div>
       <pre style="font-family:Arial;font-size:13px;white-space:pre-wrap;line-height:1.8;">${log.safetyText}</pre></div>`:""}
@@ -2332,6 +2460,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     devices:       initialData?.devices       || [],
     reentry:       initialData?.reentry ? normReentry(initialData.reentry) : {},
     instructions:  initialData?.instructions  || [],
+    terms:         initialData?.terms         || [],
     date:          initialData?.date          || prefillAppt?.date          || todayStr(),
     workerName:    initialData?.workerName    || defaultWorker.name || "",
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
@@ -2630,6 +2759,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
     </>)}
+    {sec("terms","📜","מהות הטיפול ואחריות",[f.terms.length?f.terms.length+" נוסחים":"",f.warranty?"אחריות "+f.warranty+" חו׳":""].filter(Boolean).join(" · ")||"לא חובה",f.terms.length?"ok":"opt",<TermsPicker f={f} setF={setF} pests={allPests} hasSpray={hasSpray}/>)}
     {sec("notes","📝","הערות ואחריות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):"",f.warranty?"אחריות "+f.warranty+" חו׳":""].filter(Boolean).join(" · "),f.notes||f.warranty?"ok":"opt",<>
     <div style={{marginBottom:14}}>
       {prefillAppt?.notes&&<div style={{background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:8,padding:"7px 10px",marginBottom:8,fontSize:13,color:"#475569"}}>📌 <b>הערות מההזמנה (פנימי — לא נשלח ללקוח):</b> {prefillAppt.notes}</div>}
@@ -11524,7 +11654,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="126";
+const APP_BUILD="127";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -11554,6 +11684,10 @@ function SettingsPage({isAdmin,onReset,workers=[],appointments=[],setAppointment
       <Btn sm onClick={forceAppUpdate}>⬇️ טען גרסה אחרונה</Btn>
     </div>
     {isAdmin&&setAppointments&&<GcalSettings workers={workers} appointments={appointments} setAppointments={setAppointments} currentUser={currentUser}/>}
+    {isAdmin&&<details style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:12}}>
+      <summary style={{cursor:"pointer",fontWeight:800,fontSize:16}}>📜 נוסחי מהות טיפול, אחריות והנחיות</summary>
+      <div style={{marginTop:10}}><TermsTplEditor/></div>
+    </details>}
     {isAdmin&&<BackupSettings/>}
     {isAdmin&&<details style={{background:"#fff",border:"1px solid #fecaca",borderRadius:14,padding:14}}>
       <summary style={{cursor:"pointer",fontWeight:800,color:"#b91c1c"}}>⚠️ אזור מסוכן</summary>
