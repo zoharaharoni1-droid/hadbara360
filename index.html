@@ -1293,9 +1293,14 @@ async function htmlPdfBlob(innerHtml){
     const H=Math.ceil(root.getBoundingClientRect().height);
     // נקודות חיתוך אפשריות: סוף של כל בלוק/שורה
     const top0=root.getBoundingClientRect().top;
-    const cuts=new Set([H]);
-    root.querySelectorAll('div,tr,li,table,ul').forEach(el=>{ const r=el.getBoundingClientRect(); if(r.height>0&&r.height<PAGE_H*0.9) cuts.add(Math.round(r.bottom-top0)); });
+    const cuts=new Set([H]); const atoms=[];
+    root.querySelectorAll('*').forEach(el=>{ const r=el.getBoundingClientRect(); if(!(r.height>0)) return; const t=r.top-top0, b=r.bottom-top0;
+      cuts.add(Math.round(b)); cuts.add(Math.round(t));
+      // לא חותכים באמצע שורה של טבלה, שורת טקסט, תמונה או בלוק קטן
+      if(r.height<PAGE_H*0.35||/^(TR|IMG|SVG|LI|P|H1|H2|H3|H4|SPAN|B|A)$/i.test(el.tagName)) atoms.push([t+1,b-1]); });
     const sorted=[...cuts].filter(c=>c>0&&c<=H).sort((a,b)=>a-b);
+    const okCut=c=>!atoms.some(([t,b])=>c>t&&c<b);
+    const valid=sorted.filter(okCut);
     // ציור ל-SVG
     const xhtml=new XMLSerializer().serializeToString(root);
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xhtml}</foreignObject></svg>`;
@@ -1305,13 +1310,15 @@ async function htmlPdfBlob(innerHtml){
     const fx=full.getContext('2d'); fx.fillStyle="#fff"; fx.fillRect(0,0,full.width,full.height); fx.drawImage(img,0,0,full.width,full.height);
     full.toDataURL('image/jpeg',0.5); // בודק שהציור מותר (Safari חוסם) — זורק שגיאה אם לא
     const pdf=new JsPDF({unit:'mm',format:'a4',orientation:'portrait'});
-    let y=0, page=0;
+    let y=0, page=0; const TOPP=34, BOT=34; // שוליים בכל עמוד (ומקום למספר העמוד)
     while(y<H-2){
-      let end=y+PAGE_H; if(end<H){ const c=sorted.filter(c=>c>y+PAGE_H*0.5&&c<=y+PAGE_H); end=c.length?c[c.length-1]:y+PAGE_H; } else end=H;
+      const avail=PAGE_H-(page>0?TOPP:0)-BOT; let end;
+      if(y+avail>=H) end=H;
+      else { const lo=y+avail*0.35, hi=y+avail; let c=valid.filter(c=>c>lo&&c<=hi); if(!c.length) c=sorted.filter(c=>c>lo&&c<=hi); end=c.length?c[c.length-1]:hi; }
       const sliceH=end-y; const pc=document.createElement('canvas'); pc.width=W*SC; pc.height=sliceH*SC;
       const px=pc.getContext('2d'); px.fillStyle="#fff"; px.fillRect(0,0,pc.width,pc.height); px.drawImage(full,0,y*SC,W*SC,sliceH*SC,0,0,W*SC,sliceH*SC);
       if(page>0) pdf.addPage();
-      pdf.addImage(pc.toDataURL('image/jpeg',0.92),'JPEG',0,0,210,sliceH*210/W);
+      pdf.addImage(pc.toDataURL('image/jpeg',0.92),'JPEG',0,(page>0?TOPP:0)*210/W,210,sliceH*210/W);
       page++; y=end;
     }
     const n=pdf.getNumberOfPages(); if(n>1) for(let i=1;i<=n;i++){ pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(150); pdf.text(i+" / "+n,105,292,{align:'center'}); }
@@ -8328,7 +8335,7 @@ let __pdflib=null;
 function loadPdfLib(){ if(window.PDFLib) return Promise.resolve(window.PDFLib); if(__pdflib) return __pdflib;
   __pdflib=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'; sc.onload=()=>res(window.PDFLib); sc.onerror=()=>{__pdflib=null; rej(new Error('טעינת כלי ה-PDF נכשלה'));}; document.head.appendChild(sc); }); return __pdflib; }
 async function fetchDocBytes(d){ const u=await signedUrl(d.path,600); if(!u) throw new Error("no url"); const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status); return {bytes:new Uint8Array(await r.arrayBuffer()),type:String(r.headers.get("content-type")||d.type||"").toLowerCase()}; }
-async function buildPestBook(m,{workers=[],execLogs=[],companyDocs=[],matNames=null,withCompany=true,onStep}={}){
+async function buildPestBook(m,{workers=[],execLogs=[],companyDocs=[],matNames=null,withCompany=true,logIds=[],onStep}={}){
   const {PDFDocument}=await loadPdfLib(); const step=t=>{ try{ onStep&&onStep(t); }catch(e){} };
   step("מכין את התיק…");
   const baseBlob=await htmlPdfBlob(await pestFileHtml(m,{workers,execLogs,companyDocs,inline:true}));
@@ -8343,7 +8350,10 @@ async function buildPestBook(m,{workers=[],execLogs=[],companyDocs=[],matNames=n
       else if(/png|jpe?g/.test(type)||/\.(png|jpe?g)$/.test(nm)) items.push({...p,img:bytes,png:/png/.test(type)||/\.png$/.test(nm),pages:1});
       else items.push({...p,fail:"סוג קובץ שלא ניתן לצרף — נמצא כקישור בתיק"}); }
     catch(e){ items.push({...p,fail:"לא הצלחתי לפתוח את הקובץ — נמצא כקישור בתיק"}); } }
-  const base=await PDFDocument.load(await baseBlob.arrayBuffer()); const basePages=base.getPageCount();
+  // יומני ביצוע שבחרת — נכנסים מיד אחרי התיק
+  const logDocs=[]; const logs=(execLogs||[]).filter(l=>!l.deleted&&(logIds||[]).map(String).includes(String(l.id))).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  for(const lg of logs){ step("מצרף יומן ביצוע "+(lg.docNum||"")+"…"); try{ const b=await execLogPdfBlob(lg); const d=await PDFDocument.load(await b.arrayBuffer()); logDocs.push({group:"יומן ביצוע",title:"יומן ביצוע "+(lg.docNum||"")+" — "+fmtDate(lg.date),src:d,pages:d.getPageCount()}); }catch(e){ logDocs.push({group:"יומן ביצוע",title:"יומן ביצוע "+(lg.docNum||""),fail:"לא הצלחתי להכין"}); } }
+  const base=await PDFDocument.load(await baseBlob.arrayBuffer()); const basePages=base.getPageCount()+logDocs.reduce((t,x)=>t+(x.pages||0),0);
   const esc=x=>String(x??"").replace(/[<>&"]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
   const idxHtml=offset=>{ let pg=offset; const rows=items.map(it=>{ const at=it.fail?"—":String(pg+1); if(!it.fail) pg+=it.pages;
       return `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-weight:700">${esc(it.group)}</td><td style="padding:6px 8px;border:1px solid #e5e7eb">${esc(it.title)}${it.fail?`<div style="font-size:11px;color:#b45309">${esc(it.fail)}</div>`:""}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center;font-weight:700">${at}</td></tr>`; }).join("");
@@ -8354,11 +8364,12 @@ async function buildPestBook(m,{workers=[],execLogs=[],companyDocs=[],matNames=n
   for(let t=0;t<3;t++){ const b=await htmlPdfBlob(idxHtml(basePages+idxPages)); idx=await PDFDocument.load(await b.arrayBuffer()); if(idx.getPageCount()===idxPages) break; idxPages=idx.getPageCount(); }
   const out=await PDFDocument.create();
   (await out.copyPages(base,base.getPageIndices())).forEach(pg=>out.addPage(pg));
+  for(const ld of logDocs){ if(ld.src) (await out.copyPages(ld.src,ld.src.getPageIndices())).forEach(pg=>out.addPage(pg)); }
   (await out.copyPages(idx,idx.getPageIndices())).forEach(pg=>out.addPage(pg));
   for(const it of items){ if(it.fail) continue;
     if(it.src){ try{ (await out.copyPages(it.src,it.src.getPageIndices())).forEach(pg=>out.addPage(pg)); }catch(e){} }
     else { try{ const im=it.png?await out.embedPng(it.img):await out.embedJpg(it.img); const W=595.28,H=841.89,M=24; const sc=Math.min((W-2*M)/im.width,(H-2*M)/im.height); const w=im.width*sc,h=im.height*sc; const pg=out.addPage([W,H]); pg.drawImage(im,{x:(W-w)/2,y:(H-h)/2,width:w,height:h}); }catch(e){} } }
-  const bytes=await out.save(); return {blob:new Blob([bytes],{type:"application/pdf"}),items,pages:out.getPageCount()};
+  const bytes=await out.save(); return {blob:new Blob([bytes],{type:"application/pdf"}),items:[...logDocs,...items],pages:out.getPageCount()};
 }
 
 // ─── 📄 תוכן תיק ההדברה ───────────────────────────────────────────────
@@ -8485,9 +8496,12 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
   const sec={background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10};
   const [prev,setPrev]=useState(""); const [showPrev,setShowPrev]=useState(true);
   const [openMats,setOpenMats]=useState(false); const [openDocs,setOpenDocs]=useState(false);
-  const [book,setBook]=useState(null); // {pick:[names], company:true, step, res}
-  const makeBook=async()=>{ persist(); setBook(b=>({...b,step:"מתחיל…",res:null}));
-    try{ const res=await buildPestBook(cur,{workers,execLogs,companyDocs:docs,matNames:book.pick,withCompany:book.company,onStep:t=>setBook(b=>b&&{...b,step:t})}); setBook(b=>b&&{...b,step:"",res}); }
+  const [book,setBook]=useState(null); // {pick:[names], company:true, logs:[ids], step, res}
+  const myLogs=maintLogs(m,execLogs).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const [allLogs,setAllLogs]=useState(false);
+  const openBook=(auto)=>{ const b0={pick:mats.map(x=>x.name),company:true,logs:myLogs.length?[myLogs[0].id]:[],step:"",res:null}; setBook(b0); if(auto) setTimeout(()=>makeBook(b0),0); };
+  const makeBook=async(b0)=>{ const bk=b0||book; persist(); setBook(b=>({...(b||bk),step:"מתחיל…",res:null}));
+    try{ const res=await buildPestBook(cur,{workers,execLogs,companyDocs:docs,matNames:bk.pick,withCompany:bk.company,logIds:bk.logs||[],onStep:t=>setBook(b=>b&&{...b,step:t})}); setBook(b=>b&&{...b,step:"",res}); }
     catch(e){ alert("הכנת התיק נכשלה: "+(e.message||e)); setBook(b=>b&&{...b,step:""}); } };
   const bookName="תיק הדברה מלא - "+m.customerName+".pdf";
   const hdr=(open,label,extra,onClick)=><button type="button" onClick={onClick} style={{width:"100%",display:"flex",alignItems:"center",gap:8,textAlign:"right",border:"none",background:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}><b style={{flex:1,fontSize:15}}>{label}</b>{extra}<span style={{color:"#64748b",fontSize:13}}>{open?"▲ סגור":"▼ פתח"}</span></button>;
@@ -8495,6 +8509,16 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
   const missing=[!(m.stations||[]).length&&"מיפוי תחנות",(m.zones||[]).some(z=>z.drawing&&z.drawing.draft)&&"🚧 מפה בבנייה (לא מוצגת ללקוח עד שתסמן שהיא מוכנה)",!mats.length&&"חומרים",mats.some(x=>!x.sds)&&"SDS לחלק מהחומרים",mats.some(x=>!x.label)&&"תווית לחלק מהחומרים",false].filter(Boolean);
   return <Modal title={"📁 תיק הדברה — "+m.customerName} onClose={()=>{persist();onClose();}} width={680}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10}}>תיק דיגיטלי שנשאר אצל איש הקשר במקום: פרטי המקום והחברה, רישיונות המדבירים, היתרים וביטוח, מפת תחנות, רשימת החומרים עם מספר רישום, תווית ו-SDS, הוראות בטיחות ועזרה ראשונה, ויומן הביקורים. מתעדכן לבד אחרי כל ביקור.</div>
+    {myLogs.length>0&&<div style={{...sec,padding:"8px 12px"}}>
+      <div style={{fontWeight:800,fontSize:14,marginBottom:4}}>📋 ימי ביצוע שכבר נעשו ({myLogs.length})</div>
+      {(allLogs?myLogs:myLogs.slice(0,4)).map(l=>{ const sent=!!(l.sentAt||(l.date&&l.date<"2026-11-01")); return <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderTop:"1px dashed #e2e8f0",fontSize:13,flexWrap:"wrap"}}>
+        <b style={{minWidth:78}}>{fmtDate(l.date)}</b><span style={{flex:1,minWidth:90,color:"#475569"}}>יומן {l.docNum||""} · {l.workerDocName||l.workerName||""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,2).join(", "):""}</span>
+        <span style={{fontSize:11,padding:"2px 6px",borderRadius:10,background:sent?"#dcfce7":"#fef3c7",color:sent?"#166534":"#92400e"}}>{sent?"נשלח":"לא נשלח"}</span>
+        <button type="button" onClick={()=>printExecLog(l)} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>👁 צפה</button>
+        <button type="button" onClick={()=>shareExecLogPdf(l)} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>📤 PDF</button>
+      </div>; })}
+      {myLogs.length>4&&<button type="button" onClick={()=>setAllLogs(v=>!v)} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:12,marginTop:2}}>{allLogs?"הצג פחות":"הצג את כל "+myLogs.length}</button>}
+    </div>}
     {onNewExec&&<button type="button" onClick={()=>{ persist(); onNewExec(m); }} style={{width:"100%",marginBottom:10,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה <span style={{fontWeight:400,fontSize:12}}>({maintLogs(m,execLogs).length} יומנים בתיק)</span></button>}
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
     <div style={{border:"1px solid #e2e8f0",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
@@ -8546,11 +8570,15 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
         {mats.map(x=>{ const n=MATLIB_DOCS.filter(([k])=>x[k]).length; const on=book.pick.includes(x.name); return <label key={x.name} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:14,cursor:"pointer"}}>
           <input type="checkbox" checked={on} onChange={()=>setBook(b=>({...b,pick:on?b.pick.filter(y=>y!==x.name):[...b.pick,x.name]}))} style={{width:18,height:18}}/>
           <span style={{flex:1}}>{x.name}</span><span style={{fontSize:12,color:n?"#15803d":"#b45309"}}>{n?n+" מסמכים":"אין מסמכים מצורפים"}</span></label>; })}
+        {myLogs.length>0&&<div style={{borderTop:"1px solid #e2e8f0",marginTop:4,paddingTop:4}}><div style={{fontSize:12,fontWeight:700,color:"#475569"}}>📋 לצרף יומני ביצוע:</div>
+          {myLogs.slice(0,8).map(l=>{ const on=(book.logs||[]).map(String).includes(String(l.id)); return <label key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:14,cursor:"pointer"}}>
+            <input type="checkbox" checked={on} onChange={()=>setBook(b=>({...b,logs:on?(b.logs||[]).filter(x=>String(x)!==String(l.id)):[...(b.logs||[]),l.id]}))} style={{width:18,height:18}}/>
+            <span style={{flex:1}}>יומן {l.docNum||""} · {fmtDate(l.date)}</span><span style={{fontSize:12,color:"#64748b"}}>{l.workerDocName||l.workerName||""}</span></label>; })}</div>}
         {docs.some(d=>d&&d.path)&&<label style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:14,cursor:"pointer",borderTop:"1px solid #e2e8f0",marginTop:4}}><input type="checkbox" checked={book.company} onChange={()=>setBook(b=>({...b,company:!b.company}))} style={{width:18,height:18}}/><span style={{flex:1}}>מסמכי החברה (ביטוח וכו׳)</span><span style={{fontSize:12,color:"#64748b"}}>{docs.filter(d=>d&&d.path).length}</span></label>}
         <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
           <button type="button" onClick={()=>setBook(b=>({...b,pick:mats.map(x=>x.name)}))} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>סמן הכל</button>
           <button type="button" onClick={()=>setBook(b=>({...b,pick:[]}))} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>נקה</button>
-          <Btn style={{flex:1}} onClick={makeBook}>⚙️ הכן את התיק המלא</Btn>
+          <Btn style={{flex:1}} onClick={()=>makeBook()}>⚙️ הכן את התיק המלא</Btn>
         </div></>}
       {book.step&&<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {book.step}</div>}
       {book.res&&<>
@@ -8564,9 +8592,10 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
     </div>}
     {busy?<div style={{textAlign:"center",padding:12,fontWeight:700,color:CLR.primary}}>⏳ {busy}</div>:
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      <Btn style={{flex:"1 1 100%"}} onClick={()=>setBook({pick:mats.map(x=>x.name),company:true,step:"",res:null})}>📚 תיק מלא להדפסה — כולל תוויות, SDS ותעודות (קובץ אחד)</Btn>
+      <Btn style={{flex:"1 1 100%"}} onClick={()=>openBook(true)}>📤 שלח / הדפס תיק מלא — כולל תוויות, SDS{myLogs.length?" ויומן ביצוע":""}</Btn>
+      <Btn v="secondary" style={{flex:"1 1 180px"}} onClick={()=>openBook(false)}>📚 תיק מלא — לבחור מה לצרף</Btn>
       <Btn v="secondary" style={{flex:"1 1 180px"}} onClick={()=>{persist();openPrintAsync("תיק הדברה — "+m.customerName,pestFileHtml(cur,{workers,execLogs,companyDocs:docs}));}}>📄 התיק בלבד (בלי מסמכי החומרים)</Btn>
-      <Btn v="secondary" style={{flex:"1 1 160px"}} onClick={sharePdf}>📤 שלח לאיש הקשר</Btn>
+      <button type="button" onClick={sharePdf} style={{border:"none",background:"none",color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:12,textDecoration:"underline"}}>שלח רק את התיק בלי המסמכים</button>
       <Btn v="ghost" onClick={()=>{persist();onClose();}}>💾 שמור וסגור</Btn>
     </div>}
   </Modal>;
@@ -8927,6 +8956,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
             <button type="button" onClick={()=>setFileFor(m)} style={{flex:1,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📁 תיק הדברה</button>
           </div>
           <button type="button" onClick={()=>execForMaint(m)} style={{width:"100%",marginBottom:8,border:"1.5px solid #1a5c3a",background:"#f0fdf4",color:"#1a5c3a",borderRadius:8,padding:"7px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה</button>
+          {(()=>{ const ls=maintLogs(m,execLogs).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))); return ls.length?<div style={{fontSize:12,color:"#475569",marginBottom:8,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}><b>📋 ימי ביצוע:</b>{ls.slice(0,5).map(l=><button key={l.id} type="button" onClick={()=>printExecLog(l)} title={"יומן "+(l.docNum||"")} style={{border:"1px solid #bbf7d0",background:"#f0fdf4",color:"#166534",borderRadius:12,padding:"1px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>{fmtDate(l.date)}</button>)}{ls.length>5&&<span>+{ls.length-5}</span>}</div>:null; })()}
           {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
           </div>}
@@ -11494,7 +11524,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="125";
+const APP_BUILD="126";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
