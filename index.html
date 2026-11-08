@@ -769,6 +769,40 @@ async function saveTermsTpl(list){ localStorage.setItem("h360_terms_tpl",JSON.st
 function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect(()=>{ let on=true; loadTermsTpl().then(v=>on&&setL(v)); const h=()=>setL(termsTpl()); window.addEventListener("h360-terms",h); return ()=>{on=false;window.removeEventListener("h360-terms",h);}; },[]); return l; }
 const termsRelevant=(tpl,pests,hasSpray)=>{ const P=(pests||[]).join(" "); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(k))&&!(t.not||[]).some(k=>P.includes(k))); };
 // עריכת הנוסחים בהגדרות
+async function shareText(text){ try{ if(navigator.share){ await navigator.share({text}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
+  try{ await navigator.clipboard.writeText(text); alert("✅ הועתק — אפשר להדביק בווטסאפ"); }catch(e){ window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank"); } }
+const PREP_PARTS=[["before","🔵 לפני הטיפול"],["during","🟡 בזמן הטיפול"],["after","🟢 אחרי הטיפול"],["important","❗ דגשים חשובים"]];
+const prepText=x=>["📌 *הנחיות — "+x.pest+"*",...PREP_PARTS.filter(([k])=>(x[k]||[]).length).map(([k,l])=>"\n*"+l+":*\n"+x[k].map(t=>"• "+t).join("\n"))].join("\n");
+function PrepTplEditor(){
+  const tpl=PREP_STORE.use(); const [list,setList]=useState(null); const [open,setOpen]=useState(null); const [busy,setBusy]=useState(false);
+  const L=list||tpl; const upd=(i,p)=>setList(L.map((t,j)=>j===i?{...t,...p}:t));
+  const sb2={border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12};
+  return <div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>ההנחיות האלה נכנסות להודעת אישור ההזמנה שנשלחת ללקוח, לפי המזיקים שבהזמנה (לפי שם המזיק). שורה = נקודה אחת.</div>
+    {L.map((t,i)=><div key={t.id} style={{border:"1px solid "+CLR.border,borderRadius:10,marginBottom:6,background:"#fff"}}>
+      <button type="button" onClick={()=>setOpen(open===t.id?null:t.id)} style={{width:"100%",display:"flex",gap:8,alignItems:"center",border:"none",background:"none",padding:"9px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+        <b style={{flex:1,fontSize:14}}>{t.pest}</b><span style={{fontSize:11,color:"#64748b"}}>{PREP_PARTS.map(([k])=>(t[k]||[]).length).join(" / ")}</span><span>{open===t.id?"▲":"▼"}</span></button>
+      {open===t.id&&<div style={{padding:"0 12px 10px"}}>
+        <label style={{fontSize:12,color:"#475569"}}>שם המזיק (כמו בהזמנה)</label>
+        <input value={t.pest} onChange={e=>upd(i,{pest:e.target.value})} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",fontWeight:700,marginBottom:6}}/>
+        {PREP_PARTS.map(([k,l])=><div key={k} style={{marginBottom:6}}><div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{l}</div>
+          <textarea value={(t[k]||[]).join("\n")} onChange={e=>upd(i,{[k]:e.target.value.split("\n")})} onBlur={e=>upd(i,{[k]:e.target.value.split("\n").map(x=>x.trim()).filter(Boolean)})} rows={Math.min(10,Math.max(2,(t[k]||[]).length+1))} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",lineHeight:1.6}}/></div>)}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button type="button" disabled={i===0} onClick={()=>{ const n=[...L]; [n[i-1],n[i]]=[n[i],n[i-1]]; setList(n); }} style={sb2}>⬆️</button>
+          <button type="button" disabled={i===L.length-1} onClick={()=>{ const n=[...L]; [n[i+1],n[i]]=[n[i],n[i+1]]; setList(n); }} style={sb2}>⬇️</button>
+          <button type="button" onClick={()=>{ const id="p"+Date.now(); const n=[...L]; n.splice(i+1,0,{...t,id,pest:t.pest+" (עותק)"}); setList(n); setOpen(id); }} style={sb2}>⧉ שכפל</button>
+          <button type="button" onClick={()=>shareText(prepText(t))} style={{...sb2,border:"1px solid #86efac",background:"#f0fdf4",color:"#166534"}}>📤 שלח / העתק</button>
+          {PREP_DEFAULT[t.pest]&&<button type="button" onClick={()=>{ const d=PREP_DEFAULT[t.pest]; upd(i,{before:d.before||[],during:d.during||[],after:d.after||[],important:d.important||[]}); }} style={sb2}>↺ חזרה למקורי</button>}
+          <button type="button" onClick={()=>{ if(confirm("למחוק את ההנחיות של "+t.pest+"?")) setList(L.filter((_,j)=>j!==i)); }} style={{...sb2,border:"1px solid #fecaca",color:"#dc2626"}}>🗑️ מחק</button>
+        </div></div>}
+    </div>)}
+    <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+      <Btn v="secondary" sm onClick={()=>{ const id="p"+Date.now(); setList([...L,{id,pest:"מזיק חדש",before:[],during:[],after:[],important:[]}]); setOpen(id); }}>➕ מזיק חדש</Btn>
+      {list&&<Btn sm disabled={busy} onClick={async()=>{ setBusy(true); try{ await PREP_STORE.save(list.map(x=>({...x,...Object.fromEntries(PREP_PARTS.map(([k])=>[k,(x[k]||[]).map(y=>String(y).trim()).filter(Boolean)]))}))); setList(null); alert("✅ ההנחיות נשמרו"); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); }}>💾 שמור הנחיות</Btn>}
+      {list&&<Btn v="ghost" sm onClick={()=>setList(null)}>בטל שינויים</Btn>}
+    </div>
+  </div>;
+}
 function TermsPicker({f,setF,pests,hasSpray}){
   const tpl=useTermsTpl(); const [more,setMore]=useState(false);
   const rel=termsRelevant(tpl,pests,hasSpray); const chosen=f.terms||[];
@@ -805,7 +839,16 @@ function TermsTplEditor(){
       {open===t.id&&<div style={{padding:"0 12px 10px"}}>
         <input value={t.title} onChange={e=>upd(i,{title:e.target.value})} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",fontWeight:700,marginBottom:6}}/>
         <textarea value={t.text} onChange={e=>upd(i,{text:e.target.value})} rows={8} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",lineHeight:1.6}}/>
-        <div style={{display:"flex",gap:6,marginTop:4}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"6px 0",fontSize:12}}>
+          <span style={{color:"#475569"}}>מוצע ביומן כש:</span>
+          <select value={t.when==="spray"?"spray":"pests"} onChange={e=>upd(i,e.target.value==="spray"?{when:"spray"}:{when:undefined})} style={{padding:"4px 6px",borderRadius:6,border:"1px solid "+CLR.border,fontFamily:"inherit",fontSize:12}}><option value="pests">נבחר מזיק</option><option value="spray">יש ריסוס</option></select>
+          {t.when!=="spray"&&<input value={(t.m||[]).join(", ")} onChange={e=>upd(i,{m:e.target.value.split(/\s*,\s*/).filter(Boolean)})} placeholder="מזיקים, מופרדים בפסיק (למשל: תיקן, ג'וק)" style={{flex:1,minWidth:160,padding:"5px 8px",borderRadius:6,border:"1px solid "+CLR.border,fontFamily:"inherit",fontSize:12}}/>}
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
+          <button type="button" disabled={i===0} onClick={()=>{ const n=[...L]; [n[i-1],n[i]]=[n[i],n[i-1]]; setList(n); }} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12}}>⬆️</button>
+          <button type="button" disabled={i===L.length-1} onClick={()=>{ const n=[...L]; [n[i+1],n[i]]=[n[i],n[i+1]]; setList(n); }} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12}}>⬇️</button>
+          <button type="button" onClick={()=>{ const id="c"+Date.now(); const n=[...L]; n.splice(i+1,0,{...t,id,title:t.title+" (עותק)"}); setList(n); setOpen(id); }} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>⧉ שכפל (לאחריות אחרת)</button>
+          <button type="button" onClick={()=>shareText("*"+t.title+"*\n"+t.text)} style={{border:"1px solid #86efac",background:"#f0fdf4",color:"#166534",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>📤 שלח / העתק</button>
           {TERMS_DEFAULT.find(d=>d.id===t.id)&&<button type="button" onClick={()=>{ const d=TERMS_DEFAULT.find(d=>d.id===t.id); upd(i,{title:d.title,text:termsText(d)}); }} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↺ חזרה לנוסח המקורי</button>}
           {!TERMS_DEFAULT.find(d=>d.id===t.id)&&<button type="button" onClick={()=>setList(L.filter((_,j)=>j!==i))} style={{border:"1px solid #fecaca",background:"#fff",color:"#dc2626",borderRadius:8,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>🗑️ מחק נוסח</button>}
         </div></div>}
@@ -813,6 +856,7 @@ function TermsTplEditor(){
     <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
       <Btn v="secondary" sm onClick={()=>{ const id="c"+Date.now(); setList([...L,{id,title:"נוסח חדש",m:[],text:"• "}]); setOpen(id); }}>➕ נוסח חדש</Btn>
       {list&&<Btn sm disabled={busy} onClick={async()=>{ setBusy(true); try{ await saveTermsTpl(list); setList(null); alert("✅ הנוסחים נשמרו"); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); }}>💾 שמור נוסחים</Btn>}
+      {list&&<Btn v="ghost" sm onClick={()=>setList(null)}>בטל שינויים</Btn>}
     </div>
   </div>;
 }
@@ -5093,129 +5137,141 @@ function QuickChips({chips,onPick,isOn}){
 
 
 // ─── WhatsApp confirmation for new order ─────────────
+// ── 📋 הנחיות לפני / בזמן / אחרי ההדברה — ברירת מחדל (עריכה: תבניות הודעה) ──
+const PREP_DEFAULT = {
+
+  "תיקן אמריקאי": {
+    before: [
+      "יש לפנות את הפאנלים (החיבור בין הרצפה לקירות) מחפצים כגון נעליים, בגדים, צעצועים, סלסלות וכדומה.",
+      "אין צורך להזיז רהיטים כבדים או ארונות גדולים — ניתן לרכז חפצים במרכז החדר, כל עוד נשמרת גישה חופשית לאורך הקירות.",
+      "יש לפנות את הארון שמתחת לכיור במטבח ולאפשר גישה מלאה לצנרת ולניקוזים.",
+      "יש לפנות כלים, סירים וחפצים מהכיורים, כדי לאפשר טיפול יסודי בניקוזים.",
+      "מומלץ לפתוח חלונות לפני תחילת הטיפול, לצורך אוורור וייבוש מהיר של התכשירים.",
+      "חשוב לוודא שלמדביר קיימת גישה לכל האזורים המיועדים לטיפול — אזורים שלא תהיה אליהם גישה לא יטופלו.",
+    ],
+    during: [
+      "המדביר יבצע סיור קצר במקום לפני תחילת העבודה, ויוודא שניתן להגיע לכל האזורים הנדרשים. במידת הצורך, יסייע בפינוי חפצים קלים שנותרו.",
+      "במהלך הטיפול יש להמתין מחוץ לאזור המטופל.",
+      "המדביר משתמש בציוד מגן ובמסכת נשימה המיועדים לעבודה עם חומרי הדברה — לכן אין לשהות באזור בזמן הריסוס.",
+      "יש להשאיר חלונות פתוחים בזמן ההדברה ולאחריה, על מנת לאפשר אוורור וייבוש מהיר של התכשירים.",
+    ],
+    after: [
+      "ברוב המקרים, אין להיכנס לאזור המטופל במשך שעה אחת לפחות, אלא אם המדביר הנחה אחרת.",
+      "אין להכניס תינוקות עד גיל שנתיים לאזור המטופל במשך 3 שעות לפחות. הנחיה זו חלה גם על חצר, מרפסת או כל אזור חיצוני שבו בוצעה ההדברה.",
+      "אין להחזיר בעלי חיים לאזור המטופל במשך 4–6 שעות, בהתאם להנחיות המדביר ולסוג התכשירים שבהם נעשה שימוש.",
+      "יש להיכנס לאזור המטופל רק לאחר שכל המשטחים שרוססו התייבשו לחלוטין.",
+      "יש להימנע משטיפת הרצפה במשך 24 השעות הראשונות לאחר ההדברה.",
+      "במידה שבמקום נמצאים תינוק זוחל או בעל חיים הבאים במגע ישיר עם הרצפה — חובה לבצע שטיפה יסודית של הרצפה לפני החזרתם לאזור המטופל, גם אם טרם חלפו 24 שעות.",
+      "אם רוססו משטחי עבודה כגון שיש, שולחן אוכל או משטחים הבאים במגע עם מזון — יש לנקות אותם היטב לפני השימוש.",
+      "אם לאחר זמן ההמתנה נותרו אזורים רטובים, יש להמשיך לאוורר את המקום ולהמתין לייבוש מלא. במידה שנותרו נקודות רטובות בודדות בלבד, ניתן לנגב אותן באמצעות מגבת נייר או סמרטוט חד-פעמי ולהשליכם לפח לאחר השימוש.",
+    ],
+    important: [
+      "יש להיכנס לאזור המטופל רק לאחר שחלף זמן ההמתנה שנקבע וכל האזורים שרוססו התייבשו לחלוטין.",
+      "פתיחת חלונות בזמן ההדברה ולאחריה מסייעת לייבוש מהיר של התכשירים ולאוורור המקום.",
+      "הנחיות המדביר בשטח גוברות על ההנחיות הכלליות, בהתאם לסוג התכשירים ולמאפייני המקום המטופל.",
+      "יעילות ההדברה תלויה גם בהכנת המקום ובשמירה על ההנחיות. הקפדה עליהן תסייע להשגת תוצאות מיטביות ולשמירה על בטיחות בני הבית ובעלי החיים.",
+    ],
+  },
+
+  "פרעושים": {
+    before: [
+      "יש להרים ככל האפשר חפצים מהרצפה, כגון בגדים, צעצועים, נעליים וסלים, על מנת לאפשר טיפול יסודי בכל שטח הרצפה.",
+      "מומלץ לבצע שאיבה יסודית של הרצפות, השטיחים, הספות והמזרנים לפני ההדברה.",
+      "מומלץ לכבס מצעים, שמיכות, כריות וכל בד שבא במגע עם הפרעושים.",
+      "במידה ויש בעלי חיים בבית — יש לדאוג לטיפול וטרינרי מתאים במקביל להדברה. הדברה ללא טיפול בבעל החיים לא תניב תוצאות מלאות.",
+      "מומלץ לפתוח חלונות לפני תחילת הטיפול, לצורך אוורור וייבוש מהיר של התכשירים.",
+      "חשוב לוודא שלמדביר קיימת גישה לכל האזורים המיועדים לטיפול — אזורים שלא תהיה אליהם גישה לא יטופלו.",
+    ],
+    during: [
+      "המדביר יבצע טיפול בכל שטחי הרצפה ובאזורים הנגועים.",
+      "במהלך הטיפול יש להמתין מחוץ לאזור המטופל.",
+      "המדביר משתמש בציוד מגן ובמסכת נשימה המיועדים לעבודה עם חומרי הדברה — לכן אין לשהות באזור בזמן הריסוס.",
+      "אין לבצע ריסוס על ספות, מיטות, מזרנים או מצעים.",
+      "יש להשאיר חלונות פתוחים בזמן ההדברה ולאחריה, על מנת לאפשר אוורור וייבוש מהיר של התכשירים.",
+    ],
+    after: [
+      "אין להיכנס לאזור המטופל במשך שעתיים לפחות, אלא אם המדביר הנחה אחרת.",
+      "אין להכניס תינוקות עד גיל שנתיים לאזור המטופל במשך 4 שעות לפחות. הנחיה זו חלה גם על חצר, מרפסת או כל אזור חיצוני שבו בוצעה ההדברה.",
+      "אין להחזיר בעלי חיים לאזור המטופל במשך 8 שעות לפחות.",
+      "לפני החזרת בעלי חיים או תינוקות זוחלים — חובה לבצע שטיפה יסודית של הרצפה, גם אם טרם חלף זמן ההמתנה המלא.",
+      "ניתן לשטוף את הרצפה מיד לאחר הכניסה לאזור המטופל — אין צורך להמתין 24 שעות כמו בהדברות אחרות.",
+      "מומלץ להמשיך לבצע שאיבה של שטיחים, ספות ומזרנים בימים שלאחר ההדברה, על מנת לסייע בסילוק ביצים וגלמים שעדיין לא בקעו.",
+    ],
+    important: [
+      "הדברת פרעושים חייבת להתבצע במקביל לטיפול וטרינרי בבעלי החיים — הדברה בלבד, ללא טיפול בבעל החיים, לא תניב תוצאות מלאות ועלולה לגרום להדבקה חוזרת.",
+      "הנחיות המדביר בשטח גוברות על ההנחיות הכלליות, בהתאם לסוג התכשירים ולמאפייני המקום המטופל.",
+      "יעילות ההדברה תלויה גם בהכנת המקום ובשמירה על ההנחיות. הקפדה עליהן תסייע להשגת תוצאות מיטביות ולשמירה על בטיחות בני הבית ובעלי החיים.",
+    ],
+  },
+
+  "תיקן גרמני": {
+    before: ["לא להזיז ארונות מטבח — המדביר יפתח לפי הצורך","לשטוף כלים לפני הגעת המדביר"],
+    during: ["לא לגעת בג׳ל שיונח","לא להזיז מלכודות או תחנות","להמתין מחוץ לאזור המטופל"],
+    after: ["לא לנגב פאנלים 24 שעות","לא להזיז ג׳ל או מלכודות שהונחו"],
+    important: ["ריסוס קל בלבד — אין צורך בפינוי ממושך","הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "נמלים": {
+    before: ["לטאטא ולשטוף רצפה יסודית","לפנות חפצים מהפאנלים","לאתר מקור/קן אם ידוע"],
+    during: ["להמתין מחוץ לאזור המטופל","אין לשהות ליד הריסוס"],
+    after: ["אין לשטוף רצפות 24 שעות","אין לרסס חומרי ניקוי ליד הפאנלים","להרחיק חיות מחמד 4 שעות"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "עכברים": {
+    before: ["לפנות שאריות מזון","לסגור פחי אשפה","לאתר ולסתום חורים וסדקים"],
+    during: ["להמתין מחוץ לאזור"],
+    after: ["אין לגעת במלכודות ובתחנות","לדווח לנו אם מוצאים פגרים","לשמור על מזון סגור"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "חולדות": {
+    before: ["לפנות אזורי אחסון ומחסנים","לאטום מקורות מים"],
+    during: ["להמתין מחוץ לאזור"],
+    after: ["אין לגעת בתחנות ההאכלה","להרחיק ילדים וחיות מחמד","לדווח לנו על פגרים"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "יתושים": {
+    before: ["לרוקן מים עומדים בחצר ובעציצים","לנקות ביבים וניקוזים"],
+    during: ["להמתין מחוץ לאזור בזמן הריסוס"],
+    after: ["ניתן לחזור לאחר שעה","לסגור חלונות 2 שעות נוספות לאחר הטיפול"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "זבובים": {
+    before: ["לכסות ולהסיר מזון חשוף","לרוקן פחי אשפה","לאתר מקור רבייה (לחות/אשפה)"],
+    during: ["להמתין מחוץ לאזור"],
+    after: ["לא להכניס מזון חשוף 4 שעות","לאוורר לאחר הטיפול"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "דבורים": {
+    before: ["להתרחק מאזור הנחיל/הקן","לא להתגרות בדבורים"],
+    during: ["להמתין רחוק מאזור הטיפול"],
+    after: ["לא להתקרב לאזור 24 שעות","לאוורר היטב"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "צרעות": {
+    before: ["להתרחק מאזור הקן","לא להתגרות בצרעות"],
+    during: ["להמתין רחוק מאזור הטיפול"],
+    after: ["לא להתקרב לאזור הקן 24 שעות","לאוורר היטב"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+  "דבורים וצרעות": {
+    before: ["להתרחק מאזור הקן","לא להתגרות בדבורים/צרעות"],
+    during: ["להמתין רחוק מאזור הטיפול"],
+    after: ["לא להתקרב לאזור הקן 24 שעות","לאוורר היטב"],
+    important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
+  },
+};
+
+function makeCompanyStore(prefix,lsKey,defaults,evt){
+  const get=()=>{ try{ const o=JSON.parse(localStorage.getItem(lsKey)||"null"); if(Array.isArray(o)&&o.length) return o; }catch(e){} return defaults(); };
+  const load=async()=>{ if(!sb) return get(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const re=new RegExp("^"+prefix+"-\\d+\\.json$"); const f=(data||[]).filter(x=>re.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return get();
+    const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return get(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)&&v.length){ localStorage.setItem(lsKey,JSON.stringify(v)); return v; } }catch(e){} return get(); };
+  const save=async list=>{ localStorage.setItem(lsKey,JSON.stringify(list)); try{ window.dispatchEvent(new Event(evt)); }catch(e){} if(!sb) return; const n="company/"+prefix+"-"+String(Date.now()).padStart(15,"0")+".json"; const r=await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); if(r&&r.error) throw r.error; };
+  const use=()=>{ const [l,setL]=useState(()=>get()); React.useEffect(()=>{ let on=true; load().then(v=>on&&setL(v)); const h=()=>setL(get()); window.addEventListener(evt,h); return ()=>{on=false;window.removeEventListener(evt,h);}; },[]); return l; };
+  return {get,load,save,use};
+}
+const PREP_STORE=makeCompanyStore("prep","h360_prep_tpl",()=>Object.entries(PREP_DEFAULT).map(([pest,v],i)=>({id:"d"+i,pest,before:v.before||[],during:v.during||[],after:v.after||[],important:v.important||[]})),"h360-prep");
+const prepFor=pest=>PREP_STORE.get().find(x=>x.pest===pest);
 function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, address, company}){
 
-  const INSTRUCTIONS = {
-
-    "תיקן אמריקאי": {
-      before: [
-        "יש לפנות את הפאנלים (החיבור בין הרצפה לקירות) מחפצים כגון נעליים, בגדים, צעצועים, סלסלות וכדומה.",
-        "אין צורך להזיז רהיטים כבדים או ארונות גדולים — ניתן לרכז חפצים במרכז החדר, כל עוד נשמרת גישה חופשית לאורך הקירות.",
-        "יש לפנות את הארון שמתחת לכיור במטבח ולאפשר גישה מלאה לצנרת ולניקוזים.",
-        "יש לפנות כלים, סירים וחפצים מהכיורים, כדי לאפשר טיפול יסודי בניקוזים.",
-        "מומלץ לפתוח חלונות לפני תחילת הטיפול, לצורך אוורור וייבוש מהיר של התכשירים.",
-        "חשוב לוודא שלמדביר קיימת גישה לכל האזורים המיועדים לטיפול — אזורים שלא תהיה אליהם גישה לא יטופלו.",
-      ],
-      during: [
-        "המדביר יבצע סיור קצר במקום לפני תחילת העבודה, ויוודא שניתן להגיע לכל האזורים הנדרשים. במידת הצורך, יסייע בפינוי חפצים קלים שנותרו.",
-        "במהלך הטיפול יש להמתין מחוץ לאזור המטופל.",
-        "המדביר משתמש בציוד מגן ובמסכת נשימה המיועדים לעבודה עם חומרי הדברה — לכן אין לשהות באזור בזמן הריסוס.",
-        "יש להשאיר חלונות פתוחים בזמן ההדברה ולאחריה, על מנת לאפשר אוורור וייבוש מהיר של התכשירים.",
-      ],
-      after: [
-        "ברוב המקרים, אין להיכנס לאזור המטופל במשך שעה אחת לפחות, אלא אם המדביר הנחה אחרת.",
-        "אין להכניס תינוקות עד גיל שנתיים לאזור המטופל במשך 3 שעות לפחות. הנחיה זו חלה גם על חצר, מרפסת או כל אזור חיצוני שבו בוצעה ההדברה.",
-        "אין להחזיר בעלי חיים לאזור המטופל במשך 4–6 שעות, בהתאם להנחיות המדביר ולסוג התכשירים שבהם נעשה שימוש.",
-        "יש להיכנס לאזור המטופל רק לאחר שכל המשטחים שרוססו התייבשו לחלוטין.",
-        "יש להימנע משטיפת הרצפה במשך 24 השעות הראשונות לאחר ההדברה.",
-        "במידה שבמקום נמצאים תינוק זוחל או בעל חיים הבאים במגע ישיר עם הרצפה — חובה לבצע שטיפה יסודית של הרצפה לפני החזרתם לאזור המטופל, גם אם טרם חלפו 24 שעות.",
-        "אם רוססו משטחי עבודה כגון שיש, שולחן אוכל או משטחים הבאים במגע עם מזון — יש לנקות אותם היטב לפני השימוש.",
-        "אם לאחר זמן ההמתנה נותרו אזורים רטובים, יש להמשיך לאוורר את המקום ולהמתין לייבוש מלא. במידה שנותרו נקודות רטובות בודדות בלבד, ניתן לנגב אותן באמצעות מגבת נייר או סמרטוט חד-פעמי ולהשליכם לפח לאחר השימוש.",
-      ],
-      important: [
-        "יש להיכנס לאזור המטופל רק לאחר שחלף זמן ההמתנה שנקבע וכל האזורים שרוססו התייבשו לחלוטין.",
-        "פתיחת חלונות בזמן ההדברה ולאחריה מסייעת לייבוש מהיר של התכשירים ולאוורור המקום.",
-        "הנחיות המדביר בשטח גוברות על ההנחיות הכלליות, בהתאם לסוג התכשירים ולמאפייני המקום המטופל.",
-        "יעילות ההדברה תלויה גם בהכנת המקום ובשמירה על ההנחיות. הקפדה עליהן תסייע להשגת תוצאות מיטביות ולשמירה על בטיחות בני הבית ובעלי החיים.",
-      ],
-    },
-
-    "פרעושים": {
-      before: [
-        "יש להרים ככל האפשר חפצים מהרצפה, כגון בגדים, צעצועים, נעליים וסלים, על מנת לאפשר טיפול יסודי בכל שטח הרצפה.",
-        "מומלץ לבצע שאיבה יסודית של הרצפות, השטיחים, הספות והמזרנים לפני ההדברה.",
-        "מומלץ לכבס מצעים, שמיכות, כריות וכל בד שבא במגע עם הפרעושים.",
-        "במידה ויש בעלי חיים בבית — יש לדאוג לטיפול וטרינרי מתאים במקביל להדברה. הדברה ללא טיפול בבעל החיים לא תניב תוצאות מלאות.",
-        "מומלץ לפתוח חלונות לפני תחילת הטיפול, לצורך אוורור וייבוש מהיר של התכשירים.",
-        "חשוב לוודא שלמדביר קיימת גישה לכל האזורים המיועדים לטיפול — אזורים שלא תהיה אליהם גישה לא יטופלו.",
-      ],
-      during: [
-        "המדביר יבצע טיפול בכל שטחי הרצפה ובאזורים הנגועים.",
-        "במהלך הטיפול יש להמתין מחוץ לאזור המטופל.",
-        "המדביר משתמש בציוד מגן ובמסכת נשימה המיועדים לעבודה עם חומרי הדברה — לכן אין לשהות באזור בזמן הריסוס.",
-        "אין לבצע ריסוס על ספות, מיטות, מזרנים או מצעים.",
-        "יש להשאיר חלונות פתוחים בזמן ההדברה ולאחריה, על מנת לאפשר אוורור וייבוש מהיר של התכשירים.",
-      ],
-      after: [
-        "אין להיכנס לאזור המטופל במשך שעתיים לפחות, אלא אם המדביר הנחה אחרת.",
-        "אין להכניס תינוקות עד גיל שנתיים לאזור המטופל במשך 4 שעות לפחות. הנחיה זו חלה גם על חצר, מרפסת או כל אזור חיצוני שבו בוצעה ההדברה.",
-        "אין להחזיר בעלי חיים לאזור המטופל במשך 8 שעות לפחות.",
-        "לפני החזרת בעלי חיים או תינוקות זוחלים — חובה לבצע שטיפה יסודית של הרצפה, גם אם טרם חלף זמן ההמתנה המלא.",
-        "ניתן לשטוף את הרצפה מיד לאחר הכניסה לאזור המטופל — אין צורך להמתין 24 שעות כמו בהדברות אחרות.",
-        "מומלץ להמשיך לבצע שאיבה של שטיחים, ספות ומזרנים בימים שלאחר ההדברה, על מנת לסייע בסילוק ביצים וגלמים שעדיין לא בקעו.",
-      ],
-      important: [
-        "הדברת פרעושים חייבת להתבצע במקביל לטיפול וטרינרי בבעלי החיים — הדברה בלבד, ללא טיפול בבעל החיים, לא תניב תוצאות מלאות ועלולה לגרום להדבקה חוזרת.",
-        "הנחיות המדביר בשטח גוברות על ההנחיות הכלליות, בהתאם לסוג התכשירים ולמאפייני המקום המטופל.",
-        "יעילות ההדברה תלויה גם בהכנת המקום ובשמירה על ההנחיות. הקפדה עליהן תסייע להשגת תוצאות מיטביות ולשמירה על בטיחות בני הבית ובעלי החיים.",
-      ],
-    },
-
-    "תיקן גרמני": {
-      before: ["לא להזיז ארונות מטבח — המדביר יפתח לפי הצורך","לשטוף כלים לפני הגעת המדביר"],
-      during: ["לא לגעת בג׳ל שיונח","לא להזיז מלכודות או תחנות","להמתין מחוץ לאזור המטופל"],
-      after: ["לא לנגב פאנלים 24 שעות","לא להזיז ג׳ל או מלכודות שהונחו"],
-      important: ["ריסוס קל בלבד — אין צורך בפינוי ממושך","הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "נמלים": {
-      before: ["לטאטא ולשטוף רצפה יסודית","לפנות חפצים מהפאנלים","לאתר מקור/קן אם ידוע"],
-      during: ["להמתין מחוץ לאזור המטופל","אין לשהות ליד הריסוס"],
-      after: ["אין לשטוף רצפות 24 שעות","אין לרסס חומרי ניקוי ליד הפאנלים","להרחיק חיות מחמד 4 שעות"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "עכברים": {
-      before: ["לפנות שאריות מזון","לסגור פחי אשפה","לאתר ולסתום חורים וסדקים"],
-      during: ["להמתין מחוץ לאזור"],
-      after: ["אין לגעת במלכודות ובתחנות","לדווח לנו אם מוצאים פגרים","לשמור על מזון סגור"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "חולדות": {
-      before: ["לפנות אזורי אחסון ומחסנים","לאטום מקורות מים"],
-      during: ["להמתין מחוץ לאזור"],
-      after: ["אין לגעת בתחנות ההאכלה","להרחיק ילדים וחיות מחמד","לדווח לנו על פגרים"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "יתושים": {
-      before: ["לרוקן מים עומדים בחצר ובעציצים","לנקות ביבים וניקוזים"],
-      during: ["להמתין מחוץ לאזור בזמן הריסוס"],
-      after: ["ניתן לחזור לאחר שעה","לסגור חלונות 2 שעות נוספות לאחר הטיפול"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "זבובים": {
-      before: ["לכסות ולהסיר מזון חשוף","לרוקן פחי אשפה","לאתר מקור רבייה (לחות/אשפה)"],
-      during: ["להמתין מחוץ לאזור"],
-      after: ["לא להכניס מזון חשוף 4 שעות","לאוורר לאחר הטיפול"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "דבורים": {
-      before: ["להתרחק מאזור הנחיל/הקן","לא להתגרות בדבורים"],
-      during: ["להמתין רחוק מאזור הטיפול"],
-      after: ["לא להתקרב לאזור 24 שעות","לאוורר היטב"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "צרעות": {
-      before: ["להתרחק מאזור הקן","לא להתגרות בצרעות"],
-      during: ["להמתין רחוק מאזור הטיפול"],
-      after: ["לא להתקרב לאזור הקן 24 שעות","לאוורר היטב"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-    "דבורים וצרעות": {
-      before: ["להתרחק מאזור הקן","לא להתגרות בדבורים/צרעות"],
-      during: ["להמתין רחוק מאזור הטיפול"],
-      after: ["לא להתקרב לאזור הקן 24 שעות","לאוורר היטב"],
-      important: ["הנחיות המדביר בשטח גוברות על ההנחיות הכלליות"],
-    },
-  };
 
   const lines = [
     "שלום *"+name+"* 👋",
@@ -5234,10 +5290,10 @@ function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, add
   lines.push("");
   lines.push("⚠️ *אנא אמתו שהכתובת נכונה — אם יש טעות נשמח שתיצרו קשר.*");
 
-  const relevantPests = pests.filter(p=>INSTRUCTIONS[p]);
+  const relevantPests = pests.filter(p=>prepFor(p));
   if(relevantPests.length>0){
     relevantPests.forEach(pest=>{
-      const inst = INSTRUCTIONS[pest];
+      const inst = prepFor(pest);
       lines.push("");
       lines.push("━━━━━━━━━━━━━━━━━━━━");
       lines.push("📌 *הנחיות — "+pest+"*");
@@ -7296,7 +7352,18 @@ function ScheduledMsgs({scheduled,setScheduled,customers,appointments,templates}
     </div>
   </div>;
 }
-function MsgTemplates({templates,setTemplates,customers,appointments}){
+function MsgTemplates(props){
+  const [cat,setCat]=useState(()=>{ try{ return localStorage.getItem("h360_tpl_cat")||"msg"; }catch(e){ return "msg"; } });
+  const go=c=>{ setCat(c); try{ localStorage.setItem("h360_tpl_cat",c); }catch(e){} };
+  const tab=(k,l)=><button key={k} type="button" onClick={()=>go(k)} style={{padding:"8px 14px",borderRadius:20,border:"1.5px solid "+(cat===k?CLR.primary:CLR.border),background:cat===k?CLR.primary:"#fff",color:cat===k?"#fff":"#334155",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;
+  return <div>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>{tab("msg","💬 הודעות")}{tab("warranty","🛡️ אחריות להדברה")}{tab("prep","📋 לפני / בזמן / אחרי")}</div>
+    {cat==="msg"&&<MsgTemplatesList {...props}/>}
+    {cat==="warranty"&&<div><h2 style={{color:CLR.primary,fontSize:17,margin:"0 0 4px"}}>🛡️ אחריות להדברה</h2><p style={{color:CLR.muted,fontSize:13,margin:"0 0 10px"}}>נוסחי מהות הטיפול והאחריות לכל מזיק. אפשר לערוך, לסדר, לשכפל (למשל אחריות שונה לאותו מזיק) ולשלוח. ביומן הביצוע מסמנים V על הנוסח הרצוי.</p><TermsTplEditor/></div>}
+    {cat==="prep"&&<div><h2 style={{color:CLR.primary,fontSize:17,margin:"0 0 4px"}}>📋 מה עושים לפני, בזמן ואחרי ההדברה</h2><p style={{color:CLR.muted,fontSize:13,margin:"0 0 10px"}}>ההנחיות לכל מזיק — נכנסות להודעת אישור ההזמנה ללקוח. אפשר לערוך, לסדר, לשכפל ולשלוח.</p><PrepTplEditor/></div>}
+  </div>;
+}
+function MsgTemplatesList({templates,setTemplates,customers,appointments}){
   const [editing,setEditing]=useState(null); // null | template object
   const [preview,setPreview]=useState(null); // {template, appt, customer}
   const [sendAppt,setSendAppt]=useState(null);
@@ -11654,7 +11721,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="127";
+const APP_BUILD="128";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
