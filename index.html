@@ -1543,7 +1543,7 @@ async function docPdfBlob(doc){
   const sign=await sigPrepare(doc); const copy=docOrigCopy(doc,false);
   const b=await htmlPdfBlob(docHtml({...doc,copy,signed:!!sign}));
   if(!sign) return b;
-  try{ return await sigSignBlob(b,sign,doc); }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false})); }
+  try{ const sb2=await sigSignBlob(b,sign,doc); if(!copy) sigKeepOriginal(sb2,doc); return sb2; }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false})); }
 }
 async function sendLogAndDocWA(log,doc,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
@@ -7877,7 +7877,14 @@ async function sigSignBlob(blob,sign,doc){
   const out=await sigSignPdf(bytes,{...sign,reason:doc?(doc.docType+" "+String(doc.docSeq||"").padStart(4,"0")):"מסמך",name:COMPANY.legalName||COMPANY.name,location:COMPANY.address||"ישראל"});
   return new Blob([out],{type:'application/pdf'});
 }
+// חובה לשמור את הקובץ החתום שנשלח ללקוח כחלק מהנהלת החשבונות (חוזר מס הכנסה 24/2004, סעיף 2.5.4)
+async function sigKeepOriginal(blob,doc){ try{ if(!sb||!doc||doc.id==null) return; const y=String(doc.date||"").slice(0,4)||"x";
+  const path="signed-docs/"+y+"/"+String(doc.date||"").replace(/-/g,"")+"-"+String(doc.docSeq||0)+"-"+String(doc.id).replace(/[^0-9A-Za-z_-]/g,"")+".pdf";
+  const r=await sb.storage.from('contracts').upload(path,blob,{contentType:'application/pdf',upsert:false}); if(r&&r.error&&!/exist|duplicate/i.test(r.error.message||"")) throw r.error;
+  window.__h360SetDocSigned&&window.__h360SetDocSigned(doc.id,path); }catch(e){ console.warn("שמירת המקור החתום נכשלה",e); } }
+async function openSignedOriginal(f){ try{ const r=await sb.storage.from('contracts').createSignedUrl(f.signedPath,600,{download:docNiceName(f).replace(".pdf"," - מקור חתום.pdf")}); if(r.error) throw r.error; window.open(r.data.signedUrl,"_blank"); }catch(e){ alert("פתיחת הקובץ נכשלה: "+(e.message||e)); } }
 function sigDownloadCert(){ const k=sigKey(); if(!k) return; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([k.certPem],{type:'application/x-x509-ca-cert'})); a.download="תעודת חתימה - "+(COMPANY.legalName||COMPANY.name)+".cer"; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500); }
+const ASSESSOR_NOTICE_TEXT=()=>["לכבוד","פקיד השומה ________","","הנדון: הודעה על משלוח מסמכים ממוחשבים — "+(COMPANY.legalName||COMPANY.name)+", עוסק מורשה "+COMPANY.taxId,"","בהתאם לסעיף 18ב(ב) להוראות מס הכנסה (ניהול פנקסי חשבונות), הריני להודיע כי החל מיום ________ אתחיל לשלוח ללקוחותיי חשבוניות, קבלות ומסמכים נוספים כ\"מסמך ממוחשב\", חתומים בחתימה אלקטרונית מאובטחת.","","כתובת העסק: "+(COMPANY.address||""),"טלפון: "+(COMPANY.phone||""),"","בכבוד רב,",(COMPANY.legalName||COMPANY.name),"","תאריך: ________   חתימה: ________"].join("\n");
 const EINV_CONSENT_TEXT=()=>["שלום,","מ"+(COMPANY.legalName||COMPANY.name)+" — מעכשיו החשבוניות והקבלות נשלחות אליכם כקובץ PDF חתום בחתימה אלקטרונית מאובטחת, במקום בנייר.","","כדי שנוכל לשלוח כך, נבקש אישור קצר בתשובה להודעה הזו:",'"אני מאשר/ת לקבל מ'+(COMPANY.legalName||COMPANY.name)+' חשבוניות וקבלות ממוחשבות (דיגיטליות)."',"","הערה: לפי הכללים, ללקוח עסקי שמקבל חשבונית דיגיטלית עדיף לשלם בהעברה בנקאית מהחשבון של העסק, בצ׳ק או בכרטיס אשראי של העסק.","תודה!"].join("\n");
 function SignSetupModal({onClose}){
   const list=SIGKEY_STORE.use(); const k=(list||[]).find(x=>x&&x.certPem&&!x.retired)||null;
@@ -7934,11 +7941,20 @@ function SignSetupModal({onClose}){
     <div style={box}>
       <div style={{fontWeight:800,marginBottom:4}}>📋 מה עוד צריך (לקוחות עסקיים בלבד)</div>
       <ul style={{margin:0,paddingRight:18}}>
-        <li><b>הסכמה פעם אחת:</b> לקוח עסקי צריך לאשר שהוא מסכים לקבל חשבוניות דיגיטליות. בחשבונית ללקוח עם ע.מ./ח.פ. יש תיבה לסמן שהוא הסכים.</li>
+        <li><b>הסכמה פעם אחת, לפני המסמך הראשון:</b> לקוח עסקי צריך לאשר שהוא מסכים לקבל חשבוניות דיגיטליות. בחשבונית ללקוח עם ע.מ./ח.פ. יש תיבה לסמן שהוא הסכים.</li>
         <li><b>אמצעי תשלום:</b> בחתימה מאובטחת, לקוח עסקי צריך לשלם בהעברה מהחשבון שלו, בצ׳ק או בכרטיס האשראי שלו. אם שילם במזומן או בביט — המערכת תזכיר לתת לו גם מקור מודפס.</li>
+        <li><b>לשמור את האישור:</b> את תשובת הלקוח ("מאשר") שומרים (צילום מסך / המייל) — זה חלק מהנהלת החשבונות.</li>
         <li>לקוחות פרטיים (בלי ע.מ.) — לא צריך כלום מזה.</li>
       </ul>
       <div style={{marginTop:8}}><Btn sm v="secondary" onClick={()=>{ const t=EINV_CONSENT_TEXT(); navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>alert("✅ הטקסט הועתק — אפשר להדביק בוואטסאפ או במייל ללקוח")); }}>📋 העתק בקשת הסכמה ללקוח</Btn></div>
+    </div>
+    <div style={{...box,borderColor:k&&k.noticeSent?"#86efac":"#fcd34d",background:k&&k.noticeSent?"#f0fdf4":"#fffbeb"}}>
+      <div style={{fontWeight:800,marginBottom:4}}>✉️ הודעה לפקיד השומה — פעם אחת, לפני המסמך הדיגיטלי הראשון</div>
+      <div>לפי ההוראות (סעיף 18ב(ב)), עסק שמתחיל לשלוח מסמכים ממוחשבים מודיע על כך לפקיד השומה שלו <b>בדואר רשום</b>. זה מכתב קצר — אפשר לבקש מרואה החשבון לשלוח, או להדפיס ולשלוח בדואר.</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,alignItems:"center"}}>
+        <Btn sm v="secondary" onClick={()=>{ const t=ASSESSOR_NOTICE_TEXT(); navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>alert("✅ נוסח המכתב הועתק")); }}>📋 העתק נוסח מכתב</Btn>
+        {k&&<label style={{display:"flex",gap:6,alignItems:"center"}}><input type="checkbox" checked={!!k.noticeSent} onChange={async e=>{ const v=e.target.checked?todayStr():""; try{ await SIGKEY_STORE.save((list||[]).map(x=>x===k?{...x,noticeSent:v}:x)); }catch(er){ alert("שמירה נכשלה: "+(er.message||er)); } }}/>נשלח{k.noticeSent?" ("+fmtDate(k.noticeSent)+")":""}</label>}
+      </div>
     </div>
     <div style={{fontSize:12,color:"#64748b"}}>כשפותחים את הקובץ ב-Adobe מופיע "המסמך לא שונה מאז החתימה". ליד זה יכול להופיע "זהות החותם לא אומתה" — כי החתימה שלנו לא נקנתה מגוף מאשר (ComSign וכו׳). זה ההבדל בין חתימה "מאובטחת" (שלנו, בחינם) לבין "מאושרת" (בתשלום).</div>
   </Modal>;
@@ -7999,7 +8015,7 @@ function docHtml(doc){
         <div style="font-size:13px;color:#555;">מס׳ ${doc.preview?"יוקצה בהפקה":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</div>
         ${doc.refund?`<div style="font-size:12px;font-weight:700;color:#b91c1c;">החזר כספי ללקוח</div>`:""}
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(doc.date)}</div>
-        ${T.accounting?`<div style="font-size:12px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}</div>`:""}
+        ${T.accounting?`<div style="font-size:12px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}${doc.signed?" · מסמך ממוחשב":""}</div>`:""}
         ${doc.allocationNum?`<div style="font-size:12px;color:#111;margin-top:2px;">מספר הקצאה: <b>${doc.allocationNum}</b></div>`:""}
       </div>
     </div>
@@ -8036,7 +8052,7 @@ function docHtml(doc){
     ${doc.footer?`<div style="font-size:12px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
       <div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>
-      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
+      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב — חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
     </div>
   </div>`;
 }
@@ -8347,6 +8363,8 @@ function DocsGuide({onClose}){
         <L><b>לקוח פרטי:</b> לא צריך כלום.</L>
         <L><b>לקוח עסקי (ע.מ./ח.פ.)</b> שמקזז מע״מ: צריך <b>הסכמה פעם אחת</b> לקבל חשבוניות דיגיטליות (מסמנים בחשבונית), ותשלום ב<b>העברה מהחשבון שלו, צ׳ק או כרטיס האשראי שלו</b>. שילם במזומן או בביט — נותנים לו גם מקור מודפס.</L>
         <L>הדפסה (🖨) היא מקור על נייר — היא לא צריכה חתימה דיגיטלית.</L>
+        <L>הקובץ החתום הראשון שנשלח ללקוח נשמר לבד בשרת (🔏 בשורת המסמך) — חובה לשמור אותו לביקורת.</L>
+        <L>פעם אחת, לפני המסמך הדיגיטלי הראשון: <b>מכתב בדואר רשום לפקיד השומה</b> (נוסח מוכן בחלון "🔏 חתימה דיגיטלית").</L>
       </ul>
       <H>6. כללים שהמערכת שומרת לבד</H>
       <ul style={{margin:0,paddingRight:18}}>
@@ -8511,6 +8529,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
             <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {f.official&&T.accounting?(f.originalAt?<button onClick={()=>printDoc(doc,true)} title="המקור כבר הופק — מכאן רק העתק" style={{...act,color:CLR.primary}}>📄 העתק</button>:<button onClick={()=>printDoc(doc)} title="הפקת המקור (פעם אחת)" style={{...act,color:CLR.primary,fontWeight:700}}>📄 מקור</button>)
                 :<><button onClick={()=>printDoc(doc)} title="מקור" style={{...act,color:CLR.primary}}>📄</button>{T.accounting&&<button onClick={()=>printDoc(doc,true)} title="העתק" style={{...act,color:CLR.muted}}>העתק</button>}</>}
+              {f.signedPath&&<button onClick={()=>openSignedOriginal(f)} title="הקובץ החתום שנשלח ללקוח (נשמר לביקורת)" style={{...act,color:"#166534"}}>🔏</button>}
               {f.official&&f.needsAllocation&&!f.allocationNum&&<button onClick={()=>{ const n=prompt("מספר ההקצאה שקיבלת מרשות המסים:"); if(n&&n.trim()) setFinance(fs=>fs.map(x=>x.id===f.id?{...x,allocationNum:n.trim(),allocationAddedAt:new Date().toISOString()}:x)); }} style={{...act,color:"#d97706"}}>➕ מספר הקצאה</button>}
               {t==="קבלה"&&!f.refund&&!f.refundedBy&&<button onClick={()=>setDocReq({type:"קבלה",prefill:{custId:f.customerId,custName:f.customer,lockType:true,refund:true,refDocId:f.id,refText:"קבלה "+(f.invoiceNum||""),payments:[{method:((f.payments||[])[0]||{}).method||"מזומן",amount:String(-Math.abs(totalOf(f))),date:todayStr(),details:{}}],notes:"ביטול / החזר של קבלה "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date)}})} title="למשל צ׳ק שחזר או החזר כסף" style={{...act,color:"#b91c1c"}}>↩ ביטול קבלה</button>}
               {t==="חשבונית זיכוי"&&!f.refundedBy&&<button onClick={()=>openRefund(f,finance.find(x=>String(x.id)===String(f.refDocId)))} title="תיעוד החזר כסף ללקוח" style={{...act,color:"#b91c1c"}}>↩ החזר כסף</button>}
@@ -12207,7 +12226,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="133";
+const APP_BUILD="134";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12364,6 +12383,7 @@ function App(){
   const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&(String(w.crmUserId)===String(authUser.id)||String(w.name||"").trim()===String(authUser.name||"").trim()));
   const [appointments,setAppointments]=useLS("appointments", []);
   const [finance,setFinance]=useLS("finance", []);
+  React.useEffect(()=>{ window.__h360SetDocSigned=(id,path)=>setFinance(fs=>fs.map(f=>String(f.id)===String(id)&&!f.signedPath?{...f,signedPath:path,signedAt:new Date().toISOString()}:f)); },[]);
   React.useEffect(()=>{ window.__h360MarkDocOriginal=id=>setFinance(fs=>fs.map(f=>String(f.id)===String(id)&&!f.originalAt?{...f,originalAt:new Date().toISOString()}:f)); },[]);
   // תיקון תורים בלי שם לקוח (נוצרו מכרטיס הלקוח/שכפול) — משלים את השם מכרטיס הלקוח
   React.useEffect(()=>{
