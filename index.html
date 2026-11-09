@@ -1556,9 +1556,7 @@ async function sendLogAndDocWA(log,doc,phone){
     if(log){ const {url}=await uploadExecLogPdf(log); parts.push("📋 יומן ביצוע מס׳ "+(log.docNum||"")+":\n"+url); }
     if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,"D"+String(doc.invoiceNum||doc.docSeq||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
     const name=(log&&(log.contactName||log.clientName))||(doc&&((doc.cust&&doc.cust.contactName)||doc.customer))||"";
-    // לקוח עסקי שעוד לא אישר קבלת חשבוניות דיגיטליות — מבקשים אישור באותה הודעה
-    let consentAsk=[]; try{ const tx=String((doc&&doc.cust&&doc.cust.taxId)||"").replace(/\D/g,""); if(doc&&docNeedsSig(doc)&&tx.length>=8){ const c=(JSON.parse(localStorage.getItem('h360_customers')||'[]')||[]).find(x=>String(x.id)===String(doc.customerId)); if(!c||!c.einvConsent) consentAsk=["📌 החשבונית נשלחת כקובץ ממוחשב החתום בחתימה אלקטרונית מאובטחת. נשמח לאישור קצר בתשובה: \"מאשר/ת לקבל חשבוניות דיגיטליות\". אם תעדיפו מקור מודפס — כתבו לנו.",""]; } }catch(_){}
-    const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),...consentAsk,"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
+    const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
     try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
@@ -7941,14 +7939,8 @@ function SignSetupModal({onClose}){
     </div>}
     {busy&&<div style={{fontSize:13,color:"#1d4ed8",marginBottom:8}}>{busy}</div>}
     <div style={box}>
-      <div style={{fontWeight:800,marginBottom:4}}>📋 מה עוד צריך (לקוחות עסקיים בלבד)</div>
-      <ul style={{margin:0,paddingRight:18}}>
-        <li><b>הסכמה פעם אחת:</b> לקוח עסקי (ששולח חשבוניות לרו״ח לקיזוז מע״מ) צריך לאשר פעם אחת שהוא מסכים לקבל חשבוניות דיגיטליות. <b>לא צריך לשלוח בקשה נפרדת</b> — בשליחה בוואטסאפ מתווספת לבד שורה שמבקשת "מאשר". כשהוא עונה — מסמנים V בכרטיס החשבונית הבאה. ללקוח פרטי, ועד בית, או עסק שלא מקזז מע״מ — לא רלוונטי.</li>
-        <li><b>אמצעי תשלום:</b> בחתימה מאובטחת, לקוח עסקי צריך לשלם בהעברה מהחשבון שלו, בצ׳ק או בכרטיס האשראי שלו. אם שילם במזומן או בביט — המערכת תזכיר לתת לו גם מקור מודפס.</li>
-        <li><b>לשמור את האישור:</b> את תשובת הלקוח ("מאשר") שומרים (צילום מסך / המייל) — זה חלק מהנהלת החשבונות.</li>
-        <li>לקוחות פרטיים (בלי ע.מ.) — לא צריך כלום מזה.</li>
-      </ul>
-      <div style={{marginTop:8}}><Btn sm v="secondary" onClick={()=>{ const t=EINV_CONSENT_TEXT(); navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>alert("✅ הטקסט הועתק — אפשר להדביק בוואטסאפ או במייל ללקוח")); }}>📋 העתק בקשת הסכמה ללקוח</Btn></div>
+      <div style={{fontWeight:800,marginBottom:4}}>📋 איך עובדים</div>
+      <div>שולחים חשבונית כרגיל (וואטסאפ / PDF) — היא נחתמת לבד. אין שום דבר נוסף לעשות מול הלקוח.</div>
     </div>
     <div style={{...box,borderColor:k&&k.noticeSent?"#86efac":"#fcd34d",background:k&&k.noticeSent?"#f0fdf4":"#fffbeb"}}>
       <div style={{fontWeight:800,marginBottom:4}}>✉️ הודעה לפקיד השומה — פעם אחת, לפני המסמך הדיגיטלי הראשון</div>
@@ -8301,13 +8293,6 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       <Inp label="מספר הקצאה" value={allocationNum} onChange={setAllocationNum} placeholder="9 ספרות"/>
     </div>}
 
-    {official&&T.accounting&&String(cx.taxId||"").replace(/\D/g,"").length>=8&&(()=>{ const consent=cust?cust.einvConsent:einvLocal; const weak=T.receipt&&payments.some(p=>parseFloat(p.amount)&&["מזומן","ביט","פייבוקס"].includes(p.method));
-      return <div style={{border:"1px solid "+(consent&&!weak?"#86efac":"#fcd34d"),background:consent&&!weak?"#f0fdf4":"#fffbeb",borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:13,lineHeight:1.6}}>
-        <div style={{fontWeight:800,marginBottom:2}}>🔏 לקוח עסקי — חשבונית דיגיטלית חתומה</div>
-        <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={!!consent} onChange={e=>{ const v=e.target.checked?todayStr():""; if(cust&&setCustomers) setCustomers(cs=>cs.map(x=>x.id===cust.id?{...x,einvConsent:v}:x)); else setEinvLocal(v); }}/>הלקוח הסכים לקבל חשבוניות דיגיטליות{consent&&consent!==true?" (מ-"+fmtDate(consent)+")":""}</label>
-        {!consent&&<div style={{color:"#92400e"}}>צריך הסכמה פעם אחת (אפשר בוואטסאפ). בלי הסכמה — לתת לו מקור מודפס.</div>}
-        {weak&&<div style={{color:"#92400e",marginTop:2}}>⚠️ לקוח עסקי ששילם במזומן / ביט / פייבוקס: כדי שיוכל לקזז מע״מ — תן לו גם <b>מקור מודפס</b> (🖨 הדפסה). בהעברה מהחשבון שלו, צ׳ק או אשראי — הקובץ החתום מספיק.</div>}
-      </div>; })()}
     <div style={card}>
       <div style={h}>📝 הערות</div>
       <Txt label="הערות (יופיעו במסמך)" value={notes} onChange={setNotes} rows={2}/>
@@ -8359,11 +8344,10 @@ function DocsGuide({onClose}){
       <ul style={{margin:0,paddingRight:18}}>
         <L>הפעם הראשונה שמדפיסים או שולחים מסמך רשמי — הוא יוצא כ<b>"מקור"</b>. מכאן והלאה כל הדפסה ושליחה יוצאת <b>"העתק נאמן למקור"</b>, לבד.</L>
       </ul>
-      <H>5. חתימה דיגיטלית ולקוחות עסקיים</H>
+      <H>5. חתימה דיגיטלית</H>
       <ul style={{margin:0,paddingRight:18}}>
         <L>כל מסמך רשמי שנשלח כ-PDF נחתם ב<b>חתימה אלקטרונית מאובטחת</b> של העסק (🔏 חתימה דיגיטלית). אם משנים בקובץ משהו — החתימה נשברת, ורואים את זה ב-Adobe.</L>
-        <L><b>לקוח פרטי:</b> לא צריך כלום.</L>
-        <L><b>לקוח עסקי (ע.מ./ח.פ.)</b> שמקזז מע״מ: צריך <b>הסכמה פעם אחת</b> לקבל חשבוניות דיגיטליות (מסמנים בחשבונית), ותשלום ב<b>העברה מהחשבון שלו, צ׳ק או כרטיס האשראי שלו</b>. שילם במזומן או בביט — נותנים לו גם מקור מודפס.</L>
+        <L>שולחים ללקוח כרגיל (וואטסאפ / PDF). אם לקוח מבקש מקור מודפס — מדפיסים (🖨).</L>
         <L>הדפסה (🖨) היא מקור על נייר — היא לא צריכה חתימה דיגיטלית.</L>
         <L>הקובץ החתום הראשון שנשלח ללקוח נשמר לבד בשרת (🔏 בשורת המסמך) — חובה לשמור אותו לביקורת.</L>
         <L>פעם אחת, לפני המסמך הדיגיטלי הראשון: <b>מכתב בדואר רשום לפקיד השומה</b> (נוסח מוכן בחלון "🔏 חתימה דיגיטלית").</L>
@@ -12228,7 +12212,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="136";
+const APP_BUILD="137";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
