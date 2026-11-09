@@ -1539,7 +1539,7 @@ async function sendExecLogWA(log,phone){
 }
 // ── מסמך חשבונאי כ-PDF + שליחה יחד עם יומן הביצוע ──
 function docNiceName(doc){ const d=String(doc.date||"").split("-"); const ds=d.length===3?d[2]+"."+d[1]+"."+d[0]:""; return doc.docType.replace("/"," ")+" "+String(doc.docSeq||"").padStart(4,"0")+" - "+(COMPANY.legalName||COMPANY.name)+(ds?" - "+ds:"")+".pdf"; }
-async function docPdfBlob(doc){ return htmlPdfBlob(docHtml(doc)); }
+async function docPdfBlob(doc){ return htmlPdfBlob(docHtml({...doc,copy:docOrigCopy(doc,false)})); }
 async function sendLogAndDocWA(log,doc,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
   if(!ph) return alert("אין טלפון ללקוח");
@@ -3915,7 +3915,7 @@ function InvoiceModal({appt,customers,onClose,onSave}){
 }
 
 // Execution-log modal launched from the calendar — dark themed, prefilled from the appointment
-function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[],finance=[],appointments=[]}){
+function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,onOpenInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[],finance=[],appointments=[]}){
   const [autoInv,setAutoInv]=useState(false);
   const existingLog=React.useMemo(()=>(execLogs||[]).find(l=>appt&&l.apptId===appt.id&&!l.deleted)||null,[]);
   const lockedLog=!!(existingLog&&!existingLog.draft);
@@ -3964,26 +3964,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,currentUse
         {/* Invoice section */}
         <div style={{background:"#ffffff",border:`1px solid ${"#e2e8f0"}`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
           <div style={{fontWeight:700,color:CLR.accent,fontSize:15,marginBottom:12}}>🧾 חשבונית</div>
-          {!savedInvoice ? <>
-            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",marginBottom:12,color:"#0f172a"}}>
-              <input type="checkbox" checked={makeInvoice} onChange={e=>setMakeInvoice(e.target.checked)}/> להפיק חשבונית עבור טיפול זה (₪{appt.price} + מע"מ)
-            </label>
-            {makeInvoice&&<div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                <div><label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:4}}>אמצעי תשלום</label>
-                  <select value={payMethod} onChange={e=>setPayMethod(e.target.value)} style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"8px 10px",color:"#0f172a",fontSize:14,fontFamily:"inherit"}}>
-                    {["מזומן","העברה בנקאית","ביט","PayBox","צ'ק","אשראי"].map(m=><option key={m}>{m}</option>)}
-                  </select></div>
-                <div><label style={{fontSize:12,color:CLR.muted,display:"block",marginBottom:4}}>סטטוס תשלום</label>
-                  <select value={payNow?"שולם":"חוב"} onChange={e=>setPayNow(e.target.value==="שולם")} style={{width:"100%",background:"#fff",border:`1px solid ${"#e2e8f0"}`,borderRadius:8,padding:"8px 10px",color:"#0f172a",fontSize:14,fontFamily:"inherit"}}>
-                    <option value="שולם">התקבל תשלום</option><option value="חוב">טרם שולם (חוב)</option>
-                  </select></div>
-              </div>
-              <Btn onClick={handleCreateInvoice} style={{width:"100%"}}>🧾 הפק חשבונית</Btn>
-            </div>}
-          </> : <div style={{textAlign:"center",color:"#3ddc84",fontWeight:600,fontSize:14}}>
-            ✅ חשבונית {savedInvoice.invoiceNum} נוצרה ({savedInvoice.status})
-          </div>}
+          {onOpenInvoice?<Btn onClick={()=>onOpenInvoice(appt)} style={{width:"100%"}}>🧾 הפק חשבונית / קבלה</Btn>:<div style={{fontSize:13,color:CLR.muted}}>הפקת חשבונית — מלשונית "חשבוניות".</div>}
         </div>
 
         {/* Two PDF buttons */}
@@ -5091,7 +5072,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
       currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance} finance={finance} appointments={appointments}
-      onClose={()=>{setLogAppt(null);setDetailAppt(null);backIfReq();}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog}/>}
+      onClose={()=>{setLogAppt(null);setDetailAppt(null);backIfReq();}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog} onOpenInvoice={a=>{setLogAppt(null);setInvAppt(a);}}/>}
   </div>;
 }
 
@@ -7766,6 +7747,10 @@ const DOC_TYPES = {
   "קבלה":            {short:"קבלה", accounting:true, invoice:false, receipt:true,  color:"#0891b2", help:"אישור על תשלום שהתקבל (למשל אחרי חשבונית מס)."},
   "חשבונית זיכוי":   {short:"זיכוי", accounting:true, invoice:true,  receipt:false, color:"#dc2626", help:"ביטול או הקטנה של חשבונית מס. חשבונית לא מוחקים — מזכים."},
 };
+// ── מצב רשמי: מסמכים חשבונאיים אמיתיים, מספור רציף מהשרת (טבלת doc_counters) ──
+const DOCSET_STORE=makeCompanyStore("docset","h360_docset",()=>[{official:false,since:"",start:{}}],"h360-docset");
+const docSet=()=>(DOCSET_STORE.get()[0]||{official:false,start:{}});
+async function nextOfficialSeq(type){ const st=docSet(); const {data,error}=await sb.rpc('next_doc_seq',{p_type:type,p_min:parseInt((st.start||{})[type])||1}); if(error) throw new Error(error.message||"שגיאת מספור"); if(!(data>0)) throw new Error("לא התקבל מספר מהשרת"); return data; }
 const PAY_METHODS_DOC = ["מזומן","ביט","פייבוקס","העברה בנקאית","צ׳ק","כרטיס אשראי","ניכוי במקור","אחר"];
 const PAY_ICON = {"מזומן":"💵","ביט":"🅑","פייבוקס":"🅿️","העברה בנקאית":"🏦","צ׳ק":"🧾","כרטיס אשראי":"💳","ניכוי במקור":"📉","אחר":"…"};
 const DOC_ITEM_DEFAULTS = ["הדברת תיקן אמריקאי (ג׳וקים) – ריסוס פנלים וניקוזים","הדברת תיקן גרמני – ג׳לים ומלכודות","הדברת נמלים","הדברת פרעושים","לכידת מכרסמים","הסרת קן צרעות","הדברת פשפש מיטה","הדברת בניין – חדר מדרגות, חצר וביובים","אחזקה חודשית – הדברה משולבת","ביקור חוזר / טיפול המשך"];
@@ -7791,7 +7776,7 @@ function nextDocNum(finance, type){
   return (nums.length?Math.max(...nums):0)+1;
 }
 function needsAllocation(type, beforeVat, custTaxId){
-  return !!(DOC_TYPES[type]&&DOC_TYPES[type].invoice && String(custTaxId||"").replace(/\D/g,"").length>=8 && beforeVat>=ALLOCATION_THRESHOLD);
+  return !!(DOC_TYPES[type]&&DOC_TYPES[type].invoice && String(custTaxId||"").replace(/\D/g,"").length>=8 && beforeVat>ALLOCATION_THRESHOLD);
 }
 function payDetailsText(p){
   const d=p.details||{};
@@ -7810,14 +7795,15 @@ function docHtml(doc){
   const c=doc.cust||{};
   return `
   <div style="max-width:740px;margin:0 auto;position:relative;">
-    ${doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
+    ${doc.preview?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:56px;font-weight:800;color:rgba(37,99,235,.12);transform:rotate(-18deg);pointer-events:none;">תצוגה מקדימה — עוד לא הופק</div>`:doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:16px;">
       <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:60px;width:auto;display:block;"/>
         <div style="font-size:12px;color:#333;margin-top:4px;"><b>${COMPANY.legalName||COMPANY.name}</b> · עוסק מורשה ${COMPANY.taxId}</div>
         <div style="font-size:12px;color:#555;">${COMPANY.address||""}${COMPANY.phone?" · "+COMPANY.phone:""}${COMPANY.email?" · "+COMPANY.email:""}</div></div>
       <div style="text-align:left;">
         <div style="font-size:22px;font-weight:800;color:#1a5c3a;">${doc.docType}</div>
-        <div style="font-size:13px;color:#555;">מס׳ ${doc.draft?"טיוטה ":""}${String(doc.docSeq||"").padStart(4,"0")}</div>
+        <div style="font-size:13px;color:#555;">מס׳ ${doc.preview?"יוקצה בהפקה":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</div>
+        ${doc.refund?`<div style="font-size:12px;font-weight:700;color:#b91c1c;">החזר כספי ללקוח</div>`:""}
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(doc.date)}</div>
         ${T.accounting?`<div style="font-size:12px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}</div>`:""}
         ${doc.allocationNum?`<div style="font-size:12px;color:#111;margin-top:2px;">מספר הקצאה: <b>${doc.allocationNum}</b></div>`:""}
@@ -7833,7 +7819,7 @@ function docHtml(doc){
       <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">
         ${doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:""}
         ${doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:""}
-        ${!T.receipt&&doc.payTerms?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:""}
+        ${!T.receipt&&doc.payTerms&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:""}
         ${!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""}
       </div>
     </div>
@@ -7856,11 +7842,13 @@ function docHtml(doc){
     ${doc.footer?`<div style="font-size:12px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
       <div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>
-      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.draft?"טיוטה — הופקה במערכת הדברה 360 לבדיקה בלבד. המסמך הרשמי יופק בתוכנה רשומה.":"הופק במערכת "+COMPANY.name}</div>
+      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}</div>
     </div>
   </div>`;
 }
-function printDoc(doc, copy){ openPrintWindow(doc.docType+" "+String(doc.docSeq||"").padStart(4,"0"), docHtml({...doc,copy:!!copy})); }
+// מסמך רשמי: "מקור" יוצא פעם אחת בלבד; כל הדפסה / שליחה אחר כך — "העתק נאמן למקור"
+function docOrigCopy(doc,copy){ if(!doc||!doc.official||copy) return !!copy; if(doc.originalAt) return true; try{ window.__h360MarkDocOriginal&&window.__h360MarkDocOriginal(doc.id); }catch(e){} return false; }
+function printDoc(doc, copy){ const c=docOrigCopy(doc,copy); openPrintWindow(doc.docType+" "+String(doc.docSeq||"").padStart(4,"0")+(c?" - העתק":""), docHtml({...doc,copy:c})); }
 
 // ── טופס הפקת מסמך ──
 function DocModal({type:initType="חשבונית מס/קבלה",customers=[],setCustomers,appointments=[],finance=[],prefill={},onClose,onSave}){
@@ -7888,6 +7876,8 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const [allocationNum,setAllocationNum]=useState(P.allocationNum||"");
   const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
   const [itemPick,setItemPick]=useState(null); // אינדקס שורה שפתוח בה בורר פריטים
+  const official=!!docSet().official; const [saving,setSaving]=useState(false);
+  const refDoc=P.refDocId!=null?(finance||[]).find(f=>String(f.id)===String(P.refDocId)):null;
   React.useEffect(()=>{ if(cust){ setCustQ(cust.name||""); setCx(x=>({...x,name:cust.name||"",taxId:P.taxId||cust.taxId||"",address:cust.address||"",phone:cust.phone||"",email:cust.email||"",contactName:cust.contactName||""})); } },[custId]);
   const tot=docTotals(lines,inclVat,showDisc?discount:null,roundTotal);
   const receiptOnly=type==="קבלה";
@@ -7913,7 +7903,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     const a=appointments.find(x=>String(x.id)===String(apptId));
     const seq=P.docSeq||nextDocNum(finance,type);
     return {
-      category:"חשבונית", type:(type==="חשבונית מס"||type==="חשבונית מס/קבלה"||type==="חשבונית זיכוי")?"הכנסה":type==="קבלה"?"קבלה":"דרישת תשלום", docType:type, draft:true,
+      category:"חשבונית", type:(type==="חשבונית מס"||type==="חשבונית מס/קבלה"||type==="חשבונית זיכוי")?"הכנסה":type==="קבלה"?"קבלה":"דרישת תשלום", docType:type, draft:!official, refund:!!P.refund,
       docSeq:seq, invoiceNum:(T.short)+"-"+String(seq).padStart(4,"0"),
       date, customer:cx.name||"", customerId:cust?cust.id:null,
       cust:{...cx},
@@ -7923,7 +7913,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       payments:T.receipt?payments.filter(p=>parseFloat(p.amount)):[],
       payMethod:T.receipt?(payments.find(p=>parseFloat(p.amount))||{}).method||"":"",
       payTerms:T.receipt?"":payTerms, dueDate:T.receipt?"":dueDate,
-      status:T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
+      status:P.refund?"החזר":T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"",
       refDocId:P.refDocId||null, refText:P.refText||"", execLogIds:P.execLogIds||null,
@@ -7931,15 +7921,30 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       notes, footer, privateNote, createdAt:new Date().toISOString(), createdById:P.createdById!=null?P.createdById:((__h360User||{}).id??null), createdBy:P.createdBy||((__h360User||{}).name||""),
     };
   };
-  const save=()=>{
+  const save=async()=>{
+    if(saving) return;
     if(!cx.name.trim()) return alert("בחר לקוח או כתוב שם לקוח");
     if(lastDate&&date<lastDate) return alert("תאריך המסמך לא יכול להיות לפני המסמך האחרון מאותו סוג ("+fmtDate(lastDate)+") — כדי שהמספור יישאר רציף.");
     if(date>todayStr()&&DOC_TYPES[type].accounting) return alert("אי אפשר להפיק מסמך חשבונאי בתאריך עתידי.");
     if(!receiptOnly&&!tot.total) return alert("הוסף שורת שירות עם מחיר");
     if(T.receipt&&!paidSum) return alert("הוסף את התשלום שהתקבל (לחץ על אמצעי התשלום)");
+    if(P.refund&&paidSum>0) return alert("בקבלה על החזר כספי הסכום צריך להיות במינוס (למשל ‎-350‎).");
+    if(!P.refund&&paidSum<0) return alert("סכום שלילי מותר רק בקבלה על החזר כספי ללקוח (דרך חשבונית זיכוי).");
+    if(type==="חשבונית זיכוי"&&refDoc){
+      if(date<(refDoc.date||"")) return alert("תאריך הזיכוי לא יכול להיות לפני תאריך החשבונית המקורית ("+fmtDate(refDoc.date)+").");
+      const origTot=Math.abs(docNums(refDoc).total); const prevCred=(finance||[]).filter(f=>isDocRec(f)&&docTypeOf(f)==="חשבונית זיכוי"&&String(f.refDocId)===String(refDoc.id)).reduce((t,f)=>t+Math.abs(docNums(f).total),0);
+      if(tot.total>origTot-prevCred+0.5) return alert("סכום הזיכוי ("+money(tot.total)+") גבוה ממה שנשאר לזכות בחשבונית המקורית ("+money(Math.max(0,origTot-prevCred))+").");
+    }
     if(T.receipt&&!receiptOnly&&Math.abs(paidSum-tot.total)>1&&!confirm(`סכום התשלומים (${money(paidSum)}) שונה מסכום המסמך (${money(tot.total)}). להמשיך?`)) return;
     if(alloc&&!allocationNum.trim()&&!confirm("העסקה מעל "+ALLOCATION_THRESHOLD.toLocaleString()+" ₪ ללקוח עסקי ודורשת מספר הקצאה.\nלשמור בלי מספר הקצאה בינתיים?")) return;
     if(cust&&setCustomers&&(cx.taxId!==(cust.taxId||"")||(!cust.email&&cx.email))) setCustomers(cs=>cs.map(x=>x.id===cust.id?{...x,taxId:cx.taxId,email:x.email||cx.email}:x));
+    if(official&&T.accounting){
+      if(!navigator.onLine) return alert("אין רשת. מסמך רשמי מקבל מספר מהשרת כדי שהמספור יהיה רציף ולא יוכפל — נסה שוב כשיש רשת.");
+      if(!confirm("להפיק "+type+" רשמית ללקוח "+cx.name+" על סך "+money(receiptOnly?paidSum:tot.total)+"?\nאחרי ההפקה אי אפשר לשנות או למחוק את המסמך — רק לבטל בחשבונית זיכוי.")) return;
+      setSaving(true);
+      try{ const seq=await nextOfficialSeq(type); const rec={...build(),docSeq:seq,invoiceNum:T.short+"-"+String(seq).padStart(4,"0"),draft:false,official:true,issuedAt:new Date().toISOString()}; onSave&&onSave(rec); setSaving(false); return rec; }
+      catch(e){ setSaving(false); alert("ההפקה נכשלה ("+(e.message||e)+"). המסמך לא הופק — אפשר לנסות שוב."); return; }
+    }
     const rec=build(); onSave&&onSave(rec); return rec;
   };
   const lbl={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
@@ -7961,7 +7966,8 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       setPayments([{method,amount:amt,date:r.date||date,details:r.payment.payments&&method==="כרטיס אשראי"?{payments:r.payment.payments}:{}}]); }
     if(r.notes) setNotes(n=>mergeNotes(n,r.notes));
   };
-  return <Modal title={"🧾 "+type+" (טיוטה)"} onClose={onClose} width={720}>
+  return <Modal title={"🧾 "+(P.refund?"קבלה על החזר כספי ללקוח":type)+(official&&T.accounting?"":" (טיוטה)")} onClose={onClose} width={720}>
+    {P.refund&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>↩ <b>החזר כספי:</b> הסכום בקבלה הזו במינוס — הוא מתעד שהחזרת ללקוח כסף בעקבות {P.refText||"חשבונית הזיכוי"}. בחר איך החזרת (מזומן, העברה, ביט…) והקלד את הסכום עם מינוס.</div>}
     <SmartBox color="#2563eb" bg="#eff6ff" border="#93c5fd" contacts parse={t=>parseDoc(t,{customers})} onApply={applyDoc}
       hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת ג׳וקים 350 שקל, שילם במזומן".'
       placeholder={"למשל: חשבונית ליוסי כהן על הדברת ג'וקים 350 שקל, שילם בביט"}
@@ -8090,16 +8096,92 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       <Txt label="🔒 הערה פנימית (רק לך, לא מופיעה במסמך)" value={privateNote} onChange={setPrivateNote} rows={2}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",position:"sticky",bottom:-20,background:"#fff",padding:"10px 0",borderTop:"1px solid #eef2f7"}}>
-      <Btn onClick={()=>{const r=save(); if(r) onClose();}} style={{flex:1}}>✅ שמור טיוטה</Btn>
-      <Btn v="secondary" onClick={()=>{ if(!cx.name.trim()) return alert("בחר לקוח"); printDoc(build()); }}>👁 תצוגה מקדימה</Btn>
+      <Btn onClick={async()=>{const r=await save(); if(r) onClose();}} disabled={saving} style={{flex:1}}>{saving?"⏳ מפיק…":official&&T.accounting?"✅ הפק "+type:"✅ שמור טיוטה"}</Btn>
+      <Btn v="secondary" onClick={()=>{ if(!cx.name.trim()) return alert("בחר לקוח"); printDoc({...build(),preview:official&&T.accounting,official:false}); }}>👁 תצוגה מקדימה</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
+  </Modal>;
+}
+
+const isAdminUser=()=>((typeof __h360User!=="undefined"&&__h360User)||{}).role==="מנהל";
+const DOC_NUMBERS_SQL="-- ═══════════════════════════════════════════════════════════════\n-- הדברה 360 — מספור רציף של מסמכים חשבונאיים (חשבונית מס, חשבונית מס/קבלה, קבלה, חשבונית זיכוי)\n-- להריץ פעם אחת ב-Supabase → SQL Editor → New query → Run\n-- המספר נקבע בשרת, כך שגם אם שני משתמשים מפיקים מסמך באותו רגע — לא יהיה מספר כפול ולא יהיה חור.\n-- ═══════════════════════════════════════════════════════════════\n\ncreate table if not exists public.doc_counters (\n  doc_type   text primary key,\n  last_seq   integer not null default 0,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.doc_counters enable row level security;\ndrop policy if exists doc_counters_crm on public.doc_counters;\ncreate policy doc_counters_crm on public.doc_counters for select to authenticated using (public.is_crm_user());\nrevoke all on public.doc_counters from anon;\ngrant select on public.doc_counters to authenticated;\n\n-- מחזיר את המספר הבא לסוג המסמך (לפחות p_min — כדי להמשיך מהמספור של התוכנה הקודמת)\ncreate or replace function public.next_doc_seq(p_type text, p_min integer default 1)\nreturns integer\nlanguage plpgsql security definer set search_path = public as $$\ndeclare v integer;\nbegin\n  if not public.is_crm_user() then raise exception 'not allowed'; end if;\n  if p_type not in ('חשבונית מס','חשבונית מס/קבלה','קבלה','חשבונית זיכוי') then raise exception 'bad document type'; end if;\n  insert into public.doc_counters(doc_type, last_seq) values (p_type, 0) on conflict (doc_type) do nothing;\n  update public.doc_counters\n     set last_seq = greatest(last_seq + 1, coalesce(p_min, 1)), updated_at = now()\n   where doc_type = p_type\n  returning last_seq into v;\n  return v;\nend $$;\n\nrevoke all on function public.next_doc_seq(text, integer) from public, anon;\ngrant execute on function public.next_doc_seq(text, integer) to authenticated;\n\nselect 'doc numbering ready' as status;\n";
+// 📘 מדריך: איזה מסמך, ביטול/החזר, מספר הקצאה
+function DocsGuide({onClose}){
+  const H=({children})=><div style={{fontWeight:800,fontSize:16,color:"#1a5c3a",margin:"14px 0 6px"}}>{children}</div>;
+  const L=({children})=><li style={{marginBottom:6,lineHeight:1.6}}>{children}</li>;
+  return <Modal title="📘 מדריך — חשבוניות, קבלות, זיכויים ומספר הקצאה" onClose={onClose} width={680}>
+    <div style={{fontSize:14,color:"#0f172a"}}>
+      <H>1. איזה מסמך להפיק</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L><b>הלקוח שילם עכשיו</b> → <b>חשבונית מס/קבלה</b>. מפיקים מיד עם קבלת התשלום (לא לפני ולא אחרי).</L>
+        <L><b>הלקוח ישלם אחר כך</b> (ועד בית, משרד, "שוטף +") → <b>חשבונית מס</b>. כשהתשלום מגיע — בשורה של החשבונית לוחצים <b>"שולם → קבלה"</b>.</L>
+        <L>רוצים רק לבקש תשלום, בלי מסמך מס → <b>חשבון עסקה</b> (לא מסמך חשבונאי). כשמשלמים — <b>"שולם → ח.מס/קבלה"</b>.</L>
+        <L><b>כל תשלום שמתקבל חייב קבלה מיד</b> — מזומן, ביט, העברה, צ׳ק או אשראי (באשראי — ביום אישור העסקה, גם אם יש תשלומים).</L>
+      </ul>
+      <H>2. ביטול, הנחה והחזר כסף</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L>מסמך שהופק <b>לא מוחקים ולא משנים</b>. מבטלים ב<b>חשבונית זיכוי</b> — "מסמך נגדי".</L>
+        <L><b>ביטול מלא:</b> בשורת החשבונית → <b>"זיכוי"</b> → משאירים את הסכום המלא → הפקה.</L>
+        <L><b>הנחה / ביטול חלקי:</b> "זיכוי" → משנים את הסכום לחלק שמבטלים.</L>
+        <L><b>הלקוח כבר שילם ואתה מחזיר לו כסף:</b> אחרי הזיכוי המערכת שואלת "החזרת כסף?" → אישור → <b>קבלה על החזר</b> עם סכום במינוס ואיך החזרת (מזומן, העברה, ביט…). כך גם החשבונית וגם הכסף מתועדים. אם שכחת — בשורת הזיכוי יש כפתור <b>"↩ החזר כסף"</b>.</L>
+        <L>אם הכסף נשאר אצלך כזיכוי לעבודה הבאה — לא מפיקים קבלת החזר.</L>
+        <L><b>טעות בפרטים</b> (שם, סכום, תיאור): זיכוי מלא למסמך השגוי + מסמך חדש ונכון.</L>
+        <L>הזיכוי מפנה תמיד למסמך המקורי (מספר ותאריך), ולא יכול להיות גבוה ממה שנשאר לזכות.</L>
+      </ul>
+      <H>3. מספר הקצאה (חשבוניות ישראל)</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L><b>מתי צריך:</b> רק בחשבונית ל<b>עוסק מורשה / חברה</b> שמבקש מספר הקצאה, כשהסכום <b>מעל 5,000 ₪ לפני מע״מ</b>. ללקוח פרטי — אף פעם.</L>
+        <L>המערכת מזהה לבד: כשמקלידים ח.פ. / ע.מ. של הלקוח והסכום מעל 5,000 ₪ — מופיעה אזהרה ⚠️.</L>
+        <L><b>איך מקבלים:</b> נכנסים ל<b>אזור האישי באתר רשות המסים</b> → "חשבוניות ישראל" → בקשה למספר הקצאה (ממלאים את פרטי הלקוח והחשבונית), או מבקשים מרואה החשבון.</L>
+        <L>את המספר מקלידים בשדה <b>"מספר הקצאה"</b> בחשבונית <b>לפני ההפקה</b>, והוא מודפס עליה. אם הופקה בלי — בשורת החשבונית יש <b>"➕ מספר הקצאה"</b>, ואז שולחים ללקוח העתק.</L>
+        <L>זיכוי לחשבונית שיש לה מספר הקצאה — המספר עובר לזיכוי לבד.</L>
+      </ul>
+      <H>4. מקור והעתק</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L>הפעם הראשונה שמדפיסים או שולחים מסמך רשמי — הוא יוצא כ<b>"מקור"</b>. מכאן והלאה כל הדפסה ושליחה יוצאת <b>"העתק נאמן למקור"</b>, לבד.</L>
+      </ul>
+      <H>5. כללים שהמערכת שומרת לבד</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L>מספור רציף לכל סוג מסמך, שנקבע בשרת — בלי כפילויות, גם כשכמה אנשים מפיקים יחד. לכן להפקה צריך רשת.</L>
+        <L>אין תאריך עתידי, ואין תאריך לפני המסמך האחרון מאותו סוג.</L>
+        <L>מע״מ {VAT_RATE}%. במסמך מופיעים: שם העסק, כתובת, "עוסק מורשה" ומספר, סוג המסמך, מספר, תאריך, פרטי הלקוח, פירוט, מחיר לפני מע״מ, מע״מ וסה״כ, וחתימה.</L>
+        <L>כל חודשיים — "📤 דוח לרואה חשבון".</L>
+      </ul>
+      <div style={{fontSize:12,color:CLR.muted,marginTop:12}}>המדריך מסכם את הכללים הכלליים (כל־זכות, רשות המסים). זה לא ייעוץ מס — במקרה מיוחד כדאי לשאול את רואה החשבון.</div>
+    </div>
+  </Modal>;
+}
+// 🚀 הפעלת מצב רשמי
+function GoLiveModal({finance,onClose}){
+  const [chk,setChk]=useState(""); const [busy,setBusy]=useState(false);
+  const TYPES=["חשבונית מס/קבלה","חשבונית מס","קבלה","חשבונית זיכוי"];
+  const [start,setStart]=useState(()=>Object.fromEntries(TYPES.map(t=>[t,"1"])));
+  const [ok,setOk]=useState({company:false,accountant:false});
+  const check=async()=>{ setChk("בודק…"); try{ const {error}=await sb.from('doc_counters').select('doc_type').limit(1); setChk(error?"❌ עוד לא הורץ ("+error.message+")":"✅ המספור בשרת מוכן"); }catch(e){ setChk("❌ "+(e.message||e)); } };
+  const activate=async()=>{ if(!/✅/.test(chk)) return alert("קודם צריך להריץ את קוד ה-SQL ולבדוק שהוא מוכן (שלב 1)."); if(!ok.company||!ok.accountant) return alert("סמן את שני האישורים");
+    if(!confirm("להפעיל מצב רשמי? מעכשיו המסמכים שמופקים כאן הם חשבוניות וקבלות אמיתיות.")) return;
+    setBusy(true); try{ await DOCSET_STORE.save([{official:true,since:todayStr(),start:Object.fromEntries(TYPES.map(t=>[t,String(parseInt(start[t])||1)]))}]); alert("✅ מצב רשמי הופעל"); onClose(); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
+  const box={border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10,background:"#fff"};
+  return <Modal title="🚀 הפעלת מצב רשמי — חשבוניות אמיתיות מה-CRM" onClose={onClose} width={640}>
+    <div style={box}><b>1. מספור בשרת</b><div style={{fontSize:13,color:"#475569",margin:"4px 0 8px"}}>פעם אחת: Supabase → SQL Editor → New query → מדביקים → Run. זה מה שמבטיח מספור רציף בלי כפילויות.</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}><Btn sm v="secondary" onClick={()=>{ navigator.clipboard&&navigator.clipboard.writeText(DOC_NUMBERS_SQL).then(()=>alert("✅ הקוד הועתק")); }}>📋 העתק את קוד ה-SQL</Btn>
+        <a href="https://supabase.com/dashboard/project/ilublhgawgfznxpdrfra/sql/new" target="_blank" rel="noopener" style={{fontSize:13,alignSelf:"center"}}>פתח את Supabase ←</a>
+        <Btn sm onClick={check}>🔍 בדוק</Btn><span style={{fontSize:13,alignSelf:"center"}}>{chk}</span></div></div>
+    <div style={box}><b>2. מאיזה מספר להתחיל</b><div style={{fontSize:13,color:"#475569",margin:"4px 0 8px"}}>אם עד היום הפקת ב"יש חשבונית" — מומלץ להמשיך מהמספר הבא שלך שם, לכל סוג מסמך (כדאי לתאם עם רואה החשבון). אחרת — 1.</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{TYPES.map(t=><label key={t} style={{fontSize:13}}>{t}<input type="number" min="1" value={start[t]} onChange={e=>setStart(x=>({...x,[t]:e.target.value}))} style={{width:"100%",padding:"7px 9px",borderRadius:8,border:"1px solid #cbd5e1",boxSizing:"border-box",marginTop:2}}/></label>)}</div></div>
+    <div style={box}><b>3. בדיקת פרטי העסק שיופיעו בכל מסמך</b>
+      <div style={{fontSize:13,margin:"6px 0",lineHeight:1.7}}>{COMPANY.legalName} · עוסק מורשה {COMPANY.taxId}<br/>{COMPANY.address} · {COMPANY.phone} · {COMPANY.email}</div>
+      <label style={{display:"flex",gap:8,fontSize:13,alignItems:"center"}}><input type="checkbox" checked={ok.company} onChange={e=>setOk(x=>({...x,company:e.target.checked}))}/>הפרטים נכונים</label>
+      <label style={{display:"flex",gap:8,fontSize:13,alignItems:"center",marginTop:4}}><input type="checkbox" checked={ok.accountant} onChange={e=>setOk(x=>({...x,accountant:e.target.checked}))}/>עדכנתי את רואה החשבון שמהיום החשבוניות יוצאות מה-CRM (ומאיזה מספר)</label></div>
+    <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>טיוטות שנוצרו עד עכשיו נשארות מסומנות "טיוטה" ולא נכנסות לדוח לרואה החשבון.</div>
+    <div style={{display:"flex",gap:8}}><Btn full disabled={busy} onClick={activate}>🚀 הפעל מצב רשמי</Btn><Btn v="ghost" onClick={onClose}>ביטול</Btn></div>
   </Modal>;
 }
 function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs,mineOnly=null}){
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
   const custOf=l=>customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
@@ -8130,18 +8212,25 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const openSum=r2(openInv.reduce((s,f)=>s+totalOf(f),0));
   const allocMissing=docs.filter(f=>f.needsAllocation&&!f.allocationNum);
   const saveDoc=rec=>{
+    const idBox={v:null};
     setFinance(fs=>{
-      let out=[...fs,{...rec,id:nextId(fs)}];
+      idBox.v=nextId(fs); let out=[...fs,{...rec,id:idBox.v}];
       // קבלה / חשבונית מס/קבלה שנוצרה ממסמך פתוח — סוגרת אותו
-      if(rec.refDocId&&DOC_TYPES[rec.docType]?.receipt) out=out.map(x=>String(x.id)===String(rec.refDocId)?{...x,status:"שולם",paidByDocId:rec.invoiceNum}:x);
+      if(rec.refDocId&&!rec.refund&&DOC_TYPES[rec.docType]?.receipt) out=out.map(x=>String(x.id)===String(rec.refDocId)?{...x,status:"שולם",paidByDocId:rec.invoiceNum}:x);
+      if(rec.refund&&rec.refDocId) out=out.map(x=>String(x.id)===String(rec.refDocId)?{...x,refundedBy:rec.invoiceNum}:x);
       if(rec.refDocId&&rec.docType==="חשבונית זיכוי") out=out.map(x=>String(x.id)===String(rec.refDocId)?{...x,creditedBy:rec.invoiceNum}:x);
       return out;
     });
     if(rec.execLogId&&setExecLogs) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x));
     if(rec.execLogIds&&setExecLogs){ const ids=rec.execLogIds.map(String); setExecLogs(ls=>ls.map(x=>ids.includes(String(x.id))?{...x,invoiceNum:rec.invoiceNum}:x)); }
+    // זיכוי על מסמך ששולם → מציעים לתעד את החזר הכסף (קבלה במינוס)
+    if(rec.docType==="חשבונית זיכוי"&&rec.refDocId){ const orig=finance.find(x=>String(x.id)===String(rec.refDocId));
+      if(orig&&(DOC_TYPES[docTypeOf(orig)]?.receipt||orig.status==="שולם")) setTimeout(()=>{ if(confirm("החשבונית המקורית שולמה.\nהחזרת (או תחזיר) ללקוח את הכסף?\n\nאישור = להפיק עכשיו קבלה על ההחזר (סכום במינוס).\nביטול = הכסף נשאר אצלך כזיכוי לעבודה הבאה.")) openRefund({...rec,id:idBox.v||"__new"},orig); },400); }
   };
+  const openRefund=(cr,orig)=>{ const amt=Math.abs(cr.total!=null?cr.total:docNums(cr).total); const m=((orig&&orig.payments||[])[0]||{}).method||"העברה בנקאית";
+    setDocReq({type:"קבלה",prefill:{custId:cr.customerId,custName:cr.customer,taxId:(cr.cust||{}).taxId||"",lockType:true,refund:true,refDocId:cr.id==="__new"?null:cr.id,refText:"חשבונית זיכוי "+(cr.invoiceNum||""),payments:[{method:m,amount:String(-amt),date:todayStr(),details:{}}],notes:"החזר כספי ללקוח בגין חשבונית זיכוי "+(cr.invoiceNum||"")+(orig?" (ביטול "+docTypeOf(orig)+" "+(orig.invoiceNum||"")+")":"")}}); };
   const follow=(f,type)=>{
-    const base={custId:f.customerId,custName:f.customer,taxId:(f.cust||{}).taxId||"",apptId:f.apptId||"",execLogId:f.execLogId||null,execDocNum:f.execDocNum||"",refDocId:f.id,refText:docTypeOf(f)+" "+(f.invoiceNum||""),lockType:true,
+    const base={custId:f.customerId,custName:f.customer,taxId:(f.cust||{}).taxId||"",apptId:f.apptId||"",execLogId:f.execLogId||null,execDocNum:f.execDocNum||"",refDocId:f.id,refText:docTypeOf(f)+" "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date),lockType:true,
       lines:(f.lines&&f.lines.length?f.lines:[{desc:f.pestType||"",qty:"1",unit:"יח׳",price:String(totalOf(f))}]),inclVat:f.lines&&f.lines.length?!!f.inclVat:true,allocationNum:type==="חשבונית זיכוי"?(f.allocationNum||""):""};
     if(type!=="חשבונית זיכוי") base.payments=[{method:"העברה בנקאית",amount:String(totalOf(f)),date:todayStr(),details:{}}];
     setDocReq({type,prefill:base});
@@ -8158,7 +8247,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
   return <div>
-    <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן הם תבניות לבדיקת הזרימה. המסמכים הרשמיים ימשיכו לצאת ב"יש חשבונית" עד שנחבר את המערכת לתוכנה רשומה.</div>
+    {dset.official?<div style={{background:"#f0fdf4",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""}: חשבוניות וקבלות שמופקות כאן הן מסמכים חשבונאיים אמיתיים, עם מספור רציף מהשרת.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn></div>
+      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 הפעלת מצב רשמי</Btn>}</div>}
     <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
       <StatCard label="מסמכים" value={docs.length}/>
       <StatCard label="סה״כ חשבוניות (כולל מע״מ)" value={money(sumInv)} bg="#dbeafe"/>
@@ -8204,15 +8294,18 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
             const doc=legacy?{...f,docType:t,docSeq:f.invoiceNum,draft:true,cust:{name:f.customer,phone:f.phone,address:f.address},lines:[{desc:"הדברת "+(f.pestType||""),qty:"1",unit:"יח׳",price:String(f.amount)}],inclVat:false,before:f.amount,vat:r2(f.amount*VAT_RATE/100),total:totalOf(f),payments:[{method:f.payMethod||"",amount:totalOf(f),date:f.date}]}:f;
             return <tr key={f.id} style={{borderBottom:`1px solid ${CLR.border}`}}>
             <td style={{padding:"9px 12px"}}><span style={{background:(T.color||"#64748b")+"18",color:T.color||"#64748b",fontWeight:700,borderRadius:20,padding:"2px 9px",fontSize:12,whiteSpace:"nowrap"}}>{t}</span></td>
-            <td style={{padding:"9px 12px",color:CLR.info,fontWeight:600,whiteSpace:"nowrap"}}>{f.invoiceNum||"—"}{f.needsAllocation&&!f.allocationNum?<span title="חסר מספר הקצאה" style={{color:"#d97706"}}> ⚠️</span>:""}</td>
+            <td style={{padding:"9px 12px",color:CLR.info,fontWeight:600,whiteSpace:"nowrap"}}>{f.invoiceNum||"—"}{f.needsAllocation&&!f.allocationNum?<span title="חסר מספר הקצאה" style={{color:"#d97706"}}> ⚠️</span>:""}{f.draft&&T.accounting?<span style={{fontSize:10,color:"#b91c1c",background:"#fee2e2",borderRadius:8,padding:"0 5px",marginRight:4}}>טיוטה</span>:null}{f.refund?<span style={{fontSize:10,color:"#b91c1c"}}> ↩ החזר</span>:null}</td>
             <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{fmtDate(f.date)}</td>
             <td style={{padding:"9px 12px"}}>{f.customer||"—"}{f.refText?<div style={{fontSize:11,color:CLR.muted}}>↩ {f.refText}</div>:null}</td>
             <td style={{padding:"9px 12px"}}>{money(f.before!=null?f.before:f.amount)}</td>
             <td style={{padding:"9px 12px",fontWeight:700,color:t==="חשבונית זיכוי"?CLR.danger:CLR.primary}}>{t==="חשבונית זיכוי"?"-":""}{money(totalOf(f))}</td>
             <td style={{padding:"9px 12px"}}>{T.receipt?<Badge status="שולם"/>:t==="חשבונית זיכוי"?<span style={{color:CLR.danger,fontSize:12,fontWeight:700}}>זיכוי</span>:f.status==="שולם"?<Badge status="שולם"/>:<span style={{color:"#b45309",fontSize:12,fontWeight:700}}>פתוח{f.dueDate?" · עד "+fmtDate(f.dueDate):""}</span>}{f.creditedBy?<div style={{fontSize:11,color:CLR.danger}}>זוכה ({f.creditedBy})</div>:null}</td>
             <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-              <button onClick={()=>printDoc(doc)} title="מקור" style={{...act,color:CLR.primary}}>📄</button>
-              {T.accounting&&<button onClick={()=>printDoc(doc,true)} title="העתק" style={{...act,color:CLR.muted}}>העתק</button>}
+              {f.official&&T.accounting?(f.originalAt?<button onClick={()=>printDoc(doc,true)} title="המקור כבר הופק — מכאן רק העתק" style={{...act,color:CLR.primary}}>📄 העתק</button>:<button onClick={()=>printDoc(doc)} title="הפקת המקור (פעם אחת)" style={{...act,color:CLR.primary,fontWeight:700}}>📄 מקור</button>)
+                :<><button onClick={()=>printDoc(doc)} title="מקור" style={{...act,color:CLR.primary}}>📄</button>{T.accounting&&<button onClick={()=>printDoc(doc,true)} title="העתק" style={{...act,color:CLR.muted}}>העתק</button>}</>}
+              {f.official&&f.needsAllocation&&!f.allocationNum&&<button onClick={()=>{ const n=prompt("מספר ההקצאה שקיבלת מרשות המסים:"); if(n&&n.trim()) setFinance(fs=>fs.map(x=>x.id===f.id?{...x,allocationNum:n.trim(),allocationAddedAt:new Date().toISOString()}:x)); }} style={{...act,color:"#d97706"}}>➕ מספר הקצאה</button>}
+              {t==="קבלה"&&!f.refund&&!f.refundedBy&&<button onClick={()=>setDocReq({type:"קבלה",prefill:{custId:f.customerId,custName:f.customer,lockType:true,refund:true,refDocId:f.id,refText:"קבלה "+(f.invoiceNum||""),payments:[{method:((f.payments||[])[0]||{}).method||"מזומן",amount:String(-Math.abs(totalOf(f))),date:todayStr(),details:{}}],notes:"ביטול / החזר של קבלה "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date)}})} title="למשל צ׳ק שחזר או החזר כסף" style={{...act,color:"#b91c1c"}}>↩ ביטול קבלה</button>}
+              {t==="חשבונית זיכוי"&&!f.refundedBy&&<button onClick={()=>openRefund(f,finance.find(x=>String(x.id)===String(f.refDocId)))} title="תיעוד החזר כסף ללקוח" style={{...act,color:"#b91c1c"}}>↩ החזר כסף</button>}
               {t==="חשבון עסקה"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"חשבונית מס/קבלה")} style={{...act,color:"#16a34a"}}>שולם → ח.מס/קבלה</button>}
               {t==="חשבונית מס"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"קבלה")} style={{...act,color:"#0891b2"}}>שולם → קבלה</button>}
               {T.invoice&&t!=="חשבונית זיכוי"&&!f.creditedBy&&<button onClick={()=>follow(f,"חשבונית זיכוי")} style={{...act,color:CLR.danger}}>זיכוי</button>}
@@ -8224,6 +8317,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     </div>
     <div style={{fontSize:12,color:CLR.muted,marginTop:8}}>מסמך חשבונאי לא מוחקים — מבטלים אותו בחשבונית זיכוי. חשבון עסקה אפשר להעביר לארכיון.</div>
     {acctRep&&<AccountantReport finance={finance} onClose={()=>setAcctRep(false)}/>}
+    {guide&&<DocsGuide onClose={()=>setGuide(false)}/>}
+    {goLive&&<GoLiveModal finance={finance} onClose={()=>setGoLive(false)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -9592,7 +9687,7 @@ function Finance({finance,setFinance,customers,appointments=[],workers=[],initia
           <td style={{padding:"9px 12px"}}><Badge status={f.status}/></td>
           <td style={{padding:"9px 12px",display:"flex",gap:6,alignItems:"center"}}>
             {f.category==="חשבונית"&&f.invoiceNum&&<button onClick={()=>printInvoice(f)} title="הדפס חשבונית" style={{background:"none",border:`1px solid ${CLR.border}`,borderRadius:6,padding:"3px 8px",fontSize:12,cursor:"pointer",color:CLR.primary}}>📄</button>}
-            <button onClick={()=>{if(window.confirm("להעביר לארכיון?"))softDelete(setFinance,f.id);}} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer"}}>✕</button>
+            {f.official?<span title="מסמך חשבונאי רשמי — מבטלים בחשבונית זיכוי, לא מוחקים" style={{fontSize:12,color:CLR.muted}}>🔒</span>:<button onClick={()=>{if(window.confirm("להעביר לארכיון?"))softDelete(setFinance,f.id);}} style={{background:"none",border:"none",color:CLR.danger,cursor:"pointer"}}>✕</button>}
           </td>
         </tr>)}</tbody>
       </table>
@@ -11467,7 +11562,8 @@ function AccountantReport({finance,onClose}){
   const [from,setFrom]=useState(presets[0][2][0]); const [to,setTo]=useState(presets[0][2][1]);
   const [busy,setBusy]=useState(""); const [email,setEmail]=useState(()=>lsGet("h360_acct_email",""));
   const pick=k=>{ setPreset(k); const p=presets.find(x=>x[0]===k); if(p){ setFrom(p[2][0]); setTo(p[2][1]); } };
-  const docs=(finance||[]).filter(isDocRec).filter(f=>(f.date||"")>=from&&(f.date||"")<=to&&f.status!=="בוטל"&&!f.draftOnly)
+  const offMode=!!docSet().official;
+  const docs=(finance||[]).filter(isDocRec).filter(f=>(f.date||"")>=from&&(f.date||"")<=to&&f.status!=="בוטל"&&!f.draftOnly&&(!offMode||f.official))
     .sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.invoiceNum||"").localeCompare(String(b.invoiceNum||"")));
   const byType={}; docs.forEach(f=>{ const t=docTypeOf(f)||"אחר"; const n=docNums(f); const o=byType[t]=byType[t]||{n:0,before:0,vat:0,total:0}; o.n++; o.before+=n.before; o.vat+=n.vat; o.total+=n.total; });
   const inv=docs.filter(f=>DOC_TYPES[docTypeOf(f)]?.invoice);
@@ -11902,7 +11998,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="131";
+const APP_BUILD="132";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12059,6 +12155,7 @@ function App(){
   const isAlsoWorker=(workers||[]).some(w=>!w.deleted&&isTech(w)&&w.status==="פעיל"&&authUser&&(String(w.crmUserId)===String(authUser.id)||String(w.name||"").trim()===String(authUser.name||"").trim()));
   const [appointments,setAppointments]=useLS("appointments", []);
   const [finance,setFinance]=useLS("finance", []);
+  React.useEffect(()=>{ window.__h360MarkDocOriginal=id=>setFinance(fs=>fs.map(f=>String(f.id)===String(id)&&!f.originalAt?{...f,originalAt:new Date().toISOString()}:f)); },[]);
   // תיקון תורים בלי שם לקוח (נוצרו מכרטיס הלקוח/שכפול) — משלים את השם מכרטיס הלקוח
   React.useEffect(()=>{
     if(!customers||!customers.length||!appointments||!appointments.length) return;
