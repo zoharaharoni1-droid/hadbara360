@@ -161,7 +161,7 @@ const { useState } = React;
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
-const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "הקשת 31, תל אביב-יפו", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני", licenseType: "מדביר במבנים ובשטח פתוח", licenseNum: "2849", licenseExpiry: "2030-02-15", licenseImg: "preview/assets/license.webp" };
+const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "המשלטים 1, תל אביב-יפו 6676132", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני", licenseType: "מדביר במבנים ובשטח פתוח", licenseNum: "2849", licenseExpiry: "2030-02-15", licenseImg: "preview/assets/license.webp" };
 // כתובת לניווט (Waze) — בלי דירה/קומה/כניסה, שמבלבלים את הניווט
 function navAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>x&&!/^(דירה|קומה|כניסה|דירת)\s/.test(x)).join(", "); }
 // "קומה 3 · דירה 1 · כניסה א׳"
@@ -12226,7 +12226,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="134";
+const APP_BUILD="135";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
