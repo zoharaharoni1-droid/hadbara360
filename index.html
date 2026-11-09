@@ -11249,6 +11249,13 @@ function leadPageName(l){
   if(t) return t;
   try{ return decodeURIComponent(l.page_path||"/"); }catch(e){ return l.page_path||"/"; }
 }
+// 📣 מקור הליד (מעקב המרות מהאתר): "H360:{...}" בשדה referrer; לידים ישנים — לפי האתר המפנה
+function leadAttr(l){ const r=String(l&&l.referrer||"");
+  if(r.startsWith("H360:")){ try{ const o=JSON.parse(r.slice(5)); return {src:o.src||"ישיר",first:o.first||"",camp:o.camp||"",kw:o.kw||"",gclid:o.gclid||"",land:o.land||"",ref:o.ref||""}; }catch(e){} }
+  let h=""; try{ h=new URL(r).hostname.replace(/^www\./,""); }catch(e){}
+  const src=!h?"לא ידוע":/google\./.test(h)?"גוגל אורגני":/facebook|instagram/.test(h)?"פייסבוק / אינסטגרם":/hadbara360/.test(h)?"לא ידוע":"אתר מפנה: "+h;
+  return {src,first:"",camp:"",kw:"",gclid:"",land:"",ref:h}; }
+const SRC_CLR=s=>/ממומן/.test(s)?"#b45309":/אורגני/.test(s)?"#15803d":/פייסבוק/.test(s)?"#1d4ed8":/אינדקס/.test(s)?"#7c3aed":"#64748b";
 function waPhone(p){
   let d=String(p||"").replace(/\D/g,"");
   if(d.startsWith("0")) d="972"+d.slice(1);
@@ -11265,6 +11272,8 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
   const converted=thisMonth.filter(l=>l.status==="הפך ללקוח").length;
   const byPage={}; thisMonth.forEach(l=>{const k=leadPageName(l); byPage[k]=(byPage[k]||0)+1;});
   const topPages=Object.entries(byPage).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const bySrc={}; thisMonth.forEach(l=>{ const k=leadAttr(l).src; const o=bySrc[k]||(bySrc[k]={n:0,won:0}); o.n++; if(l.status==="הפך ללקוח") o.won++; });
+  const srcRows=Object.entries(bySrc).sort((a,b)=>b[1].n-a[1].n);
 
   const update=async(l,patch)=>{
     setBusy(l.id);
@@ -11279,7 +11288,7 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
     const id=nextId(customers||[]);
     const c={id,name:l.name,phone:l.phone,email:"",address:"—",city:"",propertyType:"",rooms:"",floor:"",
       status:"פעיל",notes:`ליד מהאתר (${leadPageName(l)}), ${fmtDate((l.created_at||"").slice(0,10))}`,
-      pestType:l.pest||"",pests:l.pest?[l.pest]:[],source:"אתר האינטרנט",totalPaid:0,lastTreatment:"",tag:"new"};
+      pestType:l.pest||"",pests:l.pest?[l.pest]:[],source:"אתר — "+leadAttr(l).src,leadCampaign:leadAttr(l).camp||"",leadKeyword:leadAttr(l).kw||"",gclid:leadAttr(l).gclid||"",totalPaid:0,lastTreatment:"",tag:"new"};
     setCustomers(cs=>[...cs,c]);
     await update(l,{status:"הפך ללקוח",customer_id:String(id)});
     if(confirm(`✅ ${l.name} נוסף ללקוחות. לעבור ללשונית הלקוחות?`)) goToCustomers();
@@ -11291,6 +11300,10 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
       <div style={{...card,flex:"1 1 160px"}}><div style={{fontSize:12,color:CLR.muted}}>לידים החודש</div><div style={{fontSize:28,fontWeight:800,color:CLR.primary}}>{thisMonth.length}</div></div>
       <div style={{...card,flex:"1 1 160px"}}><div style={{fontSize:12,color:CLR.muted}}>הפכו ללקוחות החודש</div><div style={{fontSize:28,fontWeight:800,color:"#16a34a"}}>{converted}</div></div>
       <div style={{...card,flex:"1 1 160px"}}><div style={{fontSize:12,color:CLR.muted}}>ממתינים לטיפול</div><div style={{fontSize:28,fontWeight:800,color:"#2563eb"}}>{leads.filter(l=>l.status==="חדש").length}</div></div>
+      <div style={{...card,flex:"2 1 300px"}}><div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>📣 מאיפה הגיעו הלידים החודש</div>
+        {srcRows.length===0?<div style={{fontSize:13,color:CLR.muted}}>עדיין אין נתונים</div>:
+          srcRows.map(([k,o])=><div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:13,padding:"2px 0"}}><span style={{color:SRC_CLR(k),fontWeight:700}}>{k}</span><span><b>{o.n}</b> לידים · <b style={{color:"#16a34a"}}>{o.won}</b> לקוחות</span></div>)}
+      </div>
       <div style={{...card,flex:"2 1 300px"}}><div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>העמודים שהביאו הכי הרבה לידים החודש</div>
         {topPages.length===0?<div style={{fontSize:13,color:CLR.muted}}>עדיין אין נתונים</div>:
           topPages.map(([p,n])=><div key={p} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"2px 0"}}><span>{p}</span><b>{n}</b></div>)}
@@ -11312,6 +11325,7 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
       <div style={{flex:"1 1 200px",minWidth:0,fontSize:13}}>
         <div>🐜 <b>{l.pest||"לא צוין"}</b></div>
         <div style={{color:CLR.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📄 <a href={SITE_BASE+(l.page_path||"/")} target="_blank" rel="noopener" style={{color:CLR.info}}>{leadPageName(l)}</a></div>
+        {(()=>{ const a=leadAttr(l); return <div style={{fontSize:12,marginTop:2}}><span style={{color:"#fff",background:SRC_CLR(a.src),borderRadius:10,padding:"1px 8px",fontWeight:700}}>📣 {a.src}</span>{a.camp?<span style={{color:CLR.muted}}> · קמפיין: {a.camp}</span>:null}{a.kw?<span style={{color:CLR.muted}}> · חיפש: "{a.kw}"</span>:null}{a.first&&a.first!==a.src?<span style={{color:CLR.muted}}> · הגיע לראשונה מ: {a.first}</span>:null}</div>; })()}
       </div>
       <select value={l.status} onChange={e=>update(l,{status:e.target.value})}
         style={{padding:"6px 10px",borderRadius:8,border:`1.5px solid ${LEAD_COLORS[l.status]||CLR.border}`,color:LEAD_COLORS[l.status]||"#111",fontWeight:700,fontFamily:"inherit",fontSize:13,background:"#fff"}}>
@@ -11888,7 +11902,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="130";
+const APP_BUILD="131";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
