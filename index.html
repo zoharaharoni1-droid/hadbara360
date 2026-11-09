@@ -11970,6 +11970,20 @@ async function restoreBackupObj(b,onStep){
   window.dispatchEvent(new Event('h360-refresh'));
   return n;
 }
+// ארכיון מלא להורדה: גיבוי הנתונים + כל המסמכים החתומים שנשמרו
+async function downloadFullArchive(onStep){
+  if(!sb) throw new Error("אין חיבור לשרת");
+  const JSZip=await loadJsZip(); const zip=new JSZip();
+  onStep&&onStep("אוסף נתונים…"); const b=await collectBackup();
+  zip.file("נתונים-גיבוי-"+todayStr()+".json",JSON.stringify(b,null,1));
+  const fin=(b.data.finance||[]).filter(f=>f&&f.signedPath);
+  const dir=zip.folder("מסמכים חתומים"); let n=0;
+  for(const f of fin){ onStep&&onStep("מוריד מסמכים חתומים "+(++n)+"/"+fin.length+"…");
+    try{ const r=await sb.storage.from('contracts').download(f.signedPath); if(!r.error&&r.data) dir.file(String(f.date||"").slice(0,4)+"/"+(f.date||"")+" "+String(f.docType||"").replace("/"," ")+" "+String(f.docSeq||"")+" - "+String(f.customer||"").replace(/[\\/:*?"<>|]/g,"").slice(0,30)+".pdf",r.data); }catch(e){} }
+  onStep&&onStep("מכווץ…");
+  const blob=await zip.generateAsync({type:"blob"});
+  saveBlobAs(blob,"הדברה360-ארכיון-"+todayStr()+".zip");
+}
 function BackupSettings(){
   const [list,setList]=useState(null); const [msg,setMsg]=useState(""); const [busy,setBusy]=useState(false);
   const load=()=>listCloudBackups().then(setList).catch(e=>{ setList([]); setMsg("לא הצלחתי לקרוא את רשימת הגיבויים: "+(e.message||e)); });
@@ -11988,7 +12002,9 @@ function BackupSettings(){
       <Btn sm onClick={now} disabled={busy}>💾 גבה עכשיו</Btn>
       <Btn sm v="secondary" onClick={async()=>{ const b=await collectBackup(); saveBlobAs(new Blob([JSON.stringify(b,null,1)],{type:"application/json"}),"hadbara360-גיבוי-"+todayStr()+".json"); }}>⬇️ הורד גיבוי למכשיר</Btn>
       <Btn sm v="ghost" onClick={fromFile} disabled={busy}>📂 שחזר מקובץ</Btn>
+      <Btn sm v="secondary" onClick={async()=>{ setBusy(true); try{ await downloadFullArchive(t=>setMsg(t)); setMsg("✅ הארכיון ירד למחשב — שמור אותו בתיקייה / בדיסק / בגוגל דרייב"); }catch(e){ setMsg("❌ "+(e.message||e)); } setBusy(false); }} disabled={busy}>📦 ארכיון מלא למחשב</Btn>
     </div>
+    <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>📦 ארכיון מלא = כל הנתונים + כל החשבוניות והקבלות החתומות (PDF) בקובץ ZIP אחד. מומלץ להוריד פעם ב-3 חודשים ולשמור גם מחוץ למערכת.</div>
     {msg&&<div style={{fontSize:13,marginBottom:8}}>{msg}</div>}
     {list===null?<div style={{fontSize:13,color:CLR.muted}}>טוען…</div>:!list.length?<div style={{fontSize:13,color:CLR.muted}}>עדיין אין גיבויים בענן</div>:
     <details><summary style={{cursor:"pointer",fontSize:13,fontWeight:700}}>גיבויים שמורים ({list.length})</summary>
@@ -12212,7 +12228,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="137";
+const APP_BUILD="138";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
