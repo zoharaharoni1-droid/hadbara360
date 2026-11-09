@@ -1556,7 +1556,9 @@ async function sendLogAndDocWA(log,doc,phone){
     if(log){ const {url}=await uploadExecLogPdf(log); parts.push("📋 יומן ביצוע מס׳ "+(log.docNum||"")+":\n"+url); }
     if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,"D"+String(doc.invoiceNum||doc.docSeq||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
     const name=(log&&(log.contactName||log.clientName))||(doc&&((doc.cust&&doc.cust.contactName)||doc.customer))||"";
-    const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
+    // לקוח עסקי שעוד לא אישר קבלת חשבוניות דיגיטליות — מבקשים אישור באותה הודעה
+    let consentAsk=[]; try{ const tx=String((doc&&doc.cust&&doc.cust.taxId)||"").replace(/\D/g,""); if(doc&&docNeedsSig(doc)&&tx.length>=8){ const c=(JSON.parse(localStorage.getItem('h360_customers')||'[]')||[]).find(x=>String(x.id)===String(doc.customerId)); if(!c||!c.einvConsent) consentAsk=["📌 החשבונית נשלחת כקובץ ממוחשב החתום בחתימה אלקטרונית מאובטחת. נשמח לאישור קצר בתשובה: \"מאשר/ת לקבל חשבוניות דיגיטליות\". אם תעדיפו מקור מודפס — כתבו לנו.",""]; } }catch(_){}
+    const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),...consentAsk,"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
     try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
@@ -7941,7 +7943,7 @@ function SignSetupModal({onClose}){
     <div style={box}>
       <div style={{fontWeight:800,marginBottom:4}}>📋 מה עוד צריך (לקוחות עסקיים בלבד)</div>
       <ul style={{margin:0,paddingRight:18}}>
-        <li><b>הסכמה פעם אחת, לפני המסמך הראשון:</b> לקוח עסקי צריך לאשר שהוא מסכים לקבל חשבוניות דיגיטליות. בחשבונית ללקוח עם ע.מ./ח.פ. יש תיבה לסמן שהוא הסכים.</li>
+        <li><b>הסכמה פעם אחת:</b> לקוח עסקי (ששולח חשבוניות לרו״ח לקיזוז מע״מ) צריך לאשר פעם אחת שהוא מסכים לקבל חשבוניות דיגיטליות. <b>לא צריך לשלוח בקשה נפרדת</b> — בשליחה בוואטסאפ מתווספת לבד שורה שמבקשת "מאשר". כשהוא עונה — מסמנים V בכרטיס החשבונית הבאה. ללקוח פרטי, ועד בית, או עסק שלא מקזז מע״מ — לא רלוונטי.</li>
         <li><b>אמצעי תשלום:</b> בחתימה מאובטחת, לקוח עסקי צריך לשלם בהעברה מהחשבון שלו, בצ׳ק או בכרטיס האשראי שלו. אם שילם במזומן או בביט — המערכת תזכיר לתת לו גם מקור מודפס.</li>
         <li><b>לשמור את האישור:</b> את תשובת הלקוח ("מאשר") שומרים (צילום מסך / המייל) — זה חלק מהנהלת החשבונות.</li>
         <li>לקוחות פרטיים (בלי ע.מ.) — לא צריך כלום מזה.</li>
@@ -12226,7 +12228,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="135";
+const APP_BUILD="136";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
