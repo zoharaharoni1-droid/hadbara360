@@ -1539,10 +1539,16 @@ async function sendExecLogWA(log,phone){
 }
 // ── מסמך חשבונאי כ-PDF + שליחה יחד עם יומן הביצוע ──
 function docNiceName(doc){ const d=String(doc.date||"").split("-"); const ds=d.length===3?d[2]+"."+d[1]+"."+d[0]:""; return doc.docType.replace("/"," ")+" "+String(doc.docSeq||"").padStart(4,"0")+" - "+(COMPANY.legalName||COMPANY.name)+(ds?" - "+ds:"")+".pdf"; }
-async function docPdfBlob(doc){ return htmlPdfBlob(docHtml({...doc,copy:docOrigCopy(doc,false)})); }
+async function docPdfBlob(doc){
+  const sign=await sigPrepare(doc); const copy=docOrigCopy(doc,false);
+  const b=await htmlPdfBlob(docHtml({...doc,copy,signed:!!sign}));
+  if(!sign) return b;
+  try{ return await sigSignBlob(b,sign,doc); }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false})); }
+}
 async function sendLogAndDocWA(log,doc,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
   if(!ph) return alert("אין טלפון ללקוח");
+  if(doc&&docNeedsSig(doc)&&!sigUnlockedPem()&&sigKey()) await sigEnsureUnlocked();
   const w=window.open("","_blank");
   try{ if(w) w.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;font-size:20px;text-align:center">⏳ מכין את המסמכים כ-PDF...</body></html>'); }catch(e){}
   try{
@@ -7750,6 +7756,194 @@ const DOC_TYPES = {
 // ── מצב רשמי: מסמכים חשבונאיים אמיתיים, מספור רציף מהשרת (טבלת doc_counters) ──
 const DOCSET_STORE=makeCompanyStore("docset","h360_docset",()=>[{official:false,since:"",start:{}}],"h360-docset");
 const docSet=()=>(DOCSET_STORE.get()[0]||{official:false,start:{}});
+// ── 🔏 חתימה אלקטרונית מאובטחת למסמכים רשמיים ──
+// מפתח פרטי שנוצר כאן, מוצפן בסיסמה שרק המנהל יודע. השרת שומר רק את הגרסה המוצפנת.
+let __forge=null;
+function loadForge(){ if(window.forge&&window.forge.pkcs7) return Promise.resolve(window.forge); if(__forge) return __forge;
+  const srcs=['https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js','https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js'];
+  __forge=new Promise((res,rej)=>{ const tryI=i=>{ if(i>=srcs.length){ __forge=null; return rej(new Error('טעינת רכיב החתימה נכשלה')); } const sc=document.createElement('script'); sc.src=srcs[i]; sc.onload=()=>window.forge&&window.forge.pkcs7?res(window.forge):tryI(i+1); sc.onerror=()=>{ sc.remove(); tryI(i+1); }; document.head.appendChild(sc); }; tryI(0); });
+  return __forge; }
+// ── חתימה אלקטרונית מאובטחת ל-PDF (PKCS#7 detached, adbe.pkcs7.detached) ──
+function sigMakeKeyPair(info){
+  const pki=forge.pki;
+  const keys=pki.rsa.generateKeyPair({bits:2048,e:0x10001});
+  const cert=pki.createCertificate();
+  cert.publicKey=keys.publicKey;
+  cert.serialNumber="01"+forge.util.bytesToHex(forge.random.getBytesSync(15));
+  const now=new Date(); cert.validity.notBefore=new Date(now.getTime()-86400000);
+  cert.validity.notAfter=new Date(now.getFullYear()+10,now.getMonth(),now.getDate());
+  const U=v=>({value:String(v),valueTagClass:forge.asn1.Type.UTF8});
+  const attrs=[{shortName:'CN',...U(info.name)},{shortName:'O',...U(info.org||info.name)},{shortName:'C',value:'IL'}];
+  if(info.taxId) attrs.push({name:'serialNumber',value:String(info.taxId)});
+  if(info.email) attrs.push({name:'emailAddress',value:info.email});
+  cert.setSubject(attrs); cert.setIssuer(attrs);
+  cert.setExtensions([{name:'basicConstraints',cA:false},{name:'keyUsage',digitalSignature:true,nonRepudiation:true},{name:'subjectKeyIdentifier'}]);
+  cert.sign(keys.privateKey,forge.md.sha256.create());
+  return {certPem:pki.certificateToPem(cert),keyPem:pki.privateKeyToPem(keys.privateKey)};
+}
+function sigEncryptKey(keyPem,password){ return forge.pki.encryptRsaPrivateKey(forge.pki.privateKeyFromPem(keyPem),password,{algorithm:'aes256'}); }
+function sigDecryptKey(encPem,password){ const k=forge.pki.decryptRsaPrivateKey(encPem,password); if(!k) throw new Error('סיסמת החתימה שגויה'); return forge.pki.privateKeyToPem(k); }
+function sigCertInfo(certPem){ const c=forge.pki.certificateFromPem(certPem); const g=n=>{const a=c.subject.getField(n);return a?a.value:"";};
+  const der=forge.asn1.toDer(forge.pki.certificateToAsn1(c)).getBytes(); const md=forge.md.sha256.create(); md.update(der);
+  return {name:safeUtf8(g('CN')),from:c.validity.notBefore,to:c.validity.notAfter,fingerprint:md.digest().toHex().toUpperCase().match(/../g).join(":")}; }
+function safeUtf8(s){ try{ return forge.util.decodeUtf8(s); }catch(e){ return s; } }
+const SIG_LEN=16384; // מקום לחתימה (בתים)
+async function sigSignPdf(pdfBytes,{certPem,keyPem,reason,name,location}){
+  const {PDFDocument,PDFName,PDFNumber,PDFHexString,PDFString,PDFArray}=PDFLib;
+  const doc=await PDFDocument.load(pdfBytes);
+  const ctx=doc.context; const pages=doc.getPages(); const page=pages[0];
+  const BR='**********';
+  const byteRange=PDFArray.withContext(ctx); byteRange.push(PDFNumber.of(0)); byteRange.push(PDFName.of(BR)); byteRange.push(PDFName.of(BR)); byteRange.push(PDFName.of(BR));
+  const sigDict=ctx.obj({Type:'Sig',Filter:'Adobe.PPKLite',SubFilter:'adbe.pkcs7.detached',ByteRange:byteRange,
+    Contents:PDFHexString.of('0'.repeat(SIG_LEN*2)),Reason:PDFHexString.fromText(reason||''),M:PDFString.fromDate(new Date()),
+    Name:PDFHexString.fromText(name||''),Location:PDFHexString.fromText(location||''),ContactInfo:PDFString.of('')});
+  const sigRef=ctx.register(sigDict);
+  const widget=ctx.obj({Type:'Annot',Subtype:'Widget',FT:'Sig',Rect:[0,0,0,0],V:sigRef,T:PDFHexString.fromText('Signature1'),F:132,P:page.ref});
+  const wRef=ctx.register(widget);
+  page.node.set(PDFName.of('Annots'),ctx.obj([wRef]));
+  doc.catalog.set(PDFName.of('AcroForm'),ctx.obj({SigFlags:3,Fields:[wRef]}));
+  const saved=await doc.save({useObjectStreams:false,addDefaultPage:false});
+  // מיקום ה-ByteRange וה-Contents
+  const bin=new TextDecoder('latin1').decode(saved);
+  const brStr='/ByteRange [ 0 /'+BR+' /'+BR+' /'+BR+' ]';
+  let brPos=bin.indexOf(brStr); let brLen=brStr.length;
+  if(brPos<0){ const m=/\/ByteRange\s*\[\s*0\s+\/\*{10}\s+\/\*{10}\s+\/\*{10}\s*\]/.exec(bin); if(!m) throw new Error('ByteRange placeholder not found'); brPos=m.index; brLen=m[0].length; }
+  const contentsStart=bin.indexOf('<'+'0'.repeat(64),brPos); if(contentsStart<0) throw new Error('Contents placeholder not found');
+  const contentsEnd=contentsStart+SIG_LEN*2+2; // כולל < >
+  const br=[0,contentsStart,contentsEnd,saved.length-contentsEnd];
+  let brNew='/ByteRange ['+br.join(' ')+']'; if(brNew.length>brLen) throw new Error('ByteRange too long'); brNew=brNew+' '.repeat(brLen-brNew.length);
+  const out=new Uint8Array(saved); for(let i=0;i<brLen;i++) out[brPos+i]=brNew.charCodeAt(i);
+  // חתימה על כל הבתים חוץ מהחלון של החתימה
+  const part1=out.subarray(0,contentsStart), part2=out.subarray(contentsEnd);
+  const toBin=u=>{ let s=''; for(let i=0;i<u.length;i+=8192) s+=String.fromCharCode.apply(null,u.subarray(i,i+8192)); return s; };
+  const p7=forge.pkcs7.createSignedData();
+  p7.content=forge.util.createBuffer(toBin(part1)+toBin(part2));
+  const cert=forge.pki.certificateFromPem(certPem);
+  p7.addCertificate(cert);
+  // forge מקודד פעמיים שמות בעברית כשהתעודה נקראת מ-PEM — מפענחים פעם אחת לפני
+  const issuer=cert.issuer.attributes.map(a=>a.valueTagClass===forge.asn1.Type.UTF8?{...a,value:safeUtf8(a.value)}:a);
+  p7.addSigner({key:forge.pki.privateKeyFromPem(keyPem),issuer,serialNumber:cert.serialNumber,digestAlgorithm:forge.pki.oids.sha256,
+    authenticatedAttributes:[{type:forge.pki.oids.contentType,value:forge.pki.oids.data},{type:forge.pki.oids.messageDigest},{type:forge.pki.oids.signingTime,value:new Date()}]});
+  p7.sign({detached:true});
+  const hex=forge.util.bytesToHex(forge.asn1.toDer(p7.toAsn1()).getBytes());
+  if(hex.length>SIG_LEN*2) throw new Error('signature too long');
+  const padded=hex+'0'.repeat(SIG_LEN*2-hex.length);
+  for(let i=0;i<padded.length;i++) out[contentsStart+1+i]=padded.charCodeAt(i);
+  return out;
+}
+
+const SIGKEY_STORE=makeCompanyStore("sigkey","h360_sigkey",()=>[],"h360-sigkey");
+const sigKey=()=>(SIGKEY_STORE.get()||[]).find(k=>k&&k.certPem&&!k.retired)||null;
+let __sigPem=null; const SIG_DEV="h360_sig_dev";
+function sigUnlockedPem(){ const k=sigKey(); if(!k) return null; if(__sigPem&&__sigPem.fp===k.fingerprint) return __sigPem.pem;
+  try{ const v=JSON.parse(localStorage.getItem(SIG_DEV)||"null"); if(v&&v.fp===k.fingerprint&&v.pem){ __sigPem=v; return v.pem; } }catch(e){} return null; }
+function sigLock(){ __sigPem=null; try{ localStorage.removeItem(SIG_DEV); }catch(e){} try{ window.dispatchEvent(new Event("h360-sigkey")); }catch(e){} }
+// חלון סיסמה (גם מחוץ ל-React)
+function sigAskPassword(msg){ return new Promise(res=>{
+  const o=document.createElement('div'); o.dir="rtl";
+  o.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Arial,sans-serif;';
+  const btn='padding:10px 14px;border-radius:10px;border:none;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;';
+  o.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;max-width:390px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="font-weight:800;font-size:17px;color:#1a5c3a;margin-bottom:6px">🔏 סיסמת החתימה הדיגיטלית</div>
+    <div data-m style="font-size:13px;color:#475569;margin-bottom:10px;line-height:1.6"></div>
+    <div style="display:flex;gap:6px"><input data-p type="password" autocomplete="current-password" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px"/><button data-e type="button" title="הצג/הסתר" style="${btn}background:#f1f5f9">👁</button></div>
+    <div data-err style="color:#b91c1c;font-size:13px;min-height:18px;margin-top:4px"></div>
+    <label style="display:flex;gap:6px;align-items:center;font-size:13px;margin:4px 0 12px;color:#334155"><input data-r type="checkbox"/>לזכור במכשיר הזה (רק בטלפון / מחשב אישי שלך)</label>
+    <div style="display:flex;gap:8px"><button data-ok type="button" style="${btn}background:#1a5c3a;color:#fff;flex:1">✅ חתום</button><button data-skip type="button" style="${btn}background:#f1f5f9;color:#334155">בלי חתימה</button></div></div>`;
+  const q=s=>o.querySelector(s); q('[data-m]').textContent=msg||"המסמך הרשמי ייחתם בחתימה הדיגיטלית של העסק. הקלד את סיסמת החתימה.";
+  const done=v=>{ o.remove(); res(v); };
+  q('[data-e]').onclick=()=>{ const p=q('[data-p]'); p.type=p.type==="password"?"text":"password"; };
+  q('[data-skip]').onclick=()=>done(null);
+  o.__err=t=>{ q('[data-err]').textContent=t; };
+  const ok=()=>{ const pw=q('[data-p]').value; if(!pw) return o.__err("הקלד סיסמה"); const r=o.__check(pw,q('[data-r]').checked); if(r) done(r); };
+  q('[data-ok]').onclick=ok; q('[data-p]').onkeydown=e=>{ if(e.key==="Enter") ok(); };
+  o.__check=()=>null; res.__o=o; document.body.appendChild(o); setTimeout(()=>q('[data-p]').focus(),50);
+  sigAskPassword.__last=o;
+}); }
+// מחזיר את המפתח הפתוח, או null אם אין חתימה / המשתמש בחר בלי חתימה
+async function sigEnsureUnlocked(msg){
+  let k=sigKey(); if(!k&&sb&&navigator.onLine){ try{ await SIGKEY_STORE.load(); }catch(e){} k=sigKey(); }
+  if(!k) return null; const have=sigUnlockedPem(); if(have) return have;
+  await loadForge();
+  const p=sigAskPassword(msg); const o=sigAskPassword.__last;
+  o.__check=(pw,remember)=>{ try{ const pem=sigDecryptKey(k.encKey,pw); __sigPem={fp:k.fingerprint,pem}; if(remember){ try{ localStorage.setItem(SIG_DEV,JSON.stringify(__sigPem)); }catch(e){} } try{ window.dispatchEvent(new Event("h360-sigkey")); }catch(e){} return {pem}; }catch(e){ o.__err("הסיסמה שגויה — נסה שוב"); return null; } };
+  const r=await p; return r?r.pem:null;
+}
+const docNeedsSig=doc=>!!(doc&&doc.official&&!doc.draft&&(DOC_TYPES[doc.docType]||{}).accounting);
+async function sigPrepare(doc){ if(!docNeedsSig(doc)) return null; try{ const pem=await sigEnsureUnlocked(); const k=sigKey(); return pem&&k?{certPem:k.certPem,keyPem:pem}:null; }catch(e){ return null; } }
+async function sigSignBlob(blob,sign,doc){
+  await loadForge(); await loadPdfLib();
+  const bytes=new Uint8Array(await blob.arrayBuffer());
+  const out=await sigSignPdf(bytes,{...sign,reason:doc?(doc.docType+" "+String(doc.docSeq||"").padStart(4,"0")):"מסמך",name:COMPANY.legalName||COMPANY.name,location:COMPANY.address||"ישראל"});
+  return new Blob([out],{type:'application/pdf'});
+}
+function sigDownloadCert(){ const k=sigKey(); if(!k) return; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([k.certPem],{type:'application/x-x509-ca-cert'})); a.download="תעודת חתימה - "+(COMPANY.legalName||COMPANY.name)+".cer"; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500); }
+const EINV_CONSENT_TEXT=()=>["שלום,","מ"+(COMPANY.legalName||COMPANY.name)+" — מעכשיו החשבוניות והקבלות נשלחות אליכם כקובץ PDF חתום בחתימה אלקטרונית מאובטחת, במקום בנייר.","","כדי שנוכל לשלוח כך, נבקש אישור קצר בתשובה להודעה הזו:",'"אני מאשר/ת לקבל מ'+(COMPANY.legalName||COMPANY.name)+' חשבוניות וקבלות ממוחשבות (דיגיטליות)."',"","הערה: לפי הכללים, ללקוח עסקי שמקבל חשבונית דיגיטלית עדיף לשלם בהעברה בנקאית מהחשבון של העסק, בצ׳ק או בכרטיס אשראי של העסק.","תודה!"].join("\n");
+function SignSetupModal({onClose}){
+  const list=SIGKEY_STORE.use(); const k=(list||[]).find(x=>x&&x.certPem&&!x.retired)||null;
+  const [,force]=useState(0); React.useEffect(()=>{ const h=()=>force(x=>x+1); window.addEventListener("h360-sigkey",h); return ()=>window.removeEventListener("h360-sigkey",h); },[]);
+  const unlocked=!!(k&&sigUnlockedPem());
+  const [mk,setMk]=useState(false); const [pw,setPw]=useState(""); const [pw2,setPw2]=useState(""); const [show,setShow]=useState(false); const [busy,setBusy]=useState("");
+  const create=async()=>{
+    if(pw.length<8) return alert("סיסמה של 8 תווים לפחות"); if(pw!==pw2) return alert("הסיסמאות לא זהות");
+    if(!navigator.onLine||!sb) return alert("צריך רשת כדי לשמור את החתימה");
+    if(k&&!confirm("ליצור חתימה חדשה במקום הקיימת?\nמסמכים שכבר נחתמו נשארים תקפים. מסמכים חדשים ייחתמו בחתימה החדשה.")) return;
+    setBusy("⏳ יוצר מפתח הצפנה (כמה שניות)…");
+    try{ await loadForge(); await new Promise(r=>setTimeout(r,60));
+      const kp=sigMakeKeyPair({name:COMPANY.legalName||COMPANY.name,org:COMPANY.legalName||COMPANY.name,taxId:COMPANY.taxId,email:COMPANY.email});
+      const info=sigCertInfo(kp.certPem);
+      const rec={id:"k"+Date.now(),certPem:kp.certPem,encKey:sigEncryptKey(kp.keyPem,pw),fingerprint:info.fingerprint,createdAt:new Date().toISOString(),validTo:info.to.toISOString(),createdBy:((__h360User||{}).name||"")};
+      const prev=localStorage.getItem("h360_sigkey");
+      try{ await SIGKEY_STORE.save([rec,...(list||[]).filter(x=>x&&x.certPem).map(x=>({...x,retired:true}))]); }
+      catch(e){ try{ if(prev) localStorage.setItem("h360_sigkey",prev); else localStorage.removeItem("h360_sigkey"); window.dispatchEvent(new Event("h360-sigkey")); }catch(_){} throw e; }
+      __sigPem={fp:rec.fingerprint,pem:kp.keyPem}; setPw(""); setPw2(""); setMk(false); setBusy(""); alert("✅ החתימה נוצרה. מעכשיו כל מסמך רשמי שנשלח כ-PDF ייחתם.");
+    }catch(e){ setBusy(""); alert("יצירת החתימה נכשלה: "+(e.message||e)); }
+  };
+  const test=async()=>{ setBusy("⏳ מכין מסמך בדיקה…"); try{ const pem=await sigEnsureUnlocked("לבדיקה: הקלד את סיסמת החתימה."); if(!pem){ setBusy(""); return; }
+      const doc={docType:"חשבונית מס/קבלה",docSeq:0,date:todayStr(),official:true,preview:false,cust:{name:"לקוח לדוגמה"},lines:[{desc:"מסמך בדיקה — לא חשבונית",qty:"1",price:"100"}],inclVat:true,...(()=>{const t=docTotals([{desc:"x",qty:"1",price:"100"}],true,null,false);return {before:t.before,vat:t.vat,total:t.total};})(),payments:[{method:"מזומן",amount:"100"}],notes:"מסמך בדיקה לחתימה הדיגיטלית — לא מסמך חשבונאי"};
+      const b=await htmlPdfBlob(docHtml({...doc,signed:true,copy:false})); const s=await sigSignBlob(b,{certPem:k.certPem,keyPem:pem},doc);
+      const a=document.createElement('a'); a.href=URL.createObjectURL(s); a.download="בדיקת חתימה.pdf"; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+    }catch(e){ alert("הבדיקה נכשלה: "+(e.message||e)); } setBusy(""); };
+  const box={border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginBottom:10,background:"#fff",fontSize:13,lineHeight:1.7};
+  const inp={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:15,boxSizing:"border-box"};
+  return <Modal title="🔏 חתימה אלקטרונית מאובטחת" onClose={onClose} width={620}>
+    <div style={{...box,background:"#f8fafc"}}>החתימה היא קוד מוצפן שנכנס לתוך קובץ ה-PDF של כל חשבונית וקבלה רשמית. אם מישהו משנה בקובץ אפילו ספרה אחת — תוכנת ה-PDF מראה שהחתימה לא תקפה. המפתח נשמר מוצפן, ורק מי שיודע את <b>סיסמת החתימה</b> יכול לחתום.</div>
+    {k?<div style={box}>
+      <div style={{fontWeight:800,color:"#166534",fontSize:15}}>✅ יש חתימה פעילה</div>
+      <div>על שם: <b>{COMPANY.legalName||COMPANY.name}</b> · נוצרה {fmtDate(String(k.createdAt||"").slice(0,10))} · בתוקף עד {fmtDate(String(k.validTo||"").slice(0,10))}</div>
+      <div style={{fontSize:11,color:"#64748b",wordBreak:"break-all",direction:"ltr",textAlign:"left"}}>SHA-256: {k.fingerprint}</div>
+      <div style={{margin:"6px 0"}}>במכשיר הזה: {unlocked?<b style={{color:"#166534"}}>🔓 פתוחה — מסמכים נחתמים בלי לשאול</b>:<b style={{color:"#92400e"}}>🔒 נעולה — תתבקש סיסמה בשליחה הראשונה</b>}</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {!unlocked?<Btn sm onClick={()=>sigEnsureUnlocked()}>🔓 פתח במכשיר הזה</Btn>:<Btn sm v="secondary" onClick={sigLock}>🔒 נעל במכשיר הזה</Btn>}
+        <Btn sm v="secondary" disabled={!!busy} onClick={test}>🧪 מסמך בדיקה חתום</Btn>
+        <Btn sm v="secondary" onClick={sigDownloadCert}>⬇️ הורד תעודה (.cer)</Btn>
+        <Btn sm v="ghost" onClick={()=>setMk(true)}>החלפת חתימה</Btn>
+      </div></div>
+    :<div style={{...box,borderColor:"#fcd34d",background:"#fffbeb"}}><b>אין עדיין חתימה.</b> בלי חתימה, לקוח עסקי לא יכול להשתמש בקובץ ה-PDF כחשבונית מקור לקיזוז מע״מ.</div>}
+    {(mk||!k)&&<div style={box}>
+      <div style={{fontWeight:800,marginBottom:4}}>{k?"חתימה חדשה":"יצירת חתימה"} · על שם {COMPANY.legalName||COMPANY.name} (ע.מ. {COMPANY.taxId})</div>
+      <div style={{color:"#475569",marginBottom:6}}>בחר <b>סיסמת חתימה</b> (8 תווים לפחות) ושמור אותה במקום בטוח. אף אחד, כולל אני, לא יכול לשחזר אותה. אם היא נשכחת — יוצרים חתימה חדשה, ומה שכבר נחתם נשאר תקף.</div>
+      <div style={{display:"grid",gap:6}}>
+        <input type={show?"text":"password"} autoComplete="new-password" placeholder="סיסמת חתימה" value={pw} onChange={e=>setPw(e.target.value)} style={inp}/>
+        <input type={show?"text":"password"} autoComplete="new-password" placeholder="שוב את אותה סיסמה" value={pw2} onChange={e=>setPw2(e.target.value)} style={inp}/>
+        <label style={{display:"flex",gap:6,alignItems:"center"}}><input type="checkbox" checked={show} onChange={e=>setShow(e.target.checked)}/>הצג סיסמה</label>
+      </div>
+      <div style={{display:"flex",gap:6,marginTop:8}}><Btn disabled={!!busy} onClick={create}>🔏 צור חתימה</Btn>{k&&<Btn v="ghost" onClick={()=>setMk(false)}>ביטול</Btn>}</div>
+    </div>}
+    {busy&&<div style={{fontSize:13,color:"#1d4ed8",marginBottom:8}}>{busy}</div>}
+    <div style={box}>
+      <div style={{fontWeight:800,marginBottom:4}}>📋 מה עוד צריך (לקוחות עסקיים בלבד)</div>
+      <ul style={{margin:0,paddingRight:18}}>
+        <li><b>הסכמה פעם אחת:</b> לקוח עסקי צריך לאשר שהוא מסכים לקבל חשבוניות דיגיטליות. בחשבונית ללקוח עם ע.מ./ח.פ. יש תיבה לסמן שהוא הסכים.</li>
+        <li><b>אמצעי תשלום:</b> בחתימה מאובטחת, לקוח עסקי צריך לשלם בהעברה מהחשבון שלו, בצ׳ק או בכרטיס האשראי שלו. אם שילם במזומן או בביט — המערכת תזכיר לתת לו גם מקור מודפס.</li>
+        <li>לקוחות פרטיים (בלי ע.מ.) — לא צריך כלום מזה.</li>
+      </ul>
+      <div style={{marginTop:8}}><Btn sm v="secondary" onClick={()=>{ const t=EINV_CONSENT_TEXT(); navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>alert("✅ הטקסט הועתק — אפשר להדביק בוואטסאפ או במייל ללקוח")); }}>📋 העתק בקשת הסכמה ללקוח</Btn></div>
+    </div>
+    <div style={{fontSize:12,color:"#64748b"}}>כשפותחים את הקובץ ב-Adobe מופיע "המסמך לא שונה מאז החתימה". ליד זה יכול להופיע "זהות החותם לא אומתה" — כי החתימה שלנו לא נקנתה מגוף מאשר (ComSign וכו׳). זה ההבדל בין חתימה "מאובטחת" (שלנו, בחינם) לבין "מאושרת" (בתשלום).</div>
+  </Modal>;
+}
+
 async function nextOfficialSeq(type){ const st=docSet(); const {data,error}=await sb.rpc('next_doc_seq',{p_type:type,p_min:parseInt((st.start||{})[type])||1}); if(error) throw new Error(error.message||"שגיאת מספור"); if(!(data>0)) throw new Error("לא התקבל מספר מהשרת"); return data; }
 const PAY_METHODS_DOC = ["מזומן","ביט","פייבוקס","העברה בנקאית","צ׳ק","כרטיס אשראי","ניכוי במקור","אחר"];
 const PAY_ICON = {"מזומן":"💵","ביט":"🅑","פייבוקס":"🅿️","העברה בנקאית":"🏦","צ׳ק":"🧾","כרטיס אשראי":"💳","ניכוי במקור":"📉","אחר":"…"};
@@ -7842,7 +8036,7 @@ function docHtml(doc){
     ${doc.footer?`<div style="font-size:12px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
       <div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>
-      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}</div>
+      <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
     </div>
   </div>`;
 }
@@ -7876,7 +8070,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const [allocationNum,setAllocationNum]=useState(P.allocationNum||"");
   const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
   const [itemPick,setItemPick]=useState(null); // אינדקס שורה שפתוח בה בורר פריטים
-  const official=!!docSet().official; const [saving,setSaving]=useState(false);
+  const official=!!docSet().official; const [saving,setSaving]=useState(false); const [einvLocal,setEinvLocal]=useState("");
   const refDoc=P.refDocId!=null?(finance||[]).find(f=>String(f.id)===String(P.refDocId)):null;
   React.useEffect(()=>{ if(cust){ setCustQ(cust.name||""); setCx(x=>({...x,name:cust.name||"",taxId:P.taxId||cust.taxId||"",address:cust.address||"",phone:cust.phone||"",email:cust.email||"",contactName:cust.contactName||""})); } },[custId]);
   const tot=docTotals(lines,inclVat,showDisc?discount:null,roundTotal);
@@ -7976,7 +8170,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
     </div>}
     <div style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:8}}>💡 {T.help}</div>
-    <div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:8,padding:"6px 12px",fontSize:12,marginBottom:12}}>מצב טיוטה — לבדיקה בלבד, עד שנחבר תוכנה רשומה.</div>
+    {!(official&&T.accounting)&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:8,padding:"6px 12px",fontSize:12,marginBottom:12}}>מצב טיוטה — לבדיקה בלבד, עד שמפעילים מצב רשמי.</div>}
 
     {/* ── לקוח ── */}
     <div style={card}>
@@ -8085,10 +8279,17 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
 
     {(alloc||allocationNum)&&<div style={{border:"2px solid "+(allocationNum?"#16a34a":"#f59e0b"),background:allocationNum?"#f0fdf4":"#fffbeb",borderRadius:12,padding:"12px",marginBottom:12}}>
       <div style={{fontWeight:800,color:allocationNum?"#166534":"#92400e"}}>{allocationNum?"✓ מספר הקצאה הוזן":"⚠️ דרוש מספר הקצאה"}</div>
-      {!allocationNum&&<div style={{fontSize:13,color:"#78350f",margin:"4px 0 8px",lineHeight:1.6}}>העסקה מעל {ALLOCATION_THRESHOLD.toLocaleString()} ₪ לפני מע״מ ללקוח עסקי. בלי מספר הקצאה הלקוח לא יוכל לקזז את המע״מ.<br/>כשנחבר תוכנה רשומה — המספר יתקבל אוטומטית. עד אז: מבקשים אותו באזור האישי ברשות המסים (שירות "חשבוניות ישראל") ומקלידים כאן.<br/><a href="https://www.gov.il/he/service/request-assignment-number-for-tax-invoice" target="_blank" rel="noopener" style={{fontWeight:700,color:"#1d4ed8"}}>🏛️ לבקשת מספר הקצאה ברשות המסים ←</a></div>}
+      {!allocationNum&&<div style={{fontSize:13,color:"#78350f",margin:"4px 0 8px",lineHeight:1.6}}>העסקה מעל {ALLOCATION_THRESHOLD.toLocaleString()} ₪ לפני מע״מ ללקוח עסקי. בלי מספר הקצאה הלקוח לא יוכל לקזז את המע״מ.<br/>מבקשים אותו באזור האישי ברשות המסים (שירות "חשבוניות ישראל") ומקלידים כאן.<br/><a href="https://www.gov.il/he/service/request-assignment-number-for-tax-invoice" target="_blank" rel="noopener" style={{fontWeight:700,color:"#1d4ed8"}}>🏛️ לבקשת מספר הקצאה ברשות המסים ←</a></div>}
       <Inp label="מספר הקצאה" value={allocationNum} onChange={setAllocationNum} placeholder="9 ספרות"/>
     </div>}
 
+    {official&&T.accounting&&String(cx.taxId||"").replace(/\D/g,"").length>=8&&(()=>{ const consent=cust?cust.einvConsent:einvLocal; const weak=T.receipt&&payments.some(p=>parseFloat(p.amount)&&["מזומן","ביט","פייבוקס"].includes(p.method));
+      return <div style={{border:"1px solid "+(consent&&!weak?"#86efac":"#fcd34d"),background:consent&&!weak?"#f0fdf4":"#fffbeb",borderRadius:12,padding:"10px 12px",marginBottom:12,fontSize:13,lineHeight:1.6}}>
+        <div style={{fontWeight:800,marginBottom:2}}>🔏 לקוח עסקי — חשבונית דיגיטלית חתומה</div>
+        <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={!!consent} onChange={e=>{ const v=e.target.checked?todayStr():""; if(cust&&setCustomers) setCustomers(cs=>cs.map(x=>x.id===cust.id?{...x,einvConsent:v}:x)); else setEinvLocal(v); }}/>הלקוח הסכים לקבל חשבוניות דיגיטליות{consent&&consent!==true?" (מ-"+fmtDate(consent)+")":""}</label>
+        {!consent&&<div style={{color:"#92400e"}}>צריך הסכמה פעם אחת (אפשר בוואטסאפ). בלי הסכמה — לתת לו מקור מודפס.</div>}
+        {weak&&<div style={{color:"#92400e",marginTop:2}}>⚠️ לקוח עסקי ששילם במזומן / ביט / פייבוקס: כדי שיוכל לקזז מע״מ — תן לו גם <b>מקור מודפס</b> (🖨 הדפסה). בהעברה מהחשבון שלו, צ׳ק או אשראי — הקובץ החתום מספיק.</div>}
+      </div>; })()}
     <div style={card}>
       <div style={h}>📝 הערות</div>
       <Txt label="הערות (יופיעו במסמך)" value={notes} onChange={setNotes} rows={2}/>
@@ -8140,7 +8341,14 @@ function DocsGuide({onClose}){
       <ul style={{margin:0,paddingRight:18}}>
         <L>הפעם הראשונה שמדפיסים או שולחים מסמך רשמי — הוא יוצא כ<b>"מקור"</b>. מכאן והלאה כל הדפסה ושליחה יוצאת <b>"העתק נאמן למקור"</b>, לבד.</L>
       </ul>
-      <H>5. כללים שהמערכת שומרת לבד</H>
+      <H>5. חתימה דיגיטלית ולקוחות עסקיים</H>
+      <ul style={{margin:0,paddingRight:18}}>
+        <L>כל מסמך רשמי שנשלח כ-PDF נחתם ב<b>חתימה אלקטרונית מאובטחת</b> של העסק (🔏 חתימה דיגיטלית). אם משנים בקובץ משהו — החתימה נשברת, ורואים את זה ב-Adobe.</L>
+        <L><b>לקוח פרטי:</b> לא צריך כלום.</L>
+        <L><b>לקוח עסקי (ע.מ./ח.פ.)</b> שמקזז מע״מ: צריך <b>הסכמה פעם אחת</b> לקבל חשבוניות דיגיטליות (מסמנים בחשבונית), ותשלום ב<b>העברה מהחשבון שלו, צ׳ק או כרטיס האשראי שלו</b>. שילם במזומן או בביט — נותנים לו גם מקור מודפס.</L>
+        <L>הדפסה (🖨) היא מקור על נייר — היא לא צריכה חתימה דיגיטלית.</L>
+      </ul>
+      <H>6. כללים שהמערכת שומרת לבד</H>
       <ul style={{margin:0,paddingRight:18}}>
         <L>מספור רציף לכל סוג מסמך, שנקבע בשרת — בלי כפילויות, גם כשכמה אנשים מפיקים יחד. לכן להפקה צריך רשת.</L>
         <L>אין תאריך עתידי, ואין תאריך לפני המסמך האחרון מאותו סוג.</L>
@@ -8181,7 +8389,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
-  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
   const custOf=l=>customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
@@ -8247,8 +8455,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
   return <div>
-    {dset.official?<div style={{background:"#f0fdf4",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""}: חשבוניות וקבלות שמופקות כאן הן מסמכים חשבונאיים אמיתיים, עם מספור רציף מהשרת.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn></div>
-      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 הפעלת מצב רשמי</Btn>}</div>}
+    {dset.official?<div style={{background:"#f0fdf4",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""}: חשבוניות וקבלות שמופקות כאן הן מסמכים חשבונאיים אמיתיים, עם מספור רציף מהשרת.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{isAdminUser()&&<Btn sm v={sigK?"secondary":"primary"} onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>
+      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 הפעלת מצב רשמי</Btn>}{isAdminUser()&&<Btn sm v="secondary" onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>}
     <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
       <StatCard label="מסמכים" value={docs.length}/>
       <StatCard label="סה״כ חשבוניות (כולל מע״מ)" value={money(sumInv)} bg="#dbeafe"/>
@@ -8319,6 +8527,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     {acctRep&&<AccountantReport finance={finance} onClose={()=>setAcctRep(false)}/>}
     {guide&&<DocsGuide onClose={()=>setGuide(false)}/>}
     {goLive&&<GoLiveModal finance={finance} onClose={()=>setGoLive(false)}/>}
+    {signSet&&<SignSetupModal onClose={()=>setSignSet(false)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -11998,7 +12207,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="132";
+const APP_BUILD="133";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
