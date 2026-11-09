@@ -7942,14 +7942,6 @@ function SignSetupModal({onClose}){
       <div style={{fontWeight:800,marginBottom:4}}>📋 איך עובדים</div>
       <div>שולחים חשבונית כרגיל (וואטסאפ / PDF) — היא נחתמת לבד. אין שום דבר נוסף לעשות מול הלקוח.</div>
     </div>
-    <div style={{...box,borderColor:k&&k.noticeSent?"#86efac":"#fcd34d",background:k&&k.noticeSent?"#f0fdf4":"#fffbeb"}}>
-      <div style={{fontWeight:800,marginBottom:4}}>✉️ הודעה לפקיד השומה — פעם אחת, לפני המסמך הדיגיטלי הראשון</div>
-      <div>לפי ההוראות (סעיף 18ב(ב)), עסק שמתחיל לשלוח מסמכים ממוחשבים מודיע על כך לפקיד השומה שלו <b>בדואר רשום</b>. זה מכתב קצר — אפשר לבקש מרואה החשבון לשלוח, או להדפיס ולשלוח בדואר.</div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6,alignItems:"center"}}>
-        <Btn sm v="secondary" onClick={()=>{ const t=ASSESSOR_NOTICE_TEXT(); navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>alert("✅ נוסח המכתב הועתק")); }}>📋 העתק נוסח מכתב</Btn>
-        {k&&<label style={{display:"flex",gap:6,alignItems:"center"}}><input type="checkbox" checked={!!k.noticeSent} onChange={async e=>{ const v=e.target.checked?todayStr():""; try{ await SIGKEY_STORE.save((list||[]).map(x=>x===k?{...x,noticeSent:v}:x)); }catch(er){ alert("שמירה נכשלה: "+(er.message||er)); } }}/>נשלח{k.noticeSent?" ("+fmtDate(k.noticeSent)+")":""}</label>}
-      </div>
-    </div>
     <div style={{fontSize:12,color:"#64748b"}}>כשפותחים את הקובץ ב-Adobe מופיע "המסמך לא שונה מאז החתימה". ליד זה יכול להופיע "זהות החותם לא אומתה" — כי החתימה שלנו לא נקנתה מגוף מאשר (ComSign וכו׳). זה ההבדל בין חתימה "מאובטחת" (שלנו, בחינם) לבין "מאושרת" (בתשלום).</div>
   </Modal>;
 }
@@ -8336,7 +8328,7 @@ function DocsGuide({onClose}){
       <ul style={{margin:0,paddingRight:18}}>
         <L><b>מתי צריך:</b> רק בחשבונית ל<b>עוסק מורשה / חברה</b> שמבקש מספר הקצאה, כשהסכום <b>מעל 5,000 ₪ לפני מע״מ</b>. ללקוח פרטי — אף פעם.</L>
         <L>המערכת מזהה לבד: כשמקלידים ח.פ. / ע.מ. של הלקוח והסכום מעל 5,000 ₪ — מופיעה אזהרה ⚠️.</L>
-        <L><b>איך מקבלים:</b> נכנסים ל<b>אזור האישי באתר רשות המסים</b> → "חשבוניות ישראל" → בקשה למספר הקצאה (ממלאים את פרטי הלקוח והחשבונית), או מבקשים מרואה החשבון.</L>
+        <L><b>איך מקבלים:</b> הכי פשוט — שולחים לרואת החשבון את פרטי החשבונית (לקוח, ח.פ., סכום, תאריך) והיא מבקשת. או לבד: <a href="https://www.gov.il/he/service/request-assignment-number-for-tax-invoice" target="_blank" rel="noopener">בקשה למספר הקצאה — אתר רשות המסים ↗</a> (כניסה עם ההזדהות הלאומית).</L>
         <L>את המספר מקלידים בשדה <b>"מספר הקצאה"</b> בחשבונית <b>לפני ההפקה</b>, והוא מודפס עליה. אם הופקה בלי — בשורת החשבונית יש <b>"➕ מספר הקצאה"</b>, ואז שולחים ללקוח העתק.</L>
         <L>זיכוי לחשבונית שיש לה מספר הקצאה — המספר עובר לזיכוי לבד.</L>
       </ul>
@@ -8348,9 +8340,7 @@ function DocsGuide({onClose}){
       <ul style={{margin:0,paddingRight:18}}>
         <L>כל מסמך רשמי שנשלח כ-PDF נחתם ב<b>חתימה אלקטרונית מאובטחת</b> של העסק (🔏 חתימה דיגיטלית). אם משנים בקובץ משהו — החתימה נשברת, ורואים את זה ב-Adobe.</L>
         <L>שולחים ללקוח כרגיל (וואטסאפ / PDF). אם לקוח מבקש מקור מודפס — מדפיסים (🖨).</L>
-        <L>הדפסה (🖨) היא מקור על נייר — היא לא צריכה חתימה דיגיטלית.</L>
         <L>הקובץ החתום הראשון שנשלח ללקוח נשמר לבד בשרת (🔏 בשורת המסמך) — חובה לשמור אותו לביקורת.</L>
-        <L>פעם אחת, לפני המסמך הדיגיטלי הראשון: <b>מכתב בדואר רשום לפקיד השומה</b> (נוסח מוכן בחלון "🔏 חתימה דיגיטלית").</L>
       </ul>
       <H>6. כללים שהמערכת שומרת לבד</H>
       <ul style={{margin:0,paddingRight:18}}>
@@ -12228,7 +12218,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="138";
+const APP_BUILD="139";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
