@@ -8184,10 +8184,16 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
           {custMatches.map(c=><div key={c.id} onMouseDown={()=>{setCustId(String(c.id));setShowCustList(false);}} style={{padding:"9px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer"}}><div style={{fontWeight:700,fontSize:14}}>{c.name}</div><div style={{fontSize:12,color:CLR.muted}}>{[c.phone,c.address].filter(Boolean).join(" · ")}</div></div>)}
         </div>}
       </div>
-      {!cust&&custQ.trim()&&<div style={{fontSize:12,color:"#92400e",marginBottom:6}}>לקוח מזדמן — לא שמור ברשימת הלקוחות. אפשר להשלים פרטים למטה.</div>}
-      <Inp label="ע.מ. / ח.פ. של הלקוח (רק ללקוח עסקי)" value={cx.taxId} onChange={v=>setCx(x=>({...x,taxId:v.replace(/[^\d-]/g,"")}))} placeholder="ריק = לקוח פרטי"/>
-      <button type="button" onClick={()=>setShowCustMore(v=>!v)} style={{background:"none",border:"none",color:CLR.primary,fontWeight:700,cursor:"pointer",fontSize:13,padding:0}}>{showCustMore?"▲":"▼"} פרטי לקוח מורחבים</button>
+      {!cust&&custQ.trim()&&<div style={{fontSize:12,color:"#92400e",marginBottom:6}}>לקוח מזדמן — לא שמור ברשימת הלקוחות. אפשר להשלים פרטים ב"✏️ עריכת פרטים".</div>}
+      {(cx.address||cx.phone||cx.email||cx.taxId||cx.contactName)&&<div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 12px",marginBottom:8,fontSize:14,lineHeight:1.8,color:"#334155"}}>
+        {cx.address&&<div>📍 {cx.address}</div>}
+        {cx.phone&&<div>📞 <span dir="ltr">{cx.phone}</span>{cx.contactName?" · "+cx.contactName:""}</div>}
+        {cx.email&&<div>✉️ {cx.email}</div>}
+        {cx.taxId&&<div>🏢 ע.מ./ח.פ. {cx.taxId}</div>}
+      </div>}
+      <button type="button" onClick={()=>setShowCustMore(v=>!v)} style={{background:"none",border:"none",color:CLR.primary,fontWeight:700,cursor:"pointer",fontSize:13,padding:0}}>{showCustMore?"▲ סגור":"✏️ עריכת פרטים / ע.מ. ללקוח עסקי"}</button>
       {showCustMore&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 10px",marginTop:8}}>
+        <div style={{gridColumn:"1 / -1"}}><Inp label="ע.מ. / ח.פ. של הלקוח (רק ללקוח עסקי)" value={cx.taxId} onChange={v=>setCx(x=>({...x,taxId:v.replace(/[^\d-]/g,"")}))} placeholder="ריק = לקוח פרטי"/></div>
         <Inp label="שם על המסמך" value={cx.name} onChange={v=>setCx(x=>({...x,name:v}))}/>
         <Inp label="איש קשר" value={cx.contactName} onChange={v=>setCx(x=>({...x,contactName:v}))}/>
         <Inp label="כתובת" value={cx.address} onChange={v=>setCx(x=>({...x,address:v}))}/>
@@ -8222,14 +8228,18 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
         {itemPick===i&&<div style={{border:"1px solid #e2e8f0",borderRadius:10,maxHeight:200,overflowY:"auto",marginBottom:6,background:"#fff"}}>
           {items.filter(it=>!String(lines[i].desc||"").trim()||it.desc.includes(String(lines[i].desc).trim())).map((it,k)=><div key={k} onClick={()=>{setLines(ls=>ls.map((x,j)=>j===i?{...x,desc:it.desc,unit:it.unit||x.unit,price:it.price&&it.incl===inclVat?String(it.price):x.price}:x));setItemPick(null);}} style={{padding:"8px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer",fontSize:13,display:"flex",justifyContent:"space-between",gap:8}}><span>{it.desc}</span>{it.price?<span style={{color:CLR.muted,whiteSpace:"nowrap"}}>₪{it.price}</span>:null}</div>)}
         </div>}
-        <div style={{display:"grid",gridTemplateColumns:"auto minmax(0,1fr) minmax(0,1.3fr) auto",gap:6,alignItems:"center"}}>
+        <div style={{position:"relative",marginBottom:6}}>
+          <input value={l.price} onChange={e=>setLine(i,"price",e.target.value.replace(/[^0-9.\-]/g,""))} type="text" inputMode="decimal" placeholder={inclVat?"סכום — כולל מע״מ":"סכום — לפני מע״מ"} style={{...inp,fontSize:18,fontWeight:700,padding:"11px 40px 11px 12px",height:"auto"}}/>
+          <span style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",fontWeight:700,fontSize:17,pointerEvents:"none"}}>₪</span>
+          {l.price!==""&&<span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#94a3b8",fontSize:12,pointerEvents:"none"}}>{inclVat?"כולל מע״מ":"לפני מע״מ"}</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"auto minmax(0,1fr) auto",gap:6,alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden"}}>
             <button type="button" onClick={()=>setLine(i,"qty",String(Math.max(1,(parseFloat(l.qty)||1)-1)))} style={{border:"none",background:"#f1f5f9",width:30,height:36,cursor:"pointer",fontSize:16}}>−</button>
             <input value={l.qty} onChange={e=>setLine(i,"qty",e.target.value)} type="number" style={{width:38,border:"none",textAlign:"center",fontSize:14,height:36,background:"#fff"}}/>
             <button type="button" onClick={()=>setLine(i,"qty",String((parseFloat(l.qty)||0)+1))} style={{border:"none",background:"#f1f5f9",width:30,height:36,cursor:"pointer",fontSize:16}}>+</button>
           </div>
           <select value={l.unit||"יח׳"} onChange={e=>setLine(i,"unit",e.target.value)} style={inp}>{["יח׳","ביקור","דירה","שעה","מ״ר","חודש"].map(u=><option key={u}>{u}</option>)}</select>
-          <input value={l.price} onChange={e=>setLine(i,"price",e.target.value)} type="number" placeholder={inclVat?"מחיר כולל מע״מ":"מחיר לפני מע״מ"} style={inp}/>
           <button type="button" onClick={()=>setLines(ls=>ls.length>1?ls.filter((_,j)=>j!==i):[{desc:"",qty:"1",unit:"יח׳",price:""}])} style={{border:"none",background:"none",color:CLR.danger,cursor:"pointer",fontSize:18}} title="מחק שורה">🗑</button>
         </div>
       </div>)}
@@ -8356,6 +8366,28 @@ function DocsGuide({onClose}){
 }
 const SUPA_DASH="https://supabase.com/dashboard/project/ilublhgawgfznxpdrfra";
 async function checkDocNumbering(){ try{ const {error}=await sb.from('doc_counters').select('doc_type').limit(1); return error?"❌ עוד לא הורץ ("+error.message+")":"✅ המספור בשרת מוכן"; }catch(e){ return "❌ "+(e.message||e); } }
+// 💬 שליחת מסמך — ללקוח או למספר אחר (למשל הנהלת החשבונות שלו)
+function SendDocModal({doc,saved,phone,customers=[],onClose}){
+  const c=(customers||[]).find(x=>String(x.id)===String(doc.customerId))||{};
+  const opts=[...new Set([phone,c.phone,c.phone2,c.contactPhone,(doc.cust||{}).phone].map(x=>String(x||"").trim()).filter(Boolean))];
+  const [ph,setPh]=useState(opts[0]||"");
+  const name=doc.customer||(doc.cust&&doc.cust.name)||"";
+  const send=()=>{ const n=ph.replace(/[^0-9+]/g,""); if(n.replace(/\D/g,"").length<9) return alert("כתוב מספר טלפון תקין"); onClose(); sendLogAndDocWA(null,doc,n); };
+  return <Modal title={saved?"✅ "+doc.docType+" "+(doc.official?String(doc.docSeq||"").padStart(4,"0"):"(טיוטה)")+" נשמרה":"💬 שליחת "+doc.docType} onClose={onClose} width={440}>
+    <div style={{fontSize:14,marginBottom:10}}>{saved?"לשלוח ל":"שליחה ל"}<b>{name}</b>{!doc.official&&doc.draft!==false&&<div style={{fontSize:12,color:"#92400e",marginTop:4}}>זו טיוטה — יוצאת עם סימן "טיוטה". מתאים לבדיקה.</div>}</div>
+    <label style={{fontSize:13,fontWeight:700,color:"#334155"}}>למספר וואטסאפ</label>
+    <input value={ph} onChange={e=>setPh(e.target.value)} inputMode="tel" placeholder="למשל 050-1234567" style={{width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:17,boxSizing:"border-box",margin:"4px 0 6px",direction:"ltr",textAlign:"right"}}/>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+      {opts.map(o=><button key={o} type="button" onClick={()=>setPh(o)} style={{border:"1px solid "+(ph===o?"#16a34a":"#e2e8f0"),background:ph===o?"#f0fdf4":"#fff",borderRadius:20,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>📞 {o}</button>)}
+      <button type="button" onClick={()=>setPh("")} style={{border:"1px dashed #94a3b8",background:"#fff",borderRadius:20,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>✏️ מספר אחר (הנהלת חשבונות…)</button>
+    </div>
+    <div style={{display:"grid",gap:8}}>
+      <Btn full onClick={send}>💬 שלח בוואטסאפ</Btn>
+      <Btn full v="secondary" onClick={()=>{ onClose(); shareLogAndDocPdf(null,doc); }}>📤 שיתוף / הורדת PDF (מייל וכו׳)</Btn>
+      <Btn full v="ghost" onClick={onClose}>{saved?"לא עכשיו":"ביטול"}</Btn>
+    </div>
+  </Modal>;
+}
 // 🔢 הכנת מספור — פעם אחת, לא מפעיל שום דבר
 function NumberingSetupModal({onClose}){
   const [chk,setChk]=useState("בודק…"); React.useEffect(()=>{ checkDocNumbering().then(setChk); },[]);
@@ -8401,7 +8433,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
-  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [sendNow,setSendNow]=useState(null);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [setup,setSetup]=useState(false); const [sendDlg,setSendDlg]=useState(null); const [sendNow,setSendNow]=useState(null);
   const docPhone=d=>{ const c=(customers||[]).find(x=>String(x.id)===String(d.customerId)); return (d.cust&&d.cust.phone)||(c&&c.phone)||d.phone||""; }; const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
@@ -8468,19 +8500,31 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     setDocReq({type:"חשבונית מס",prefill:{custId:g.cust?g.cust.id:null,custName:g.name,taxId:(g.cust&&g.cust.taxId)||"",execLogIds:logs.map(l=>l.id),refText:"חשבונית מרכזת — "+logs.length+" ביקורים",inclVat:true,
       lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
+  const tb={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"};
   return <div>
-    {dset.official?<div style={{background:"#f0fdf4",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""}: חשבוניות וקבלות שמופקות כאן הן מסמכים חשבונאיים אמיתיים, עם מספור רציף מהשרת.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{isAdminUser()&&<Btn sm v={sigK?"secondary":"primary"} onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>
-      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm v="secondary" onClick={()=>setNumSet(true)}>🔢 הכנת מספור (פעם אחת)</Btn>}{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 מעבר לחשבוניות רשמיות</Btn>}{isAdminUser()&&<Btn sm v="secondary" onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>}
-    <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
-      <StatCard label="מסמכים" value={docs.length}/>
-      <StatCard label="סה״כ חשבוניות (כולל מע״מ)" value={money(sumInv)} bg="#dbeafe"/>
-      <StatCard label="פתוח לגבייה" value={money(openSum)} bg="#fee2e2"/>
-      {allocMissing.length>0&&<StatCard label="חסר מספר הקצאה" value={allocMissing.length} bg="#fef3c7"/>}
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12,padding:"8px 12px",borderRadius:10,fontSize:13,background:dset.official?"#f0fdf4":"#fffbeb",border:"1px solid "+(dset.official?"#bbf7d0":"#fde68a"),color:dset.official?"#166534":"#92400e"}}>
+      <span style={{flex:1,minWidth:200}}>{dset.official?<>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""} — מסמכים אמיתיים, מספור רציף.</>:<>🧪 <b>מצב טיוטה</b> — לבדיקה. החשבוניות האמיתיות עדיין ב"יש חשבונית".</>}</span>
+      <button type="button" onClick={()=>setSetup(v=>!v)} style={{...tb,padding:"6px 12px",fontSize:13}}>⚙️ הגדרות {setup?"▲":"▼"}</button>
     </div>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
-      {["חשבונית מס/קבלה","חשבונית מס","חשבון עסקה","קבלה"].map(t=><Btn key={t} sm onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{background:DOC_TYPES[t].color,color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ {t}</Btn>)}
-      <Btn sm onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{background:"#7c3aed",color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>+ חשבונית מרכזת</Btn>
-      {!mineOnly&&<Btn sm onClick={()=>setAcctRep(true)} style={{background:"#0f172a",color:"#fff",border:"none",padding:"8px 14px",fontSize:13}}>📤 דוח לרואה חשבון</Btn>}
+    {setup&&<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12,padding:10,border:"1px solid #e2e8f0",borderRadius:10,background:"#f8fafc"}}>
+      <button type="button" style={tb} onClick={()=>setGuide(true)}>📘 מדריך</button>
+      {isAdminUser()&&<button type="button" style={tb} onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</button>}
+      {!dset.official&&!mineOnly&&isAdminUser()&&<button type="button" style={tb} onClick={()=>setNumSet(true)}>🔢 הכנת מספור (פעם אחת)</button>}
+      {!dset.official&&!mineOnly&&isAdminUser()&&<button type="button" style={{...tb,background:"#1a5c3a",color:"#fff",border:"none"}} onClick={()=>setGoLive(true)}>🚀 מעבר לחשבוניות רשמיות</button>}
+    </div>}
+    {/* מסמך חדש */}
+    <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:14}}>
+      <div style={{fontWeight:800,fontSize:15,color:"#0f172a",marginBottom:10}}>מסמך חדש</div>
+      <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false}})} style={{width:"100%",border:"none",borderRadius:12,background:"#1a5c3a",color:"#fff",padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+        <span style={{textAlign:"right"}}><span style={{display:"block",fontSize:17,fontWeight:800}}>+ חשבונית מס/קבלה</span><span style={{fontSize:12,opacity:.85}}>הלקוח שילם עכשיו — הכי נפוץ</span></span><span style={{fontSize:24}}>🧾</span>
+      </button>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
+        {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
+        <button type="button" onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{border:"1px solid #7c3aed55",background:"#7c3aed0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#7c3aed"}}>+ חשבונית מרכזת</span><span style={{fontSize:11,color:"#64748b"}}>כמה ביקורים בחשבונית אחת</span></button>
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
+      {[["מסמכים",docs.length,"#f0fdf4","#166534"],["סה״כ חשבוניות",money(sumInv),"#eff6ff","#1d4ed8"],["פתוח לגבייה",money(openSum),"#fef2f2","#b91c1c"],...(allocMissing.length?[["חסר מספר הקצאה",allocMissing.length,"#fffbeb","#b45309"]]:[])].map(([l,v,bg,c])=><div key={l} style={{background:bg,borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div></div>)}
     </div>
     {pendingInv.length>0&&<div style={{background:"#fff7ed",border:"1.5px solid #fdba74",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
       <div style={{fontWeight:800,fontSize:15,color:"#9a3412",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית מס/קבלה ({pendingInv.length})</div>
@@ -8505,39 +8549,51 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["הכל","ממתין","שולם","זיכוי"].map(t=><button key={t} onClick={()=>setStatusF(t)} style={{padding:"5px 12px",borderRadius:8,border:`1px solid ${statusF===t?"#334155":CLR.border}`,background:statusF===t?"#334155":"transparent",color:statusF===t?"#fff":CLR.muted,cursor:"pointer",fontWeight:600,fontSize:12}}>{t==="ממתין"?"פתוח":t}</button>)}
       <div style={{flex:1}}/>
+      {!mineOnly&&<Btn sm v="secondary" onClick={()=>setAcctRep(true)}>📤 דוח לרואה חשבון</Btn>}
       <Btn sm v="secondary" onClick={()=>exportInvoices(finance)}>📥 ייצא Excel</Btn>
     </div>
-    <div style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,overflow:"auto"}}>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:760}}>
-        <thead><tr style={{background:CLR.surface}}>{["סוג","מס׳","תאריך","לקוח","לפני מע״מ","סה״כ","סטטוס","פעולות"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"right",fontWeight:600,color:CLR.muted,borderBottom:`1px solid ${CLR.border}`}}>{h}</th>)}</tr></thead>
-        <tbody>
-          {filtered.length===0&&<tr><td colSpan={8} style={{padding:24,textAlign:"center",color:CLR.muted}}>אין מסמכים</td></tr>}
-          {filtered.map(f=>{const t=docTypeOf(f);const T=DOC_TYPES[t]||{};const legacy=!f.docType;
-            const doc=legacy?{...f,docType:t,docSeq:f.invoiceNum,draft:true,cust:{name:f.customer,phone:f.phone,address:f.address},lines:[{desc:"הדברת "+(f.pestType||""),qty:"1",unit:"יח׳",price:String(f.amount)}],inclVat:false,before:f.amount,vat:r2(f.amount*VAT_RATE/100),total:totalOf(f),payments:[{method:f.payMethod||"",amount:totalOf(f),date:f.date}]}:f;
-            return <tr key={f.id} style={{borderBottom:`1px solid ${CLR.border}`}}>
-            <td style={{padding:"9px 12px"}}><span style={{background:(T.color||"#64748b")+"18",color:T.color||"#64748b",fontWeight:700,borderRadius:20,padding:"2px 9px",fontSize:12,whiteSpace:"nowrap"}}>{t}</span></td>
-            <td style={{padding:"9px 12px",color:CLR.info,fontWeight:600,whiteSpace:"nowrap"}}>{f.invoiceNum||"—"}{f.needsAllocation&&!f.allocationNum?<span title="חסר מספר הקצאה" style={{color:"#d97706"}}> ⚠️</span>:""}{f.draft&&T.accounting?<span style={{fontSize:10,color:"#b91c1c",background:"#fee2e2",borderRadius:8,padding:"0 5px",marginRight:4}}>טיוטה</span>:null}{f.refund?<span style={{fontSize:10,color:"#b91c1c"}}> ↩ החזר</span>:null}</td>
-            <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>{fmtDate(f.date)}</td>
-            <td style={{padding:"9px 12px"}}>{f.customer||"—"}{f.refText?<div style={{fontSize:11,color:CLR.muted}}>↩ {f.refText}</div>:null}</td>
-            <td style={{padding:"9px 12px"}}>{money(f.before!=null?f.before:f.amount)}</td>
-            <td style={{padding:"9px 12px",fontWeight:700,color:t==="חשבונית זיכוי"?CLR.danger:CLR.primary}}>{t==="חשבונית זיכוי"?"-":""}{money(totalOf(f))}</td>
-            <td style={{padding:"9px 12px"}}>{T.receipt?<Badge status="שולם"/>:t==="חשבונית זיכוי"?<span style={{color:CLR.danger,fontSize:12,fontWeight:700}}>זיכוי</span>:f.status==="שולם"?<Badge status="שולם"/>:<span style={{color:"#b45309",fontSize:12,fontWeight:700}}>פתוח{f.dueDate?" · עד "+fmtDate(f.dueDate):""}</span>}{f.creditedBy?<div style={{fontSize:11,color:CLR.danger}}>זוכה ({f.creditedBy})</div>:null}</td>
-            <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-              {f.official&&T.accounting?(f.originalAt?<button onClick={()=>printDoc(doc,true)} title="המקור כבר הופק — מכאן רק העתק" style={{...act,color:CLR.primary}}>📄 העתק</button>:<button onClick={()=>printDoc(doc)} title="הפקת המקור (פעם אחת)" style={{...act,color:CLR.primary,fontWeight:700}}>📄 מקור</button>)
-                :<><button onClick={()=>printDoc(doc)} title="מקור" style={{...act,color:CLR.primary}}>📄</button>{T.accounting&&<button onClick={()=>printDoc(doc,true)} title="העתק" style={{...act,color:CLR.muted}}>העתק</button>}</>}
-              {!legacy&&<button onClick={()=>{ const ph=docPhone(f)||prompt("טלפון לשליחה בוואטסאפ:"); if(ph) sendLogAndDocWA(null,doc,ph); }} title="שליחה ללקוח בוואטסאפ" style={{...act,color:"#16a34a"}}>💬</button>}
-              {f.signedPath&&<button onClick={()=>openSignedOriginal(f)} title="הקובץ החתום שנשלח ללקוח (נשמר לביקורת)" style={{...act,color:"#166534"}}>🔏</button>}
-              {f.official&&f.needsAllocation&&!f.allocationNum&&<button onClick={()=>{ const n=prompt("מספר ההקצאה שקיבלת מרשות המסים:"); if(n&&n.trim()) setFinance(fs=>fs.map(x=>x.id===f.id?{...x,allocationNum:n.trim(),allocationAddedAt:new Date().toISOString()}:x)); }} style={{...act,color:"#d97706"}}>➕ מספר הקצאה</button>}
-              {t==="קבלה"&&!f.refund&&!f.refundedBy&&<button onClick={()=>setDocReq({type:"קבלה",prefill:{custId:f.customerId,custName:f.customer,lockType:true,refund:true,refDocId:f.id,refText:"קבלה "+(f.invoiceNum||""),payments:[{method:((f.payments||[])[0]||{}).method||"מזומן",amount:String(-Math.abs(totalOf(f))),date:todayStr(),details:{}}],notes:"ביטול / החזר של קבלה "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date)}})} title="למשל צ׳ק שחזר או החזר כסף" style={{...act,color:"#b91c1c"}}>↩ ביטול קבלה</button>}
-              {t==="חשבונית זיכוי"&&!f.refundedBy&&<button onClick={()=>openRefund(f,finance.find(x=>String(x.id)===String(f.refDocId)))} title="תיעוד החזר כסף ללקוח" style={{...act,color:"#b91c1c"}}>↩ החזר כסף</button>}
-              {t==="חשבון עסקה"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"חשבונית מס/קבלה")} style={{...act,color:"#16a34a"}}>שולם → ח.מס/קבלה</button>}
-              {t==="חשבונית מס"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"קבלה")} style={{...act,color:"#0891b2"}}>שולם → קבלה</button>}
-              {T.invoice&&t!=="חשבונית זיכוי"&&!f.creditedBy&&<button onClick={()=>follow(f,"חשבונית זיכוי")} style={{...act,color:CLR.danger}}>זיכוי</button>}
-              {!T.accounting&&<button onClick={()=>{if(window.confirm("להעביר לארכיון?"))softDelete(setFinance,f.id);}} style={{...act,border:"none",color:CLR.danger}}>✕</button>}
-            </div></td>
-          </tr>;})}
-        </tbody>
-      </table>
+    <div style={{display:"grid",gap:10}}>
+      {filtered.length===0&&<div style={{padding:24,textAlign:"center",color:CLR.muted,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>אין מסמכים</div>}
+      {filtered.map(f=>{const t=docTypeOf(f);const T=DOC_TYPES[t]||{};const legacy=!f.docType;
+        const doc=legacy?{...f,docType:t,docSeq:f.invoiceNum,draft:true,cust:{name:f.customer,phone:f.phone,address:f.address},lines:[{desc:"הדברת "+(f.pestType||""),qty:"1",unit:"יח׳",price:String(f.amount)}],inclVat:false,before:f.amount,vat:r2(f.amount*VAT_RATE/100),total:totalOf(f),payments:[{method:f.payMethod||"",amount:totalOf(f),date:f.date}]}:f;
+        const isCred=t==="חשבונית זיכוי"; const paid=T.receipt||f.status==="שולם";
+        const ab=(c,bold)=>({border:"1px solid "+c+"40",background:c+"0f",color:c,borderRadius:9,padding:"7px 11px",fontSize:13,fontWeight:bold?800:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"});
+        const svc=(f.lines||[]).map(l=>l.desc).filter(Boolean)[0]||f.pestType||"";
+        return <div key={f.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"4px solid "+(T.color||"#64748b"),borderRadius:12,padding:"12px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}>
+            <div style={{minWidth:0}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
+                <span style={{color:T.color||"#64748b",fontWeight:800,fontSize:13}}>{t}</span>
+                <span style={{color:"#334155",fontWeight:700,fontSize:13}}>{f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")}</span>
+                {f.draft&&T.accounting?<span style={{fontSize:11,color:"#b91c1c",background:"#fee2e2",borderRadius:8,padding:"0 6px"}}>טיוטה</span>:null}
+                {f.refund?<span style={{fontSize:11,color:"#b91c1c"}}>↩ החזר</span>:null}
+                {f.needsAllocation&&!f.allocationNum?<span style={{fontSize:11,color:"#b45309",background:"#fef3c7",borderRadius:8,padding:"0 6px"}}>⚠️ חסר מספר הקצאה</span>:null}
+              </div>
+              <div style={{fontWeight:800,fontSize:16,color:"#0f172a"}}>{f.customer||"—"}</div>
+              <div style={{fontSize:12,color:"#64748b"}}>{fmtDate(f.date)}{svc?" · "+svc:""}</div>
+              {f.refText?<div style={{fontSize:12,color:"#64748b"}}>↩ {f.refText}</div>:null}
+            </div>
+            <div style={{textAlign:"left",flexShrink:0}}>
+              <div style={{fontSize:19,fontWeight:800,color:isCred?CLR.danger:"#0f172a"}}>{isCred?"-":""}{money(totalOf(f))}</div>
+              <div style={{fontSize:11,color:"#64748b"}}>לפני מע״מ {money(f.before!=null?f.before:f.amount)}</div>
+              <div style={{marginTop:3}}>{isCred?<span style={{color:CLR.danger,fontSize:12,fontWeight:700}}>זיכוי</span>:paid?<span style={{color:"#166534",background:"#dcfce7",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>✓ שולם</span>:<span style={{color:"#b45309",background:"#fef3c7",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>פתוח{f.dueDate?" · עד "+fmtDate(f.dueDate):""}</span>}</div>
+              {f.creditedBy?<div style={{fontSize:11,color:CLR.danger}}>זוכה ({f.creditedBy})</div>:null}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
+            {!legacy&&<button type="button" onClick={()=>setSendDlg(doc)} style={ab("#16a34a",true)}>💬 שליחה ללקוח</button>}
+            {f.official&&T.accounting?(f.originalAt?<button onClick={()=>printDoc(doc,true)} title="המקור כבר הופק — מכאן רק העתק" style={ab("#1a5c3a")}>🖨 הדפסת העתק</button>:<button onClick={()=>printDoc(doc)} title="הפקת המקור (פעם אחת)" style={ab("#1a5c3a")}>🖨 הדפסת מקור</button>)
+              :<button onClick={()=>printDoc(doc)} style={ab("#1a5c3a")}>👁 צפייה / הדפסה</button>}
+            {f.signedPath&&<button onClick={()=>openSignedOriginal(f)} title="הקובץ החתום שנשלח ללקוח (נשמר לביקורת)" style={ab("#166534")}>🔏 הקובץ החתום</button>}
+            {f.official&&f.needsAllocation&&!f.allocationNum&&<button onClick={()=>{ const n=prompt("מספר ההקצאה שקיבלת מרשות המסים:"); if(n&&n.trim()) setFinance(fs=>fs.map(x=>x.id===f.id?{...x,allocationNum:n.trim(),allocationAddedAt:new Date().toISOString()}:x)); }} style={ab("#d97706")}>➕ מספר הקצאה</button>}
+            {t==="חשבון עסקה"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"חשבונית מס/קבלה")} style={ab("#16a34a")}>✓ שולם → חשבונית מס/קבלה</button>}
+            {t==="חשבונית מס"&&f.status!=="שולם"&&<button onClick={()=>follow(f,"קבלה")} style={ab("#0891b2")}>✓ שולם → קבלה</button>}
+            {t==="קבלה"&&!f.refund&&!f.refundedBy&&<button onClick={()=>setDocReq({type:"קבלה",prefill:{custId:f.customerId,custName:f.customer,lockType:true,refund:true,refDocId:f.id,refText:"קבלה "+(f.invoiceNum||""),payments:[{method:((f.payments||[])[0]||{}).method||"מזומן",amount:String(-Math.abs(totalOf(f))),date:todayStr(),details:{}}],notes:"ביטול / החזר של קבלה "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date)}})} title="למשל צ׳ק שחזר או החזר כסף" style={ab("#b91c1c")}>↩ ביטול קבלה</button>}
+            {isCred&&!f.refundedBy&&<button onClick={()=>openRefund(f,finance.find(x=>String(x.id)===String(f.refDocId)))} title="תיעוד החזר כסף ללקוח" style={ab("#b91c1c")}>↩ החזר כסף</button>}
+            {T.invoice&&!isCred&&!f.creditedBy&&<button onClick={()=>follow(f,"חשבונית זיכוי")} title="ביטול מלא או חלקי של המסמך" style={ab("#b91c1c")}>✕ ביטול (זיכוי)</button>}
+            {!T.accounting&&<button onClick={()=>{if(window.confirm("להעביר לארכיון?"))softDelete(setFinance,f.id);}} style={ab("#64748b")}>📁 לארכיון</button>}
+          </div>
+        </div>;})}
     </div>
     <div style={{fontSize:12,color:CLR.muted,marginTop:8}}>מסמך חשבונאי לא מוחקים — מבטלים אותו בחשבונית זיכוי. חשבון עסקה אפשר להעביר לארכיון.</div>
     {acctRep&&<AccountantReport finance={finance} onClose={()=>setAcctRep(false)}/>}
@@ -8545,14 +8601,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     {goLive&&<GoLiveModal finance={finance} onClose={()=>setGoLive(false)}/>}
     {signSet&&<SignSetupModal onClose={()=>setSignSet(false)}/>}
     {numSet&&<NumberingSetupModal onClose={()=>setNumSet(false)}/>}
-    {sendNow&&<Modal title={"✅ "+sendNow.docType+" "+(sendNow.official?String(sendNow.docSeq||"").padStart(4,"0"):"(טיוטה)")+" נשמרה"} onClose={()=>setSendNow(null)} width={420}>
-      <div style={{fontSize:14,marginBottom:12}}>לשלוח ללקוח <b>{sendNow.customer||(sendNow.cust&&sendNow.cust.name)}</b>?{!sendNow.official&&<div style={{fontSize:12,color:"#92400e",marginTop:4}}>זו טיוטה — עם סימן "טיוטה". מתאים לבדיקה (למשל לשלוח לעצמך).</div>}</div>
-      <div style={{display:"grid",gap:8}}>
-        <Btn full onClick={()=>{ const d=sendNow; const ph=docPhone(d); setSendNow(null); if(!ph){ const x=prompt("טלפון לשליחה בוואטסאפ:"); if(!x) return; return sendLogAndDocWA(null,d,x); } sendLogAndDocWA(null,d,ph); }}>💬 שלח בוואטסאפ{docPhone(sendNow)?" ("+docPhone(sendNow)+")":""}</Btn>
-        <Btn full v="secondary" onClick={()=>{ const d=sendNow; setSendNow(null); shareLogAndDocPdf(null,d); }}>📤 שיתוף / הורדת PDF</Btn>
-        <Btn full v="ghost" onClick={()=>setSendNow(null)}>לא עכשיו</Btn>
-      </div>
-    </Modal>}
+    {sendNow&&<SendDocModal doc={sendNow} saved phone={docPhone(sendNow)} customers={customers} onClose={()=>setSendNow(null)}/>}
+    {sendDlg&&<SendDocModal doc={sendDlg} phone={docPhone(sendDlg)} customers={customers} onClose={()=>setSendDlg(null)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -12249,7 +12299,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="142";
+const APP_BUILD="143";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
