@@ -3225,6 +3225,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
                   <button onClick={()=>openDup(l)} title="שכפל ליומן חדש עם תאריך היום" style={{...act,flex:"0 0 auto",padding:"9px 10px",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#475569"}}>⧉</button>
                   <button onClick={()=>printExecLog(l)} style={{...act,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#475569"}}>📄 PDF</button>
                   <button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendExecLogWA(l,ph);}} style={{...act,border:"none",background:"#25D366",color:"#fff"}}>📤 שלח</button>
+                  {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nהיומן יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקת היומן (עובר לסל המחזור)" style={{...act,flex:"0 0 auto",padding:"9px 10px",border:"1px solid #fecaca",background:"#fff",color:"#dc2626"}}>🗑️ מחק</button>}
                 </div>
                 <button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendReviewRequest(l.clientName,ph); setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,reviewRequestedAt:todayStr()}:x)); }} style={{...act,width:"100%",marginTop:8,border:"1px solid #fde047",background:l.reviewRequestedAt?"#f8fafc":"#fef9c3",color:l.reviewRequestedAt?"#64748b":"#854d0e"}}>{l.reviewRequestedAt?`✓ נשלחה בקשת ביקורת (${fmtDate(l.reviewRequestedAt)}) · לשלוח שוב`:"⭐ בקשת ביקורת בגוגל"}</button>
               </div>;})}
@@ -12514,7 +12515,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="150";
+const APP_BUILD="151";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12779,7 +12780,10 @@ function App(){
     {id:3,name:"תודה לאחר טיפול",emoji:"🙏",text:"שלום *{שם}* 👋\n\nתודה שבחרת ב-"+COMPANY.name+"!\nהטיפול בוצע בהצלחה.\n\nנשמח לעמוד לשירותך שוב 😊"},
     {id:4,name:"תזכורת תשלום",emoji:"💳",text:"שלום *{שם}* 👋\n\nבהתאם לבדיקתנו, ישנו חוב פתוח עבור הטיפול שביצענו.\nנשמח להסדיר את התשלום בהקדם.\n\n"+COMPANY.name+" 🦟"},
   ]);
-  const [execLogs,setExecLogs]=useLS("execLogs", []);
+  const [execLogsAll,setExecLogs]=useLS("execLogs", []);
+  const execLogs = React.useMemo(()=>activeOnly(execLogsAll),[execLogsAll]);
+  const trashItems = React.useMemo(()=>[...deletedItems,
+    ...execLogsAll.filter(x=>x&&x.deleted).map(x=>({...x,name:"יומן ביצוע · "+(x.clientName||"ללא שם")+(x.date?" · "+fmtDate(x.date):""),_type:"יומן ביצוע",_setter:()=>softRestore(setExecLogs,x.id)}))],[deletedItems,execLogsAll]);
   const debtCount = React.useMemo(()=>{ try{ return new Set(openDebts(activeFinance,execLogs,customers).map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size; }catch(e){ return 0; } },[activeFinance,execLogs,customers]);
   // 👤 יומני ביצוע שנעשו בלי כרטיס לקוח — יוצרים / מקשרים לקוח (פעם אחת, אחרי שהנתונים נטענו)
   const linkRef=React.useRef({customers,execLogs}); linkRef.current={customers,execLogs};
@@ -13030,7 +13034,7 @@ function App(){
             {tab==="expenses"&&<Finance key="expenses" initialType="הוצאה" finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
             {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments} execLogs={execLogs} finance={activeFinance}/>}
-            {tab==="trash"&&<TrashBin items={deletedItems} currentUser={user}/>}
+            {tab==="trash"&&<TrashBin items={trashItems} currentUser={user}/>}
             </div>
 
         
