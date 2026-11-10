@@ -6894,6 +6894,7 @@ const rolePermsFull=role=>{ const base=ROLE_PERMS[role]||ROLE_PERMS["פקידה"
 function permOf(u,id){
   if(!u||!u.role) return true;
   if(u.role==="מנהל"||id==="settings") return true;
+  if(id==="debts") return permOf(u,"invoices")===true;
   const p=u.permissions||{};
   if(p[id]!==undefined&&p[id]!==null) return p[id];
   return (ROLE_PERMS[u.role]||ROLE_PERMS["פקידה"])[id]||false;
@@ -8111,7 +8112,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       payTerms:T.receipt?"":payTerms, dueDate:T.receipt?"":dueDate,
       status:P.refund?"החזר":T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
-      apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"",
+      apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"", ...(P.debtId!=null?{debtId:P.debtId}:{}),
       refDocId:P.refDocId||null, refText:P.refText||"", execLogIds:P.execLogIds||null,
       phone:cx.phone||"", address:(a&&a.address)||cx.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
       notes, footer, privateNote, createdAt:new Date().toISOString(), createdById:P.createdById!=null?P.createdById:((__h360User||{}).id??null), createdBy:P.createdBy||((__h360User||{}).name||""),
@@ -8366,6 +8367,100 @@ function DocsGuide({onClose}){
 }
 const SUPA_DASH="https://supabase.com/dashboard/project/ilublhgawgfznxpdrfra";
 async function checkDocNumbering(){ try{ const {error}=await sb.from('doc_counters').select('doc_type').limit(1); return error?"❌ עוד לא הורץ ("+error.message+")":"✅ המספור בשרת מוכן"; }catch(e){ return "❌ "+(e.message||e); } }
+// ═══ 💳 חובות: חשבוניות פתוחות + יומני ביצוע בלי תשלום + חובות ידניים ═══
+const docTotalOf=f=>f.total!=null?f.total:r2((parseFloat(f.amount)||0)*(1+VAT_RATE/100));
+const logHasDoc=(l,finance)=>!!(l.invoiceNum||(finance||[]).some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(f.execLogIds||[]).map(String).includes(String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId)))));
+function computeDebts(finance,execLogs,customers){
+  const custBy=(id,name)=>(customers||[]).find(c=>id!=null&&String(c.id)===String(id))||(customers||[]).find(c=>name&&c.name===name)||null;
+  const out=[];
+  (finance||[]).forEach(f=>{ if(!f||f.deleted) return;
+    if(isDocRec(f)){ const t=docTypeOf(f); if(!["חשבונית מס","חשבון עסקה"].includes(t)) return; if(f.creditedBy&&!f.paidByDocId) return;
+      const c=custBy(f.customerId,f.customer); out.push({key:"f"+f.id,kind:"doc",rec:f,cust:c,name:f.customer||(c&&c.name)||"—",phone:(f.cust&&f.cust.phone)||(c&&c.phone)||"",amount:docTotalOf(f),date:f.date,label:t+" "+(f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")),desc:((f.lines||[])[0]||{}).desc||"",paid:f.status==="שולם",paidRef:f.paidByDocId||f.paidNote||"",paidAt:f.paidAt||""}); }
+    else if(f.category==="חוב"){ const c=custBy(f.customerId,f.customer); out.push({key:"m"+f.id,kind:"manual",rec:f,cust:c,name:f.customer||(c&&c.name)||"—",phone:f.phone||(c&&c.phone)||"",amount:parseFloat(f.amount)||0,date:f.date,label:f.source||"חוב",desc:f.desc||"",paid:f.status==="שולם",paidRef:f.paidByDocId||f.paidNote||"",paidAt:f.paidAt||""}); }
+  });
+  (execLogs||[]).forEach(l=>{ if(!l||l.deleted) return; const amt=parseFloat(l.agreedPrice||l.paymentAmount)||0; if(!amt) return;
+    const hasDoc=logHasDoc(l,finance); if(l.paymentDone&&!l.debtClosed) return; if(hasDoc&&!l.debtClosed) return;
+    const c=custBy(l.customerId,l.clientName); out.push({key:"l"+l.id,kind:"log",rec:l,cust:c,name:l.clientName||(c&&c.name)||"—",phone:l.phone||(c&&c.phone)||"",amount:amt,date:l.date,label:"יומן ביצוע "+(l.docNum||""),desc:"הדברת "+(l.pest||[]).join(", "),paid:!!l.debtClosed,paidRef:(l.debtClosed&&l.debtClosed.ref)||"",paidAt:(l.debtClosed&&l.debtClosed.at)||""}); });
+  return out;
+}
+const openDebts=(finance,execLogs,customers)=>computeDebts(finance,execLogs,customers).filter(d=>!d.paid);
+// סגירת חוב (סימון ששולם) — לכל סוג
+function closeDebt(d,ref,{setFinance,setExecLogs}){ const at=new Date().toISOString();
+  if(d.kind==="log") setExecLogs&&setExecLogs(ls=>ls.map(x=>String(x.id)===String(d.rec.id)?{...x,debtClosed:{at,ref:ref||"סומן כשולם"}}:x));
+  else setFinance&&setFinance(fs=>fs.map(x=>String(x.id)===String(d.rec.id)?{...x,status:"שולם",paidAt:at,...(ref&&/^[^\s]+-\d/.test(ref)?{paidByDocId:ref}:{paidNote:ref||"סומן כשולם"})}:x)); }
+const debtReminderText=(name,items)=>{ const tot=items.reduce((t,d)=>t+d.amount,0); const b=COMPANY.bank;
+  return ["שלום "+name+",","תזכורת ידידותית מ"+COMPANY.name+" — נשארה יתרה לתשלום של "+money(tot)+":",...items.map(d=>"• "+d.label+(d.date?" מ-"+fmtDate(d.date):"")+" — "+money(d.amount)),"",...(b?["אפשר לשלם בהעברה בנקאית:",b.name+" ("+b.code+") · סניף "+b.branch+" · חשבון "+b.account+" · על שם "+b.holder,"או בביט / אשראי — מוזמנים לחזור אלינו.",""]:[]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n"); };
+function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
+  const [view,setView]=useState("open"); const [q,setQ]=useState(""); const [openC,setOpenC]=useState({}); const [add,setAdd]=useState(null);
+  const all=computeDebts(finance,execLogs,customers);
+  const list=all.filter(d=>view==="open"?!d.paid:d.paid).filter(d=>!q.trim()||(d.name+" "+d.label+" "+d.desc).includes(q.trim()));
+  const groups={}; list.forEach(d=>{ const k=d.cust?"c"+d.cust.id:"n"+d.name; (groups[k]=groups[k]||{name:d.cust?d.cust.name:d.name,phone:d.phone,items:[]}).items.push(d); if(!groups[k].phone&&d.phone) groups[k].phone=d.phone; });
+  const G=Object.entries(groups).map(([k,g])=>({k,...g,total:g.items.reduce((t,d)=>t+d.amount,0),oldest:g.items.map(d=>d.date||"").sort()[0]||""})).sort((a,b)=>view==="open"?b.total-a.total:String(b.items[0].paidAt).localeCompare(String(a.items[0].paidAt)));
+  const openAll=all.filter(d=>!d.paid); const totOpen=openAll.reduce((t,d)=>t+d.amount,0);
+  const age=d=>d.date?Math.floor((Date.now()-new Date(d.date).getTime())/86400000):0;
+  const buckets=[["עד 30 יום",d=>age(d)<=30],["31–60 יום",d=>age(d)>30&&age(d)<=60],["מעל 60 יום",d=>age(d)>60]].map(([l,fn])=>[l,openAll.filter(fn).reduce((t,d)=>t+d.amount,0)]);
+  const go=(action)=>{ window.__h360DocAction=action; window.__h360Nav&&window.__h360Nav("invoices"); };
+  const payDoc=d=>{ if(d.kind==="doc") go({kind:"follow",id:d.rec.id,type:docTypeOf(d.rec)==="חשבון עסקה"?"חשבונית מס/קבלה":"קבלה"});
+    else if(d.kind==="log") go({kind:"log",id:d.rec.id});
+    else go({kind:"debt",debt:{id:d.rec.id,custId:d.cust?d.cust.id:null,custName:d.name,desc:d.desc||d.label,amount:d.amount}}); };
+  const markPaid=d=>{ const n=prompt("לסמן ששולם — בלי להפיק מסמך כאן.\nאיך / איפה? (למשל: קבלה הופקה ב'יש חשבונית', שולם במזומן)","שולם"); if(n===null) return; closeDebt(d,n||"סומן כשולם",{setFinance,setExecLogs}); };
+  const reopen=d=>{ if(!confirm("להחזיר לחובות הפתוחים?")) return; if(d.kind==="log") setExecLogs(ls=>ls.map(x=>String(x.id)===String(d.rec.id)?{...x,debtClosed:null}:x)); else setFinance(fs=>fs.map(x=>String(x.id)===String(d.rec.id)?{...x,status:"פתוח",paidAt:"",paidNote:"",paidByDocId:x.paidByDocId&&isDocRec(x)?x.paidByDocId:""}:x)); };
+  const remind=g=>{ const ph=String(g.phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972")||String(prompt("טלפון לתזכורת:")||"").replace(/[^0-9]/g,"").replace(/^0/,"972"); if(!ph) return; window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(debtReminderText(g.name,g.items)),"_blank"); };
+  const b=(c,bold)=>({border:"1px solid "+c+"40",background:c+"0f",color:c,borderRadius:9,padding:"7px 11px",fontSize:13,fontWeight:bold?800:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"});
+  const saveManual=()=>{ const a=add; const amt=parseFloat(a.amount); if(!a.name.trim()||!amt) return alert("שם לקוח וסכום");
+    const c=(customers||[]).find(x=>x.name===a.name.trim());
+    setFinance(fs=>[...fs,{id:nextId(fs),category:"חוב",type:"חוב",customer:a.name.trim(),customerId:c?c.id:null,phone:a.phone||(c&&c.phone)||"",amount:amt,desc:a.desc,date:a.date||todayStr(),source:a.source||"חוב",status:"פתוח",createdAt:new Date().toISOString()}]); setAdd(null); };
+  return <div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
+      <div style={{background:"#fef2f2",borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>סה״כ חובות פתוחים</div><div style={{fontSize:22,fontWeight:800,color:"#b91c1c"}}>{money(totOpen)}</div><div style={{fontSize:12,color:"#64748b"}}>{new Set(openAll.map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size} לקוחות · {openAll.length} פריטים</div></div>
+      {buckets.map(([l,v],i)=><div key={l} style={{background:["#f8fafc","#fffbeb","#fff1f2"][i],borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:["#334155","#b45309","#be123c"][i]}}>{money(v)}</div></div>)}
+    </div>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+      <div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3}}>{[["open","פתוחים"],["paid","שולמו"]].map(([v,l])=><button key={v} type="button" onClick={()=>setView(v)} style={{border:"none",borderRadius:8,padding:"7px 16px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",background:view===v?"#fff":"transparent",color:view===v?(v==="open"?"#b91c1c":"#166534"):"#64748b",boxShadow:view===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>)}</div>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לקוח" style={{flex:1,minWidth:160,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14}}/>
+      <Btn sm v="secondary" onClick={()=>setAdd({name:"",phone:"",amount:"",desc:"",date:todayStr(),source:"חוב"})}>+ חוב ידני</Btn>
+    </div>
+    {G.length===0&&<div style={{padding:30,textAlign:"center",color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>{view==="open"?"🎉 אין חובות פתוחים":"עוד אין חובות ששולמו"}</div>}
+    <div style={{display:"grid",gap:10}}>
+    {G.map(g=>{ const ex=openC[g.k]??(G.length<=6);
+      return <div key={g.k} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"4px solid "+(view==="open"?"#dc2626":"#16a34a"),borderRadius:12,overflow:"hidden"}}>
+        <div onClick={()=>setOpenC(o=>({...o,[g.k]:!ex}))} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer"}}>
+          <div style={{minWidth:0}}><div style={{fontWeight:800,fontSize:16}}>{g.name}</div><div style={{fontSize:12,color:"#64748b"}}>{g.items.length} {g.items.length===1?"פריט":"פריטים"}{view==="open"&&g.oldest?" · הכי ישן מ-"+fmtDate(g.oldest):""}{g.phone?" · "+g.phone:""}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{fontSize:19,fontWeight:800,color:view==="open"?"#b91c1c":"#166534"}}>{money(g.total)}</div><span style={{color:"#94a3b8"}}>{ex?"▲":"▼"}</span></div>
+        </div>
+        {ex&&<div style={{borderTop:"1px solid #f1f5f9",padding:"8px 14px 12px"}}>
+          {g.items.sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(d=><div key={d.key} style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",flexWrap:"wrap",padding:"8px 0",borderBottom:"1px dashed #eef2f7"}}>
+            <div style={{minWidth:0,flex:"1 1 200px"}}><div style={{fontWeight:700,fontSize:14}}>{d.label} <span style={{fontWeight:400,color:"#64748b",fontSize:12}}>{d.date?"· "+fmtDate(d.date):""}{view==="open"&&d.date?" · לפני "+age(d)+" ימים":""}</span></div>
+              <div style={{fontSize:12,color:"#64748b"}}>{d.desc}{view==="paid"&&d.paidRef?" · ✓ "+d.paidRef:""}{view==="paid"&&d.paidAt?" · "+fmtDate(String(d.paidAt).slice(0,10)):""}</div></div>
+            <div style={{fontWeight:800,fontSize:15}}>{money(d.amount)}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",width:"100%"}}>
+              {view==="open"?<>
+                <button type="button" onClick={()=>payDoc(d)} style={b("#16a34a",true)}>🧾 שולם — הפק {d.kind==="doc"&&docTypeOf(d.rec)==="חשבונית מס"?"קבלה":"חשבונית מס/קבלה"}</button>
+                <button type="button" onClick={()=>markPaid(d)} style={b("#64748b")}>✓ סמן כשולם (בלי מסמך)</button>
+                {d.kind==="doc"&&<button type="button" onClick={()=>printDoc(d.rec,!!d.rec.originalAt)} style={b("#1a5c3a")}>👁 צפייה</button>}
+              </>:<button type="button" onClick={()=>reopen(d)} style={b("#b45309")}>↩ החזר לפתוחים</button>}
+            </div>
+          </div>)}
+          {view==="open"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+            <button type="button" onClick={()=>remind(g)} style={b("#16a34a")}>💬 תזכורת תשלום בוואטסאפ</button>
+            {g.phone&&<a href={"tel:"+g.phone} style={{...b("#0369a1"),textDecoration:"none"}}>📞 התקשר</a>}
+          </div>}
+        </div>}
+      </div>; })}
+    </div>
+    <div style={{fontSize:12,color:"#64748b",marginTop:10,lineHeight:1.6}}>חוב = חשבונית מס / חשבון עסקה שלא שולמו, יומן ביצוע בלי תשלום ובלי חשבונית, או חוב שהוספת ידנית. כשמפיקים קבלה או חשבונית מס/קבלה — החוב עובר ל"שולמו".</div>
+    {add&&<Modal title="+ חוב ידני" onClose={()=>setAdd(null)} width={440}>
+      <label style={{fontSize:13,fontWeight:600,color:"#334155"}}>לקוח</label>
+      <input value={add.name} onChange={e=>{ const v=e.target.value; const c=(customers||[]).find(x=>x.name===v); setAdd(a=>({...a,name:v,phone:a.phone||(c&&c.phone)||""})); }} list="h360-debt-cust" placeholder="הקלד שם לקוח" style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",margin:"4px 0 12px"}}/>
+      <datalist id="h360-debt-cust">{(customers||[]).filter(c=>!c.deleted).slice(0,500).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+      <Inp label="סכום (₪ כולל מע״מ)" type="number" value={add.amount} onChange={v=>setAdd(a=>({...a,amount:v}))}/>
+      <Inp label="על מה" value={add.desc} onChange={v=>setAdd(a=>({...a,desc:v}))} placeholder="למשל: הדברה 3/10, חשבונית 80118 ביש חשבונית"/>
+      <Inp label="מתאריך" type="date" value={add.date} onChange={v=>setAdd(a=>({...a,date:v}))}/>
+      <Inp label="טלפון (לתזכורת)" value={add.phone} onChange={v=>setAdd(a=>({...a,phone:v}))}/>
+      <div style={{display:"flex",gap:8}}><Btn full onClick={saveManual}>💾 הוסף חוב</Btn><Btn v="ghost" onClick={()=>setAdd(null)}>ביטול</Btn></div>
+    </Modal>}
+  </div>;
+}
 // 💬 שליחת מסמך — ללקוח או למספר אחר (למשל הנהלת החשבונות שלו)
 function SendDocModal({doc,saved,phone,customers=[],onClose}){
   const c=(customers||[]).find(x=>String(x.id)===String(doc.customerId))||{};
@@ -8433,7 +8528,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
-  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [setup,setSetup]=useState(false); const [sendDlg,setSendDlg]=useState(null); const [sendNow,setSendNow]=useState(null);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [setup,setSetup]=useState(false); const [credPick,setCredPick]=useState(null); const [sendDlg,setSendDlg]=useState(null); const [sendNow,setSendNow]=useState(null);
   const docPhone=d=>{ const c=(customers||[]).find(x=>String(x.id)===String(d.customerId)); return (d.cust&&d.cust.phone)||(c&&c.phone)||d.phone||""; }; const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
@@ -8474,7 +8569,13 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       if(rec.refDocId&&rec.docType==="חשבונית זיכוי") out=out.map(x=>String(x.id)===String(rec.refDocId)?{...x,creditedBy:rec.invoiceNum}:x);
       return out;
     });
-    if(rec.execLogId&&setExecLogs) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x));
+    if(rec.execLogId&&setExecLogs) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum,...(!x.paymentDone&&DOC_TYPES[rec.docType]?.receipt?{debtClosed:{at:new Date().toISOString(),ref:rec.invoiceNum||rec.docType}}:{})}:x));
+    // חוב ידני ששולם בחשבונית הזו
+    if(rec.debtId!=null&&DOC_TYPES[rec.docType]?.receipt) setFinance(fs=>fs.map(x=>String(x.id)===String(rec.debtId)?{...x,status:"שולם",paidAt:new Date().toISOString(),paidByDocId:rec.invoiceNum}:x));
+    // קבלה ללקוח שיש לו חובות פתוחים אחרים → שואלים אם לסגור אותם
+    if(DOC_TYPES[rec.docType]?.receipt&&!rec.refund&&rec.refDocId==null&&rec.debtId==null&&!rec.execLogId){ const ref=rec.invoiceNum||rec.docType;
+      const other=openDebts(finance,execLogs,customers).filter(d=>(rec.customerId!=null&&d.cust&&String(d.cust.id)===String(rec.customerId))||(d.name&&d.name===rec.customer));
+      if(other.length) setTimeout(()=>{ if(confirm("ל"+rec.customer+" יש "+other.length+" חובות פתוחים:\n"+other.map(d=>"• "+d.label+(d.date?" ("+fmtDate(d.date)+")":"")+" — "+money(d.amount)).join("\n")+"\n\nהתשלום הזה סוגר אותם? (אישור = לסמן כשולמו)")) other.forEach(d=>closeDebt(d,ref,{setFinance,setExecLogs})); },400); }
     if(rec.docType!=="חשבונית זיכוי"&&!rec.refund) setTimeout(()=>setSendNow({...rec,id:idBox.v}),80);
     if(rec.execLogIds&&setExecLogs){ const ids=rec.execLogIds.map(String); setExecLogs(ls=>ls.map(x=>ids.includes(String(x.id))?{...x,invoiceNum:rec.invoiceNum}:x)); }
     // זיכוי על מסמך ששולם → מציעים לתעד את החזר הכסף (קבלה במינוס)
@@ -8483,6 +8584,12 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   };
   const openRefund=(cr,orig)=>{ const amt=Math.abs(cr.total!=null?cr.total:docNums(cr).total); const m=((orig&&orig.payments||[])[0]||{}).method||"העברה בנקאית";
     setDocReq({type:"קבלה",prefill:{custId:cr.customerId,custName:cr.customer,taxId:(cr.cust||{}).taxId||"",lockType:true,refund:true,refDocId:cr.id==="__new"?null:cr.id,refText:"חשבונית זיכוי "+(cr.invoiceNum||""),payments:[{method:m,amount:String(-amt),date:todayStr(),details:{}}],notes:"החזר כספי ללקוח בגין חשבונית זיכוי "+(cr.invoiceNum||"")+(orig?" (ביטול "+docTypeOf(orig)+" "+(orig.invoiceNum||"")+")":"")}}); };
+  // פעולה שהגיעה מדף החובות
+  React.useEffect(()=>{ const a=window.__h360DocAction; if(!a) return; window.__h360DocAction=null;
+    setTimeout(()=>{ if(a.kind==="follow"){ const f=finance.find(x=>String(x.id)===String(a.id)); if(f) follow(f,a.type); }
+      else if(a.kind==="log"){ const l=(execLogs||[]).find(x=>String(x.id)===String(a.id)); if(l) openInvFor(l); }
+      else if(a.kind==="debt"){ const d=a.debt; const c=d.custId!=null?customers.find(x=>String(x.id)===String(d.custId)):null;
+        setDocReq({type:"חשבונית מס/קבלה",prefill:{custId:c?c.id:null,custName:c?custDocName(c):d.custName,debtId:d.id,lines:[{desc:d.desc||"",qty:"1",unit:"יח׳",price:String(d.amount||"")}],inclVat:true,payments:[]}}); } },50); },[]);
   const follow=(f,type)=>{
     const base={custId:f.customerId,custName:f.customer,taxId:(f.cust||{}).taxId||"",apptId:f.apptId||"",execLogId:f.execLogId||null,execDocNum:f.execDocNum||"",refDocId:f.id,refText:docTypeOf(f)+" "+(f.invoiceNum||"")+" מתאריך "+fmtDate(f.date),lockType:true,
       lines:(f.lines&&f.lines.length?f.lines:[{desc:f.pestType||"",qty:"1",unit:"יח׳",price:String(totalOf(f))}]),inclVat:f.lines&&f.lines.length?!!f.inclVat:true,allocationNum:type==="חשבונית זיכוי"?(f.allocationNum||""):""};
@@ -8520,6 +8627,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       </button>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
         {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
+        <button type="button" onClick={()=>setCredPick("")} style={{border:"1px solid #dc262655",background:"#dc26260d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#dc2626"}}>+ חשבונית זיכוי</span><span style={{fontSize:11,color:"#64748b"}}>ביטול / הנחה על חשבונית שהופקה</span></button>
         <button type="button" onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{border:"1px solid #7c3aed55",background:"#7c3aed0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#7c3aed"}}>+ חשבונית מרכזת</span><span style={{fontSize:11,color:"#64748b"}}>כמה ביקורים בחשבונית אחת</span></button>
       </div>
     </div>
@@ -8602,6 +8710,14 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     {signSet&&<SignSetupModal onClose={()=>setSignSet(false)}/>}
     {numSet&&<NumberingSetupModal onClose={()=>setNumSet(false)}/>}
     {sendNow&&<SendDocModal doc={sendNow} saved phone={docPhone(sendNow)} customers={customers} onClose={()=>setSendNow(null)}/>}
+    {credPick!=null&&<Modal title="+ חשבונית זיכוי — על איזו חשבונית?" onClose={()=>setCredPick(null)} width={520}>
+      <div style={{fontSize:13,color:"#64748b",marginBottom:8}}>זיכוי תמיד מתייחס לחשבונית קיימת. בחר אותה — ואז אפשר לזכות את כל הסכום או חלק ממנו.</div>
+      <input autoFocus value={credPick} onChange={e=>setCredPick(e.target.value)} placeholder="🔍 שם לקוח או מספר" style={{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:15,boxSizing:"border-box",marginBottom:8}}/>
+      <div style={{maxHeight:360,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10}}>
+        {docs.filter(f=>DOC_TYPES[docTypeOf(f)]?.invoice&&docTypeOf(f)!=="חשבונית זיכוי"&&!f.creditedBy).filter(f=>!credPick.trim()||((f.customer||"")+" "+(f.invoiceNum||"")+" "+(f.docSeq||"")).includes(credPick.trim())).slice(0,40).map(f=><div key={f.id} onClick={()=>{ setCredPick(null); follow(f,"חשבונית זיכוי"); }} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"10px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer"}}>
+          <div><div style={{fontWeight:700}}>{f.customer}</div><div style={{fontSize:12,color:"#64748b"}}>{docTypeOf(f)} {f.official?String(f.docSeq||"").padStart(4,"0"):f.invoiceNum} · {fmtDate(f.date)}</div></div><div style={{fontWeight:800}}>{money(totalOf(f))}</div></div>)}
+      </div>
+    </Modal>}
     {sendDlg&&<SendDocModal doc={sendDlg} phone={docPhone(sendDlg)} customers={customers} onClose={()=>setSendDlg(null)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
@@ -12299,7 +12415,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="143";
+const APP_BUILD="144";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12565,6 +12681,7 @@ function App(){
     {id:4,name:"תזכורת תשלום",emoji:"💳",text:"שלום *{שם}* 👋\n\nבהתאם לבדיקתנו, ישנו חוב פתוח עבור הטיפול שביצענו.\nנשמח להסדיר את התשלום בהקדם.\n\n"+COMPANY.name+" 🦟"},
   ]);
   const [execLogs,setExecLogs]=useLS("execLogs", []);
+  const debtCount = React.useMemo(()=>{ try{ return new Set(openDebts(activeFinance,execLogs,customers).map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size; }catch(e){ return 0; } },[activeFinance,execLogs,customers]);
   // 👤 יומני ביצוע שנעשו בלי כרטיס לקוח — יוצרים / מקשרים לקוח (פעם אחת, אחרי שהנתונים נטענו)
   const linkRef=React.useRef({customers,execLogs}); linkRef.current={customers,execLogs};
   React.useEffect(()=>{ if(!authUser||authUser.role!=="מנהל") return; const t=setTimeout(()=>{
@@ -12596,6 +12713,7 @@ function App(){
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
     {id:"mychems",label:"🧪 החומרים שלי",short:"🧪"},
     {id:"invoices",label:"🧾 חשבוניות",short:"🧾",hideFor:"מדביר"},
+    {id:"debts",label:"💳 חובות",short:"💳",hideFor:"מדביר"},
     {id:"maintenance",label:"🔁 אחזקות",short:"🔁",hideFor:"מדביר"},
     {id:"projects",label:"🏗️ פרויקטים",short:"🏗️",hideFor:"מדביר"},
     {id:"notes",label:"📓 הערות",short:"📓"},
@@ -12631,7 +12749,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -12654,7 +12772,7 @@ function App(){
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
             {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
-            {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
+            {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות",hide:null}]},
           ].map(group=>(
@@ -12753,7 +12871,7 @@ function App(){
               {[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
-                {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
+                {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
               ].map(group=>(
@@ -12809,6 +12927,7 @@ function App(){
             {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={jobAppointments} templates={msgTemplates}/>}
             {tab==="regional"&&<RegionalStats appointments={jobAppointments} customers={customers} workers={activeWorkers} finance={activeFinance}/>}
             {tab==="finance"&&<Finance finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
+            {tab==="debts"&&<Debts finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} customers={customers}/>}
             {tab==="expenses"&&<Finance key="expenses" initialType="הוצאה" finance={activeFinance} setFinance={setFinance} customers={customers} appointments={jobAppointments} workers={activeWorkers}/>}
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
             {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments} execLogs={execLogs} finance={activeFinance}/>}
