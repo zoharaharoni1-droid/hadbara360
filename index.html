@@ -7043,6 +7043,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const setEC=(k,v)=>setEditCustData(x=>({...x,[k]:v}));
   const [showNew,setShowNew]=useState(false);
   const [nextFor,setNextFor]=useState(null);
+  const [showImport,setShowImport]=useState(false);
   React.useEffect(()=>{ const id=window.__h360OpenCustomer; if(id==null) return; window.__h360OpenCustomer=null; const c=customers.find(x=>String(x.id)===String(id)); if(c) setSel(c); },[]);
   const [showCalc,setShowCalc]=useState(false);
   const [invAppt,setInvAppt]=useState(null);
@@ -7085,6 +7086,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       <input placeholder="🔍 חיפוש שם, טלפון, כתובת..." value={srch} onChange={e=>setSrch(e.target.value)} style={{flex:1,minWidth:160,padding:"9px 14px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,background:"#f9fafb",boxSizing:"border-box"}}/>
       <Btn v="accent" sm onClick={()=>setShowCalc(true)}>🧮 מחשבון</Btn>
       <Btn sm v="secondary" onClick={()=>exportCustomers(customers)}>📥 ייצא Excel</Btn>
+      {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowImport(true)}>📂 ייבוא לקוחות</Btn>}
       <button onClick={()=>setShowArchive(a=>!a)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(showArchive?"#f59e0b":CLR.border),background:showArchive?"#fef9c3":"transparent",color:showArchive?"#92400e":CLR.muted,cursor:"pointer",fontSize:13,fontWeight:showArchive?700:400}}>
         {showArchive?"← חזור לפעילים":"📦 ארכיון ("+archivedCustomers.length+")"}
       </button>
@@ -7331,7 +7333,8 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         <Btn v="ghost" onClick={()=>setNextFor(null)}>סיום — רק לשמור את הלקוח</Btn>
       </div>
     </Modal>}
-    {showNew&&<NewCustomerModal onCreated={c=>setNextFor(c)} onClose={()=>setShowNew(false)} workers={workers} customers={customers}
+    {showImport&&<CustomerImport customers={customers} setCustomers={setCustomers} onClose={()=>setShowImport(false)}/>}
+      {showNew&&<NewCustomerModal onCreated={c=>setNextFor(c)} onClose={()=>setShowNew(false)} workers={workers} customers={customers}
       onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
       onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}/>}
     {showCalc&&<PriceCalc onClose={()=>setShowCalc(false)} onDone={()=>setShowCalc(false)}/>}
@@ -8069,7 +8072,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const [allocationNum,setAllocationNum]=useState(P.allocationNum||"");
   const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
   const [itemPick,setItemPick]=useState(null); // אינדקס שורה שפתוח בה בורר פריטים
-  const official=!!docSet().official; const [saving,setSaving]=useState(false); const [einvLocal,setEinvLocal]=useState("");
+  const official=!!docSet().official; const [saving,setSaving]=useState(false); const [einvLocal,setEinvLocal]=useState(""); const [extRef,setExtRef]=useState("");
   const refDoc=P.refDocId!=null?(finance||[]).find(f=>String(f.id)===String(P.refDocId)):null;
   React.useEffect(()=>{ if(cust){ setCustQ(cust.name||""); setCx(x=>({...x,name:cust.name||"",taxId:P.taxId||cust.taxId||"",address:cust.address||"",phone:cust.phone||"",email:cust.email||"",contactName:cust.contactName||""})); } },[custId]);
   const tot=docTotals(lines,inclVat,showDisc?discount:null,roundTotal);
@@ -8113,7 +8116,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       status:P.refund?"החזר":T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"", ...(P.debtId!=null?{debtId:P.debtId}:{}),
-      refDocId:P.refDocId||null, refText:P.refText||"", execLogIds:P.execLogIds||null,
+      refDocId:P.refDocId||null, refText:P.refText||(extRef.trim()?"חשבונית מס "+extRef.trim():""), execLogIds:P.execLogIds||null,
       phone:cx.phone||"", address:(a&&a.address)||cx.address||"", pestType:(lines[0]&&lines[0].desc)||"", workerName:(a&&a.workerName)||"",
       notes, footer, privateNote, createdAt:new Date().toISOString(), createdById:P.createdById!=null?P.createdById:((__h360User||{}).id??null), createdBy:P.createdBy||((__h360User||{}).name||""),
     };
@@ -8206,6 +8209,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
           <option value="">—</option>{custAppts.map(a=><option key={a.id} value={a.id}>{fmtDate(a.date)} · {a.pestType} · ₪{a.price}</option>)}</select></div>}
     </div>
 
+    {receiptOnly&&!P.refText&&!P.refund&&<div style={{...card,paddingBottom:4}}><Inp label="עבור חשבונית מס מספר (לא חובה — למשל חשבונית שהופקה ב'יש חשבונית')" value={extRef} onChange={setExtRef} placeholder="למשל 80118"/></div>}
     {/* ── תאריך ── */}
     <div style={{...card,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"end"}}>
       <div><Inp label="תאריך המסמך" type="date" value={date} onChange={setDate}/>{lastDate&&<div style={{fontSize:11,color:CLR.muted,marginTop:-8}}>אפשר מ-{fmtDate(lastDate)} עד היום (מספור רציף)</div>}</div>
@@ -11185,6 +11189,64 @@ function exportCollabs(collabs, appointments){
   exportToCSV("שיתופי_פעולה_"+todayStr()+".csv", headers, rows);
 }
 
+// ═══ 📥 ייבוא לקוחות מקובץ Excel / CSV (למשל ייצוא מ"יש חשבונית") ═══
+let __xlsx=null;
+function loadXlsx(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(__xlsx) return __xlsx;
+  __xlsx=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload=()=>res(window.XLSX); sc.onerror=()=>{ __xlsx=null; rej(new Error("טעינת רכיב האקסל נכשלה")); }; document.head.appendChild(sc); }); return __xlsx; }
+const IMP_FIELDS=[["name","שם לקוח",/^(שם( ה)?לקוח|שם|לקוח|customer|name)$/i],["docName","שם על המסמך",/שם על (ה)?מסמך|שם לחשבונית/],["phone","טלפון",/נייד|טלפון|טל[׳']?|phone|mobile/i],["phone2","טלפון נוסף",/טלפון (נוסף|2)|טל[׳'] נוסף|קווי/],["email","אימייל",/מייל|email|e-mail|דוא/i],["address","כתובת",/כתובת|רחוב|address/i],["city","עיר",/^עיר|ישוב|יישוב|city/i],["taxId","ח.פ / ע.מ / ת.ז",/ח\.?פ|ע\.?מ|ת\.?ז|מספר עוסק|עוסק|tax/i],["contactName","איש קשר",/איש קשר|contact/i],["notes","הערות",/הער|notes/i]];
+const normPh=p=>String(p||"").replace(/\D/g,"").replace(/^972/,"0");
+function guessCustKind(name,taxId){ const n=String(name||""); if(/ועד\s+(ה)?בית/.test(n)) return "בניין משותף"; if(/^גן\s|גן ילדים|גני |בית ספר|ביה["״]ס|ישיבה|תלמוד תורה/.test(n)) return "מוסד חינוך"; if(String(taxId||"").replace(/\D/g,"").length>=8||/בע["״]?מ|בעמ|ltd|inc|עמותה|שותפות|משרד/i.test(n)) return "עסק"; return ""; }
+function CustomerImport({customers,setCustomers,onClose}){
+  const [rows,setRows]=useState(null); const [head,setHead]=useState([]); const [map,setMap]=useState({}); const [busy,setBusy]=useState(""); const [done,setDone]=useState(null);
+  const onFile=async f=>{ if(!f) return; setBusy("קורא את הקובץ…"); try{ const X=await loadXlsx(); const wb=X.read(await f.arrayBuffer(),{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
+      let aoa=X.utils.sheet_to_json(ws,{header:1,raw:false,defval:""}).filter(r=>r.some(c=>String(c).trim()));
+      // שורת הכותרת = הראשונה שיש בה "שם"
+      const hi=Math.max(0,aoa.findIndex(r=>r.some(c=>/שם|name/i.test(String(c))))); const h=aoa[hi].map(c=>String(c).trim()); const data=aoa.slice(hi+1);
+      const m={}; IMP_FIELDS.forEach(([k,,re])=>{ const i=h.findIndex((c,ix)=>re.test(c)&&!Object.values(m).includes(ix)); if(i>=0) m[k]=i; });
+      if(m.name==null){ const i=h.findIndex(c=>/שם/.test(c)); if(i>=0) m.name=i; }
+      setHead(h); setMap(m); setRows(data); }catch(e){ alert("לא הצלחתי לקרוא את הקובץ: "+(e.message||e)); } setBusy(""); };
+  const val=(r,k)=>map[k]!=null?String(r[map[k]]??"").trim():"";
+  const plan=React.useMemo(()=>{ if(!rows) return null; const byTax={},byPh={},byName={}; (customers||[]).forEach(c=>{ const t=String(c.taxId||"").replace(/\D/g,""); if(t) byTax[t]=c; const p=normPh(c.phone); if(p.length>=9) byPh[p]=c; if(c.name) byName[c.name.trim()]=c; });
+    const seen=new Set(); const out={add:[],merge:[],skip:0};
+    rows.forEach(r=>{ const name=val(r,"name")||val(r,"docName"); if(!name){ out.skip++; return; } const tax=val(r,"taxId").replace(/\D/g,""); const ph=normPh(val(r,"phone"));
+      const key=tax||ph||name; if(seen.has(key)){ out.skip++; return; } seen.add(key);
+      const ex=(tax&&byTax[tax])||(ph.length>=9&&byPh[ph])||byName[name];
+      const addr=[val(r,"address"),val(r,"city")].filter(Boolean).join(", ");
+      const rec={name,bizName:val(r,"docName")&&val(r,"docName")!==name?val(r,"docName"):"",phone:val(r,"phone"),email:val(r,"email"),address:addr,taxId:val(r,"taxId"),contactName:val(r,"contactName"),notes:val(r,"notes"),extra:val(r,"phone2")};
+      if(ex) out.merge.push({ex,rec}); else out.add.push(rec); });
+    return out; },[rows,map,customers]);
+  const run=()=>{ if(!plan) return; if(!confirm("להוסיף "+plan.add.length+" לקוחות חדשים ולהשלים פרטים חסרים ל-"+plan.merge.length+" קיימים?")) return;
+    const now=new Date().toISOString();
+    setCustomers(cs=>{ let next=[...cs]; let id=nextId(next);
+      plan.merge.forEach(({ex,rec})=>{ next=next.map(c=>c.id!==ex.id?c:{...c,...Object.fromEntries(["phone","email","address","taxId","contactName","bizName"].filter(k=>rec[k]&&!String(c[k]||"").trim()||(k==="address"&&rec[k]&&c[k]==="—")).map(k=>[k,rec[k]]))}); });
+      plan.add.forEach(r=>{ next.push({id:id++,name:r.name,bizName:r.bizName,phone:r.phone,email:r.email,address:r.address||"",taxId:r.taxId,contactName:r.contactName,notes:r.notes,propertyType:guessCustKind(r.name,r.taxId),status:"פעיל",source:"יבוא מיש חשבונית",createdAt:now,...(r.extra?{extraContacts:[{role:"טלפון נוסף",phone:r.extra}]}:{})}); });
+      return next; });
+    setDone({add:plan.add.length,merge:plan.merge.length}); };
+  const sel={padding:"6px 8px",borderRadius:8,border:"1px solid #cbd5e1",fontSize:13,width:"100%"};
+  return <Modal title="📥 ייבוא לקוחות מקובץ" onClose={onClose} width={640}>
+    {done?<div style={{fontSize:15,lineHeight:1.8}}>✅ נוספו <b>{done.add}</b> לקוחות חדשים, והושלמו פרטים ל-<b>{done.merge}</b> לקוחות שכבר היו.<div style={{marginTop:10}}><Btn onClick={onClose}>סגור</Btn></div></div>
+    :!rows?<div style={{fontSize:14,lineHeight:1.8}}>
+      <div style={{marginBottom:10}}>בוחרים קובץ Excel או CSV של לקוחות — למשל הייצוא מ"יש חשבונית" (לקוחות ← כפתור הייצוא).</div>
+      <label style={{display:"block",border:"2px dashed #94a3b8",borderRadius:12,padding:"24px 12px",textAlign:"center",cursor:"pointer",background:"#f8fafc",fontWeight:700}}>📂 בחר קובץ (xlsx / xls / csv)<input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}} onChange={e=>onFile(e.target.files[0])}/></label>
+      {busy&&<div style={{marginTop:8,color:"#1d4ed8"}}>{busy}</div>}
+      <div style={{fontSize:12,color:"#64748b",marginTop:10}}>לקוח שכבר קיים (לפי ח.פ., טלפון או שם) לא ייכפל — רק יושלמו לו פרטים חסרים. שום פרט קיים לא נמחק.</div>
+    </div>
+    :<div style={{fontSize:14}}>
+      <div style={{fontWeight:800,marginBottom:6}}>איזו עמודה בקובץ היא מה? (זיהיתי לבד — אפשר לתקן)</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 10px",marginBottom:12}}>
+        {IMP_FIELDS.map(([k,l])=><label key={k} style={{fontSize:12,color:"#334155"}}>{l}<select value={map[k]??""} onChange={e=>setMap(m=>({...m,[k]:e.target.value===""?undefined:+e.target.value}))} style={sel}><option value="">— אין —</option>{head.map((h,i)=><option key={i} value={i}>{h||"עמודה "+(i+1)}</option>)}</select></label>)}
+      </div>
+      <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"10px 12px",marginBottom:10,lineHeight:1.8}}>
+        בקובץ {rows.length} שורות: <b style={{color:"#166534"}}>{plan.add.length} חדשים</b> · <b style={{color:"#1d4ed8"}}>{plan.merge.length} כבר קיימים</b> (יושלמו פרטים חסרים){plan.skip?" · "+plan.skip+" ריקים/כפולים":""}
+      </div>
+      <div style={{maxHeight:220,overflowY:"auto",border:"1px solid #e2e8f0",borderRadius:10,marginBottom:12}}>
+        {plan.add.slice(0,30).map((r,i)=><div key={i} style={{padding:"6px 10px",borderBottom:"1px solid #f1f5f9",fontSize:13}}><b>{r.name}</b> <span style={{color:"#64748b"}}>{[r.phone,r.address,r.taxId?"ח.פ "+r.taxId:"",guessCustKind(r.name,r.taxId)].filter(Boolean).join(" · ")}</span></div>)}
+        {plan.add.length>30&&<div style={{padding:"6px 10px",fontSize:12,color:"#64748b"}}>ועוד {plan.add.length-30}…</div>}
+      </div>
+      <div style={{display:"flex",gap:8}}><Btn full disabled={map.name==null} onClick={run}>📥 ייבא {plan.add.length} לקוחות</Btn><Btn v="ghost" onClick={()=>setRows(null)}>קובץ אחר</Btn></div>
+    </div>}
+  </Modal>;
+}
 function exportCustomers(customers){
   exportToCSV("לקוחות_"+todayStr()+".csv",
     ["שם","טלפון","כתובת","סוג נכס","סטטוס","מזיק","שולם"],
@@ -12416,7 +12478,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="145";
+const APP_BUILD="146";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
