@@ -96,6 +96,13 @@ function loadScript(urls,cb,i){
     .mob-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   }
   html{overflow-x:hidden}
+  .h360-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:10px;align-items:start}
+  .h360-split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+  .h360-split>.h360-side{position:sticky;top:12px}
+  @media(max-width:900px){.h360-split{grid-template-columns:minmax(0,1fr)}.h360-split>.h360-side{position:static}}
+  .h360-seg{display:flex;gap:4px;background:#f1f5f9;border-radius:12px;padding:4px;flex-wrap:wrap}
+  .h360-seg button{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;background:transparent;color:#64748b}
+  .h360-seg button.on{background:#fff;color:#0369a1;box-shadow:0 1px 3px rgba(0,0,0,.1)}
   body{overflow-x:clip;max-width:100vw}
   *{box-sizing:border-box}
 </style>
@@ -3078,6 +3085,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   const [formKey,setFormKey]=useState(0);
   const [previewData,setPreviewData]=useState(null);
   const [viewLog,setViewLog]=useState(null);
+  const [elQ,setElQ]=useState(""); const [elSeg,setElSeg]=useState("");
 
   const myLogs = currentUser.role==="מדביר"
     ? execLogs.filter(l=>l.workerId===currentUser.id||l.workerName===workerObj.name)
@@ -3156,81 +3164,69 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
       </div>
     </div>
   );  // LIST MODE
+  const nq=elNorm(elQ.trim());
+  const matchLog=l=>!nq||elNorm([l.clientName,l.address,l.phone,l.docNum,l.placeName,(l.pest||[]).join(" "),l.workerName].filter(Boolean).join(" ")).includes(nq);
+  const matchAppt=a=>!nq||elNorm([a.customerName,a.address,a.phone,a.pestType].filter(Boolean).join(" ")).includes(nq);
+  const waitList=pendingAppts.filter(a=>String(a.date||"")<=todayStr()).filter(matchAppt).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+  const sortL=L=>[...L].sort((x,y)=>String(y.date||"").localeCompare(String(x.date||""))||(y.id-x.id));
+  const draftList=sortL(myLogs.filter(l=>l.draft&&matchLog(l)));
+  const doneList=sortL(myLogs.filter(l=>!l.draft&&matchLog(l)));
+  const segs=[["wait","⏳ ממתינים למילוי",waitList.length],["draft","✏️ בהשלמה",draftList.length],["done","✅ הושלמו",doneList.length]];
+  const curSeg=elSeg||(waitList.length?"wait":draftList.length?"draft":"done");
+  const ib={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:9,padding:"6px 10px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
+  const logCard=l=>{
+    const ph=l.phone||(customers.find(c=>String(c.id)===String(l.customerId))||customers.find(c=>c.name===l.clientName)||{}).phone;
+    const inv=l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId))));
+    const pay=l.paymentDone?(inv?["✓ שולם · חשבונית הופקה","#166534","#dcfce7"]:["✓ שולם · ממתין לחשבונית","#0369a1","#e0f2fe"]):l.paymentStatus==="office"?["🏢 תשלום מול המשרד","#475569","#f1f5f9"]:l.debtClosed?["✓ החוב נסגר","#166534","#dcfce7"]:["חוב"+(l.paymentDebt?" ₪"+l.paymentDebt:""),"#b91c1c","#fef2f2"];
+    return <div key={l.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(l.draft?"#38bdf8":"#16a34a"),borderRadius:12,padding:"10px 12px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline"}}>
+        <div style={{fontWeight:800,fontSize:15,color:"#0f172a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.clientName||"ללא שם"}</div>
+        <div style={{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}}>{fmtDate(l.date)}{l.docNum?" · "+l.docNum:""}</div>
+      </div>
+      <div style={{fontSize:12,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"2px 0 6px"}}>{[l.address,(l.pest||[]).slice(0,3).join(", "),l.workerName].filter(Boolean).join(" · ")||"—"}</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+        {l.draft?<span style={{fontSize:12,fontWeight:700,color:"#0369a1",background:"#e0f2fe",borderRadius:20,padding:"2px 10px"}}>✏️ טיוטה — להשלים</span>
+          :<span style={{fontSize:12,fontWeight:700,color:pay[1],background:pay[2],borderRadius:20,padding:"2px 10px"}}>{pay[0]}</span>}
+        {l.reviewRequestedAt&&<span style={{fontSize:11,color:"#64748b"}}>⭐ ביקורת נשלחה</span>}
+      </div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8,paddingTop:8,borderTop:"1px solid #f1f5f9"}}>
+        {l.draft?<button onClick={()=>openEdit(l)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✏️ השלם</button>
+          :<button onClick={()=>setViewLog(l)} style={{...ib,color:"#0369a1"}}>👁 צפה</button>}
+        {!l.draft&&<button onClick={()=>printExecLog(l)} style={ib}>📄 PDF</button>}
+        {!l.draft&&<button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendExecLogWA(l,ph);}} style={{...ib,color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח</button>}
+        {!l.draft&&<button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendReviewRequest(l.clientName,ph); setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,reviewRequestedAt:todayStr()}:x)); }} title="בקשת ביקורת בגוגל" style={ib}>⭐ ביקורת</button>}
+        <button onClick={()=>openDup(l)} title="שכפל ליומן חדש עם תאריך היום" style={ib}>⧉</button>
+        {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nהיומן יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקה (לסל המחזור)" style={{...ib,color:"#dc2626",borderColor:"#fecaca",marginRight:"auto"}}>🗑️ מחק</button>}
+      </div>
+    </div>; };
+  const apptCard=a=><div key={"a"+a.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid #94a3b8",borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontWeight:800,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
+        <div style={{fontSize:12,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fmtDate(a.date)}{a.time?" "+a.time:""}{a.pestType?" · "+a.pestType:""}{a.address?" · "+a.address:""}</div>
+      </div>
+      <button onClick={()=>startNew(a)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✍️ מלא יומן</button>
+    </div>;
+  const cur=curSeg==="wait"?waitList:curSeg==="draft"?draftList:doneList;
   return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
-
-      {/* ── כותרת + כפתור ── */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+     <div style={{maxWidth:1150,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
         <div>
-          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#0f172a",letterSpacing:"-0.5px"}}>📋 יומן ביצוע</h2>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#0f172a"}}>📋 יומן ביצוע</h2>
           <div style={{fontSize:12,color:CLR.muted,marginTop:2}}>{currentUser.role==="מדביר"?"יומני הביצוע שלי":"כל יומני הביצוע"}</div>
         </div>
         <Btn onClick={()=>startNew(null)}>+ יומן ביצוע חדש</Btn>
       </div>
-
-      {/* ── תורים ממתינים ── */}
-      {pendingAppts.length>0&&(
-        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"14px 18px",marginBottom:20}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:10}}>⏳ ממתינים למילוי יומן ({pendingAppts.length})</div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {pendingAppts.slice(0,5).map(a=>(
-              <div key={a.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"#fff",borderRadius:8,border:"1px solid #fde68a"}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <span style={{fontWeight:700,fontSize:13,color:"#0f172a"}}>{a.customerName}</span>
-                  <span style={{color:CLR.muted,fontSize:12,marginRight:8}}> · {a.pestType} · {fmtDate(a.date)}</span>
-                </div>
-                <Btn sm onClick={()=>startNew(a)}>✍️ מלא</Btn>
-              </div>
-            ))}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
+        <div className="h360-seg">{segs.map(([k,lb,n])=><button key={k} type="button" className={curSeg===k?"on":""} onClick={()=>setElSeg(k)}>{lb} <span style={{fontWeight:800}}>({n})</span></button>)}</div>
+        <input value={elQ} onChange={e=>setElQ(e.target.value)} placeholder="🔍 חיפוש: לקוח, כתובת, טלפון, מספר יומן…" style={{flex:"1 1 220px",minWidth:0,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14,background:"#fff",fontFamily:"inherit"}}/>
+      </div>
+      {cur.length===0
+        ? <div style={{textAlign:"center",color:CLR.muted,padding:40,fontSize:14,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>
+            {nq?"לא נמצאו תוצאות לחיפוש":curSeg==="wait"?"אין תורים שממתינים ליומן 👍":curSeg==="draft"?"אין טיוטות פתוחות":"אין יומני ביצוע עדיין"}
           </div>
-        </div>
-      )}
-
-      {/* ── רשימת יומנים ── */}
-      {myLogs.length===0
-        ? <div style={{textAlign:"center",color:CLR.muted,padding:60,fontSize:15}}>
-            <div style={{fontSize:40,marginBottom:12}}>📋</div>
-            אין יומני ביצוע עדיין<br/>
-            <span style={{fontSize:13}}>לחץ "יומן ביצוע חדש" כדי להוסיף</span>
-          </div>
-        : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {[...myLogs].sort((x,y)=>String(y.date||"").localeCompare(String(x.date||""))||(y.id-x.id)).map(l=>{
-              const ph=l.phone||(customers.find(c=>String(c.id)===String(l.customerId))||customers.find(c=>c.name===l.clientName)||{}).phone;
-              const chip=(bg,fg)=>({background:bg,color:fg,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,whiteSpace:"nowrap"});
-              const act={flex:1,padding:"9px 6px",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"};
-              return <div key={l.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                {/* כותרת: שם + תאריך */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                  <div style={{fontWeight:800,fontSize:16,color:"#0f172a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📋 {l.clientName||"ללא שם"}{l.draft&&<span style={{marginRight:8,fontSize:12,background:"#fef3c7",color:"#92400e",border:"1px solid #fcd34d",borderRadius:20,padding:"2px 9px",fontWeight:700}}>📝 טיוטה — להשלים</span>}</div>
-                  <div style={{fontSize:13,color:CLR.muted,whiteSpace:"nowrap",flexShrink:0}}>{fmtDate(l.date)}</div>
-                </div>
-                {/* תגיות */}
-                {(l.pest?.length>0||l.pestLevel)&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                  {(l.pest||[]).slice(0,3).map(p=><span key={p} style={chip(CLR.primaryLight,CLR.primary)}>{p}</span>)}
-                  {l.pestLevel&&<span style={chip("#f1f5f9","#475569")}>רמה: {l.pestLevel}</span>}
-                </div>}
-                {/* פרטים */}
-                <div style={{fontSize:13,color:"#475569",lineHeight:1.7}}>
-                  {l.address&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {l.address}</div>}
-                  {(l.structureType||l.workerName)&&<div>{l.structureType?"🏠 "+l.structureType:""}{l.structureType&&l.workerName?"  ·  ":""}{l.workerName?"👷 "+l.workerName:""}</div>}
-                  <div style={{fontSize:13,fontWeight:600,color:l.paymentDone?(l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId))))?"#15803d":"#c2410c"):"#b91c1c"}}>
-                    {l.paymentDone?("💳 שולם"+(l.paymentMethod?" · "+l.paymentMethod:"")+(l.paymentAmount?" · ₪"+l.paymentAmount:"")+((l.invoiceNum||(finance||[]).some(x=>x.category==="חשבונית"&&((x.execLogId&&String(x.execLogId)===String(l.id))||(l.apptId&&x.apptId&&String(x.apptId)===String(l.apptId)))))?" · 🧾 חשבונית הופקה":" · ⏳ ממתין לחשבונית")):((l.paymentStatus==="office"?"🏢 תשלום מול המשרד":"💳 חוב"+(l.paymentDebt?" ₪"+l.paymentDebt:""))+(l.paymentNote?" — "+l.paymentNote:""))}
-                  </div>
-                  {l.materials?.length>0&&<div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🧪 {l.materials.map(m=>m.name).join(", ")}</div>}
-                </div>
-                {/* פעולות */}
-                <div style={{display:"flex",gap:8,marginTop:12}}>
-                  <button onClick={()=>setViewLog(l)} style={{...act,border:"1px solid #e2e8f0",background:"#f8fafc",color:CLR.primary}}>👁 צפה</button>
-                  {l.draft&&<button onClick={()=>openEdit(l)} style={{...act,border:"none",background:"#f59e0b",color:"#fff"}}>✏️ השלם</button>}
-                  <button onClick={()=>openDup(l)} title="שכפל ליומן חדש עם תאריך היום" style={{...act,flex:"0 0 auto",padding:"9px 10px",border:"1px solid #e2e8f0",background:"#f8fafc",color:"#475569"}}>⧉</button>
-                  <button onClick={()=>printExecLog(l)} style={{...act,border:"1px solid #e2e8f0",background:"#f8fafc",color:"#475569"}}>📄 PDF</button>
-                  <button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendExecLogWA(l,ph);}} style={{...act,border:"none",background:"#25D366",color:"#fff"}}>📤 שלח</button>
-                  {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nהיומן יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקת היומן (עובר לסל המחזור)" style={{...act,flex:"0 0 auto",padding:"9px 10px",border:"1px solid #fecaca",background:"#fff",color:"#dc2626"}}>🗑️ מחק</button>}
-                </div>
-                <button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendReviewRequest(l.clientName,ph); setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,reviewRequestedAt:todayStr()}:x)); }} style={{...act,width:"100%",marginTop:8,border:"1px solid #fde047",background:l.reviewRequestedAt?"#f8fafc":"#fef9c3",color:l.reviewRequestedAt?"#64748b":"#854d0e"}}>{l.reviewRequestedAt?`✓ נשלחה בקשת ביקורת (${fmtDate(l.reviewRequestedAt)}) · לשלוח שוב`:"⭐ בקשת ביקורת בגוגל"}</button>
-              </div>;})}
-          </div>
-      }
+        : <div className="h360-grid">{curSeg==="wait"?cur.map(apptCard):cur.map(logCard)}</div>}
+     </div>
     </div>
   );
 }
@@ -3813,9 +3809,10 @@ function CustomerSearchSelect({customers, value, onChange}){
     document.addEventListener("mousedown",close);
     return()=>document.removeEventListener("mousedown",close);
   },[]);
-  const filtered=q.length>0
-    ? customers.filter(c=>!c.deleted&&smartMatch(c,q)).slice(0,10)
-    : customers.slice(0,8);
+  const sorted=React.useMemo(()=>custSortAlpha(customers.filter(c=>!c.deleted)),[customers]);
+  const filtered=q.trim().length>0
+    ? custRank(sorted.filter(c=>smartMatch(c,q)),q).slice(0,60)
+    : sorted.slice(0,300);
   return <div ref={ref} style={{position:"relative"}}>
     <div onClick={()=>setOpen(o=>!o)} style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,boxSizing:"border-box",background:"#f9fafb",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",minHeight:38}}>
       <span style={{color:selected?"#111":CLR.muted}}>{selected?selected.name+" ("+normILPhone(selected.phone)+")":"-- בחר לקוח --"}</span>
@@ -5493,6 +5490,9 @@ function hayOf(o){
   const h={t,d,parts}; __hayCache.set(o,h); return h;
 }
 // מתאים אם כל מילה בחיפוש מופיעה. מספרים (טלפון) — בלי מקפים/רווחים
+// מיון לקוחות לפי א-ב, ובחיפוש — מי שהשם שלו מתחיל במה שהוקלד קודם
+function custSortAlpha(arr){ return [...(arr||[])].sort((a,b)=>String(a.name||"").trim().localeCompare(String(b.name||"").trim(),"he")); }
+function custRank(arr,q){ const n=elNorm(q); if(!n) return arr; const st=[],rest=[]; arr.forEach(c=>(elNorm(c.name).startsWith(n)?st:rest).push(c)); return [...st,...rest]; }
 function smartMatch(o,q){
   const qq=normQ(q); if(!qq) return true; const h=hayOf(o);
   const digits=qq.replace(/[\s\-–()+.]/g,"");
@@ -5509,7 +5509,7 @@ function ExistingCustomerSearch({customers, onSelect, onClose}){
   const [q,setQ]=React.useState("");
   const ref=React.useRef(null);
   React.useEffect(()=>{setTimeout(()=>ref.current&&ref.current.focus(),50);},[]);
-  const results=q.trim().length<2?[]:customers.filter(c=>!c.deleted&&smartMatch(c,q)).slice(0,12);
+  const results=q.trim().length<2?[]:custRank(custSortAlpha(customers.filter(c=>!c.deleted&&smartMatch(c,q))),q).slice(0,25);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:2000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"60px 16px"}} onClick={onClose}>
     <div style={{background:"#fff",borderRadius:16,width:560,maxWidth:"98vw",direction:"rtl",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}} onClick={e=>e.stopPropagation()}>
       <div style={{padding:"14px 18px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",gap:10}}>
@@ -8091,7 +8091,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   // שילמו (למשל ביט 400) ובשורת השירות אין מחיר — ממלאים את המחיר לבד, כדי שיחושב מע״מ
   React.useEffect(()=>{ if(receiptOnly||P.refund) return; if(paidSum>0&&!tot.total&&lines.length===1&&!String(lines[0].price||"").trim()){ setLine(0,"price",String(inclVat?paidSum:r2(paidSum/(1+VAT_RATE/100)))); } },[paidSum]);
   const custAppts=appointments.filter(a=>String(a.customerId)===String(custId)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const custMatches=custQ.trim().length>=1?customers.filter(c=>!c.deleted&&(String(c.name||"").includes(custQ.trim())||String(c.phone||"").replace(/\D/g,"").includes(custQ.replace(/\D/g,"")||"~"))).slice(0,8):[];
+  const custMatches=custQ.trim().length>=1?custRank(custSortAlpha(customers.filter(c=>!c.deleted&&(elNorm(c.name).includes(elNorm(custQ))||String(c.phone||"").replace(/\D/g,"").includes(custQ.replace(/\D/g,"")||"~")))),custQ).slice(0,15):[];
   // פריטים: ברירת מחדל + שורות ממסמכים קודמים (עם המחיר האחרון)
   const pastItems=React.useMemo(()=>{ const m={}; (finance||[]).filter(isDocRec).sort((a,b)=>String(a.date).localeCompare(String(b.date))).forEach(f=>(f.lines||[]).forEach(l=>{ const d=String(l.desc||"").trim(); const cn=String(f.customer||(f.cust&&f.cust.name)||"").trim();
       // לא מציעים שורות שכוללות שם של לקוח / כתובת (זה פריט של לקוח מסוים, לא שירות)
@@ -8396,9 +8396,12 @@ function closeDebt(d,ref,{setFinance,setExecLogs}){ const at=new Date().toISOStr
 const debtReminderText=(name,items)=>{ const tot=items.reduce((t,d)=>t+d.amount,0); const b=COMPANY.bank;
   return ["שלום "+name+",","תזכורת ידידותית מ"+COMPANY.name+" — נשארה יתרה לתשלום של "+money(tot)+":",...items.map(d=>"• "+d.label+(d.date?" מ-"+fmtDate(d.date):"")+" — "+money(d.amount)),"",...(b?["אפשר לשלם בהעברה בנקאית:",b.name+" ("+b.code+") · סניף "+b.branch+" · חשבון "+b.account+" · על שם "+b.holder,"או בביט / אשראי — מוזמנים לחזור אלינו.",""]:[]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n"); };
 function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
-  const [view,setView]=useState("open"); const [q,setQ]=useState(""); const [openC,setOpenC]=useState({}); const [add,setAdd]=useState(null);
+  const [view,setView]=useState("open"); const [q,setQ]=useState(""); const [openC,setOpenC]=useState({}); const [add,setAdd]=useState(null); const [kindF,setKindF]=useState("all"); const [ageF,setAgeF]=useState(-1);
   const all=computeDebts(finance,execLogs,customers);
-  const list=all.filter(d=>view==="open"?!d.paid:d.paid).filter(d=>!q.trim()||(d.name+" "+d.label+" "+d.desc).includes(q.trim()));
+  const kindOf=d=>d.kind==="doc"?"doc":d.kind==="log"?"log":"manual";
+  const ageOk=d=>{ if(ageF<0||view!=="open") return true; const a=d.date?Math.floor((Date.now()-new Date(d.date).getTime())/86400000):0; return ageF===0?a<=30:ageF===1?(a>30&&a<=60):a>60; };
+  const list=all.filter(d=>view==="open"?!d.paid:d.paid).filter(d=>kindF==="all"||kindOf(d)===kindF).filter(ageOk).filter(d=>!q.trim()||elNorm(d.name+" "+d.label+" "+d.desc).includes(elNorm(q.trim())));
+  const kindCnt=k=>all.filter(d=>(view==="open"?!d.paid:d.paid)&&(k==="all"||kindOf(d)===k)).length;
   const groups={}; list.forEach(d=>{ const k=d.cust?"c"+d.cust.id:"n"+d.name; (groups[k]=groups[k]||{name:d.cust?d.cust.name:d.name,phone:d.phone,items:[]}).items.push(d); if(!groups[k].phone&&d.phone) groups[k].phone=d.phone; });
   const G=Object.entries(groups).map(([k,g])=>({k,...g,total:g.items.reduce((t,d)=>t+d.amount,0),oldest:g.items.map(d=>d.date||"").sort()[0]||""})).sort((a,b)=>view==="open"?b.total-a.total:String(b.items[0].paidAt).localeCompare(String(a.items[0].paidAt)));
   const openAll=all.filter(d=>!d.paid); const totOpen=openAll.reduce((t,d)=>t+d.amount,0);
@@ -8415,10 +8418,10 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
   const saveManual=()=>{ const a=add; const amt=parseFloat(a.amount); if(!a.name.trim()||!amt) return alert("שם לקוח וסכום");
     const c=(customers||[]).find(x=>x.name===a.name.trim());
     setFinance(fs=>[...fs,{id:nextId(fs),category:"חוב",type:"חוב",customer:a.name.trim(),customerId:c?c.id:null,phone:a.phone||(c&&c.phone)||"",amount:amt,desc:a.desc,date:a.date||todayStr(),source:a.source||"חוב",status:"פתוח",createdAt:new Date().toISOString()}]); setAdd(null); };
-  return <div>
+  return <div style={{maxWidth:1150,margin:"0 auto"}}>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
-      <div style={{background:"#fef2f2",borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>סה״כ חובות פתוחים</div><div style={{fontSize:22,fontWeight:800,color:"#b91c1c"}}>{money(totOpen)}</div><div style={{fontSize:12,color:"#64748b"}}>{new Set(openAll.map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size} לקוחות · {openAll.length} פריטים</div></div>
-      {buckets.map(([l,v],i)=><div key={l} style={{background:["#f8fafc","#fffbeb","#fff1f2"][i],borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:["#334155","#b45309","#be123c"][i]}}>{money(v)}</div></div>)}
+      <div onClick={()=>setAgeF(-1)} style={{background:"#fef2f2",borderRadius:12,padding:"10px 14px",cursor:"pointer",outline:ageF<0?"2px solid #fecaca":"none"}}><div style={{fontSize:12,color:"#64748b"}}>סה״כ חובות פתוחים</div><div style={{fontSize:22,fontWeight:800,color:"#b91c1c"}}>{money(totOpen)}</div><div style={{fontSize:12,color:"#64748b"}}>{new Set(openAll.map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size} לקוחות · {openAll.length} פריטים</div></div>
+      {buckets.map(([l,v],i)=><div key={l} onClick={()=>{ setView("open"); setAgeF(ageF===i?-1:i); }} title="לחץ כדי לסנן" style={{background:["#f8fafc","#f0f9ff","#fff1f2"][i],borderRadius:12,padding:"10px 14px",cursor:"pointer",outline:ageF===i?"2px solid "+["#94a3b8","#7dd3fc","#fda4af"][i]:"none"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:["#334155","#0369a1","#be123c"][i]}}>{money(v)}</div></div>)}
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
       <div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3}}>{[["open","פתוחים"],["paid","שולמו"]].map(([v,l])=><button key={v} type="button" onClick={()=>setView(v)} style={{border:"none",borderRadius:8,padding:"7px 16px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",background:view===v?"#fff":"transparent",color:view===v?(v==="open"?"#b91c1c":"#166534"):"#64748b",boxShadow:view===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>)}</div>
@@ -8426,8 +8429,10 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
       <Btn sm v="secondary" onClick={()=>setAdd({name:"",phone:"",amount:"",desc:"",date:todayStr(),source:"חוב"})}>+ חוב ידני</Btn>
       {view==="open"&&openAll.some(d=>d.kind==="log")&&<Btn sm v="ghost" onClick={()=>{ const v=prompt("סגירת יומני ביצוע ישנים (שכבר טופלו ב'יש חשבונית')\nלסמן כשולמו את כל היומנים שלא שולמו עד תאריך (dd/mm/yyyy):",""); if(!v) return; const m=v.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/); if(!m) return alert("תאריך לא תקין"); const iso=(m[3].length===2?"20"+m[3]:m[3])+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0"); const L=openAll.filter(d=>d.kind==="log"&&String(d.date||"")<=iso); if(!L.length) return alert("אין יומנים עד התאריך הזה"); if(!confirm("לסמן "+L.length+" יומני ביצוע (סה״כ "+money(L.reduce((t,d)=>t+d.amount,0))+") כשולמו?")) return; const ids=new Set(L.map(d=>String(d.rec.id))); const at=new Date().toISOString(); setExecLogs(ls=>ls.map(x=>ids.has(String(x.id))?{...x,debtClosed:{at,ref:"טופל לפני המעבר"}}:x)); }}>✓ סגירת יומנים ישנים</Btn>}
     </div>
-    {G.length===0&&<div style={{padding:30,textAlign:"center",color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>{view==="open"?"🎉 אין חובות פתוחים":"עוד אין חובות ששולמו"}</div>}
-    <div style={{display:"grid",gap:10}}>
+    <div className="h360-seg" style={{marginBottom:12,display:"inline-flex"}}>{[["all","הכל"],["log","📋 מיומני ביצוע"],["doc","🧾 חשבוניות פתוחות"],["manual","✍️ חובות ידניים"]].map(([k,l])=><button key={k} type="button" className={kindF===k?"on":""} onClick={()=>setKindF(k)}>{l} ({kindCnt(k)})</button>)}</div>
+    {ageF>=0&&view==="open"&&<div style={{fontSize:13,color:"#0369a1",marginBottom:8}}>מסונן לפי גיל החוב: {buckets[ageF][0]} · <a href="#" onClick={e=>{e.preventDefault();setAgeF(-1);}}>הצג הכל</a></div>}
+    {G.length===0&&<div style={{padding:30,textAlign:"center",color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>{q||kindF!=="all"||ageF>=0?"אין תוצאות לסינון הזה":view==="open"?"🎉 אין חובות פתוחים":"עוד אין חובות ששולמו"}</div>}
+    <div className="h360-grid">
     {G.map(g=>{ const ex=openC[g.k]??(G.length<=6);
       return <div key={g.k} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"4px solid "+(view==="open"?"#dc2626":"#16a34a"),borderRadius:12,overflow:"hidden"}}>
         <div onClick={()=>setOpenC(o=>({...o,[g.k]:!ex}))} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer"}}>
@@ -8458,7 +8463,7 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
     {add&&<Modal title="+ חוב ידני" onClose={()=>setAdd(null)} width={440}>
       <label style={{fontSize:13,fontWeight:600,color:"#334155"}}>לקוח</label>
       <input value={add.name} onChange={e=>{ const v=e.target.value; const c=(customers||[]).find(x=>x.name===v); setAdd(a=>({...a,name:v,phone:a.phone||(c&&c.phone)||""})); }} list="h360-debt-cust" placeholder="הקלד שם לקוח" style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",margin:"4px 0 12px"}}/>
-      <datalist id="h360-debt-cust">{(customers||[]).filter(c=>!c.deleted).slice(0,500).map(c=><option key={c.id} value={c.name}/>)}</datalist>
+      <datalist id="h360-debt-cust">{custSortAlpha((customers||[]).filter(c=>!c.deleted)).map(c=><option key={c.id} value={c.name}/>)}</datalist>
       <Inp label="סכום (₪ כולל מע״מ)" type="number" value={add.amount} onChange={v=>setAdd(a=>({...a,amount:v}))}/>
       <Inp label="על מה" value={add.desc} onChange={v=>setAdd(a=>({...a,desc:v}))} placeholder="למשל: הדברה 3/10, חשבונית 80118 ביש חשבונית"/>
       <Inp label="מתאריך" type="date" value={add.date} onChange={v=>setAdd(a=>({...a,date:v}))}/>
@@ -8614,8 +8619,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
   const tb={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"};
-  return <div>
-    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12,padding:"8px 12px",borderRadius:10,fontSize:13,background:dset.official?"#f0fdf4":"#fffbeb",border:"1px solid "+(dset.official?"#bbf7d0":"#fde68a"),color:dset.official?"#166534":"#92400e"}}>
+  return <div style={{maxWidth:1150,margin:"0 auto"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12,padding:"8px 12px",borderRadius:10,fontSize:13,background:dset.official?"#f0fdf4":"#f0f9ff",border:"1px solid "+(dset.official?"#bbf7d0":"#bae6fd"),color:dset.official?"#166534":"#075985"}}>
       <span style={{flex:1,minWidth:200}}>{dset.official?<>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""} — מסמכים אמיתיים, מספור רציף.</>:<>🧪 <b>מצב טיוטה</b> — לבדיקה. החשבוניות האמיתיות עדיין ב"יש חשבונית".</>}</span>
       <button type="button" onClick={()=>setSetup(v=>!v)} style={{...tb,padding:"6px 12px",fontSize:13}}>⚙️ הגדרות {setup?"▲":"▼"}</button>
     </div>
@@ -8641,15 +8646,18 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
       {[["מסמכים",docs.length,"#f0fdf4","#166534"],["סה״כ חשבוניות",money(sumInv),"#eff6ff","#1d4ed8"],["פתוח לגבייה",money(openSum),"#fef2f2","#b91c1c"],...(allocMissing.length?[["חסר מספר הקצאה",allocMissing.length,"#fffbeb","#b45309"]]:[])].map(([l,v,bg,c])=><div key={l} style={{background:bg,borderRadius:12,padding:"10px 14px"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div></div>)}
     </div>
-    {pendingInv.length>0&&<div style={{background:"#fff7ed",border:"1.5px solid #fdba74",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
-      <div style={{fontWeight:800,fontSize:15,color:"#9a3412",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית מס/קבלה ({pendingInv.length})</div>
-      {pendingInv.map(l=><div key={l.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",background:"#fff",border:"1px solid #fed7aa",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
-        <div style={{fontSize:14}}><b>{l.clientName}</b> <span style={{color:CLR.muted}}>· {fmtDate(l.date)} · יומן {l.docNum}</span><div style={{fontSize:13,color:"#7c2d12"}}>{l.paymentMethod||"—"}{l.paymentAmount?" · ₪"+l.paymentAmount:""}{l.workerName?" · "+(l.workerDocName||l.workerName):""}</div></div>
-        <div style={{display:"flex",gap:6}}>
-          <Btn sm onClick={()=>openInvFor(l)}>🧾 חשבונית מס/קבלה</Btn>
-          {setExecLogs&&<Btn sm v="ghost" onClick={()=>{if(confirm("לסמן שהחשבונית הופקה ב'יש חשבונית'?")) setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,invoiceNum:"הופקה ידנית"}:x));}}>הופקה ב"יש חשבונית"</Btn>}
+    {pendingInv.length>0&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:12,padding:"12px 14px",marginBottom:16}}>
+      <div style={{fontWeight:800,fontSize:15,color:"#075985",marginBottom:8}}>🧾 שולם בשטח — ממתינים לחשבונית ({pendingInv.length})</div>
+      <div className="h360-grid">
+      {pendingInv.map(l=><div key={l.id} style={{background:"#fff",border:"1px solid #e0f2fe",borderRadius:10,padding:"9px 12px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b style={{fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.clientName}</b><span style={{fontSize:12,color:CLR.muted,whiteSpace:"nowrap"}}>{fmtDate(l.date)}</span></div>
+        <div style={{fontSize:12,color:"#475569"}}>{l.paymentMethod||"—"}{l.paymentAmount?" · ₪"+l.paymentAmount:""}{l.docNum?" · יומן "+l.docNum:""}</div>
+        <div style={{display:"flex",gap:6,marginTop:7,flexWrap:"wrap"}}>
+          <button type="button" onClick={()=>openInvFor(l)} style={{border:"none",background:"#0284c7",color:"#fff",borderRadius:9,padding:"6px 11px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🧾 הפק חשבונית</button>
+          {setExecLogs&&<button type="button" onClick={()=>{if(confirm("להוריד את "+(l.clientName||"")+" מהרשימה?\n(למשל: החשבונית הופקה ב'יש חשבונית', או שזה היה ניסיון)")) setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,invoiceNum:"הופקה ידנית"}:x));}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#475569",borderRadius:9,padding:"6px 11px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✕ הסר מהרשימה</button>}
         </div>
       </div>)}
+      </div>
     </div>}
     <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
       <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="🔍 חפש לקוח, מספר מסמך, שירות..." style={{flex:2,minWidth:200,padding:"8px 14px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,background:"#f9fafb",boxSizing:"border-box"}}/>
@@ -8667,8 +8675,9 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       {!mineOnly&&<Btn sm v="secondary" onClick={()=>setAcctRep(true)}>📤 דוח לרואה חשבון</Btn>}
       <Btn sm v="secondary" onClick={()=>exportInvoices(finance)}>📥 ייצא Excel</Btn>
     </div>
-    <div style={{display:"grid",gap:10}}>
-      {filtered.length===0&&<div style={{padding:24,textAlign:"center",color:CLR.muted,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>אין מסמכים</div>}
+    {filtered.length===0&&<div style={{padding:24,textAlign:"center",color:CLR.muted,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>אין מסמכים</div>}
+    <div className="h360-grid">
+      {false&&<div style={{padding:24,textAlign:"center",color:CLR.muted,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>אין מסמכים</div>}
       {filtered.map(f=>{const t=docTypeOf(f);const T=DOC_TYPES[t]||{};const legacy=!f.docType;
         const doc=legacy?{...f,docType:t,docSeq:f.invoiceNum,draft:true,cust:{name:f.customer,phone:f.phone,address:f.address},lines:[{desc:"הדברת "+(f.pestType||""),qty:"1",unit:"יח׳",price:String(f.amount)}],inclVat:false,before:f.amount,vat:r2(f.amount*VAT_RATE/100),total:totalOf(f),payments:[{method:f.payMethod||"",amount:totalOf(f),date:f.date}]}:f;
         const isCred=t==="חשבונית זיכוי"; const paid=T.receipt||f.status==="שולם";
@@ -8680,7 +8689,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
               <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
                 <span style={{color:T.color||"#64748b",fontWeight:800,fontSize:13}}>{t}</span>
                 <span style={{color:"#334155",fontWeight:700,fontSize:13}}>{f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")}</span>
-                {f.draft&&T.accounting?<span style={{fontSize:11,color:"#b91c1c",background:"#fee2e2",borderRadius:8,padding:"0 6px"}}>טיוטה</span>:null}
+                {f.draft&&T.accounting?<span style={{fontSize:11,color:"#475569",background:"#f1f5f9",borderRadius:8,padding:"0 6px"}}>טיוטה</span>:null}
                 {f.refund?<span style={{fontSize:11,color:"#b91c1c"}}>↩ החזר</span>:null}
                 {f.needsAllocation&&!f.allocationNum?<span style={{fontSize:11,color:"#b45309",background:"#fef3c7",borderRadius:8,padding:"0 6px"}}>⚠️ חסר מספר הקצאה</span>:null}
               </div>
@@ -8691,7 +8700,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
             <div style={{textAlign:"left",flexShrink:0}}>
               <div style={{fontSize:19,fontWeight:800,color:isCred?CLR.danger:"#0f172a"}}>{isCred?"-":""}{money(totalOf(f))}</div>
               <div style={{fontSize:11,color:"#64748b"}}>לפני מע״מ {money(f.before!=null?f.before:f.amount)}</div>
-              <div style={{marginTop:3}}>{isCred?<span style={{color:CLR.danger,fontSize:12,fontWeight:700}}>זיכוי</span>:paid?<span style={{color:"#166534",background:"#dcfce7",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>✓ שולם</span>:<span style={{color:"#b45309",background:"#fef3c7",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>פתוח{f.dueDate?" · עד "+fmtDate(f.dueDate):""}</span>}</div>
+              <div style={{marginTop:3}}>{isCred?<span style={{color:CLR.danger,fontSize:12,fontWeight:700}}>זיכוי</span>:paid?<span style={{color:"#166534",background:"#dcfce7",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>✓ שולם</span>:<span style={{color:"#0369a1",background:"#e0f2fe",borderRadius:8,padding:"1px 8px",fontSize:12,fontWeight:700}}>פתוח{f.dueDate?" · עד "+fmtDate(f.dueDate):""}</span>}</div>
               {f.creditedBy?<div style={{fontSize:11,color:CLR.danger}}>זוכה ({f.creditedBy})</div>:null}
             </div>
           </div>
@@ -11827,9 +11836,16 @@ function waPhone(p){
   return d;
 }
 
-function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
+function LeadsPage({leads:leadsAll,reload,customers,setCustomers,goToCustomers}){
   const [filter,setFilter]=React.useState("פתוחים");
   const [busy,setBusy]=React.useState(null);
+  const [hidden,setHidden]=React.useState(()=>new Set(lsGet("h360_leads_hidden",[]).map(String)));
+  const del=async l=>{ if(!confirm("למחוק את הליד של "+(l.name||"")+"?\nהמחיקה סופית.")) return; setBusy(l.id);
+    let ok=false; try{ const r=await sb.from('leads').delete().eq('id',l.id).select('id'); ok=!r.error&&r.data&&r.data.length>0; }catch(e){}
+    if(!ok){ try{ const r2=await sb.from('leads').update({status:"נמחק",updated_at:new Date().toISOString()}).eq('id',l.id).select('id'); ok=!r2.error&&r2.data&&r2.data.length>0; }catch(e){} }
+    if(!ok){ const h=new Set(hidden); h.add(String(l.id)); setHidden(h); lsSet("h360_leads_hidden",[...h]); }
+    logActivity("ליד נמחק", l.name); setBusy(null); reload(); };
+  const leads=(leadsAll||[]).filter(l=>l.status!=="נמחק"&&!hidden.has(String(l.id)));
   const shown=leads.filter(l=> filter==="הכל" ? true : filter==="פתוחים" ? (l.status==="חדש"||l.status==="נוצר קשר") : l.status===filter);
 
   const monthStart=new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
@@ -11901,6 +11917,7 @@ function LeadsPage({leads,reload,customers,setCustomers,goToCustomers}){
         <a href={"https://wa.me/"+waPhone(l.phone)+"?text="+encodeURIComponent("שלום "+l.name+", כאן הדברה 360. קיבלנו את פנייתך מהאתר"+(l.pest?" בנושא "+l.pest:"")+". מתי נוח לדבר?")} target="_blank" rel="noopener"
           onClick={()=>{if(l.status==="חדש")update(l,{status:"נוצר קשר"});}} style={{padding:"7px 12px",borderRadius:8,background:"#25D366",color:"#fff",textDecoration:"none",fontSize:13,fontWeight:600}}>💬 וואטסאפ</a>
         {l.status!=="הפך ללקוח"&&<button onClick={()=>toCustomer(l)} style={{padding:"7px 12px",borderRadius:8,border:`1px solid ${CLR.primary}`,background:CLR.primaryLight,color:CLR.primary,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>➕ צור לקוח</button>}
+        {isAdminUser()&&<button onClick={()=>del(l)} title="מחיקת הליד" style={{padding:"7px 12px",borderRadius:8,border:"1px solid #fecaca",background:"#fff",color:"#dc2626",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>🗑️ מחק</button>}
       </div>
     </div>)}
   </div>;
@@ -11938,18 +11955,17 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
   const missing=kit.filter(k=>!String(k.batch||"").trim()).length;
   const expired=kit.filter(k=>k.expiry&&k.expiry<todayStr()).length;
   const need=kitNeedsCheck(w);
+  const usage=React.useMemo(()=>{ const from=isoOf(new Date(Date.now()-90*86400000)); const cnt={}; let visits=0;
+    (execLogs||[]).filter(l=>!l.deleted&&!l.draft&&w&&String(l.workerName||"").trim()===String(w.name||"").trim()&&String(l.date||"")>=from).forEach(l=>{ visits++; (l.materials||[]).forEach(m=>{ if(m&&m.name) cnt[m.name]=(cnt[m.name]||0)+1; }); });
+    return {visits,top:Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,8)}; },[execLogs,wid]);
   const fld={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",fontFamily:"inherit",background:"#fff"};
   if(!techs.length) return <div style={{padding:20}}>אין עדיין מדבירים ברשימת העובדים.</div>;
-  return <div style={{maxWidth:640,margin:"0 auto"}}>
+  return <div style={{maxWidth:1150,margin:"0 auto"}} className="h360-split">
+   <div>
     <h2 style={{margin:"0 0 4px",color:CLR.primary}}>🧪 החומרים שלי</h2>
     <div style={{fontSize:14,color:"#475569",marginBottom:12}}>החומרים שאתה מסתובב איתם ומספרי האצווה שלהם. מה שתרשום כאן ייכנס לבד ליומן הביצוע — גם כשבוחרים חומר וגם כשאומרים אותו בהקלטה.</div>
     {(isStaff||techs.length>1)&&<div style={{marginBottom:12}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>הערכה של</label>
       <select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(t=><option key={t.id} value={t.id}>{t.name}{(t.chemKit||[]).length?" ("+(t.chemKit||[]).length+")":""}</option>)}</select></div>}
-    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:need?"#fff7ed":"#f0fdf4",border:"1px solid "+(need?"#fdba74":"#86efac"),borderRadius:12,padding:"10px 12px",marginBottom:12}}>
-      <div style={{flex:1,minWidth:180,fontSize:14,color:need?"#9a3412":"#166534"}}>{need?"⏰ בדיקת אצוות חודשית — עבור על החומרים ובדוק שמספרי האצווה תואמים למה שיש לך ברכב.":"✅ האצוות נבדקו החודש"}{w&&w.kitCheckedAt?<span style={{display:"block",fontSize:12,color:"#64748b"}}>בדיקה אחרונה: {fmtDate(w.kitCheckedAt)}</span>:null}</div>
-      <button type="button" onClick={()=>{ save(kit,{kitCheckedAt:todayStr()}); showToast("✅ נרשם — האצוות מעודכנות"); }} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ בדקתי, הכל מעודכן</button>
-    </div>
-    {(missing>0||expired>0)&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>{missing>0?`חסר מספר אצווה ב-${missing} חומרים. `:""}{expired>0?`${expired} חומרים פג תוקפם.`:""}</div>}
     {kit.map((k,i)=>{ const noB=!String(k.batch||"").trim(); const exp=k.expiry&&k.expiry<todayStr();
       return <div key={k.name} style={{background:"#fff",border:"1px solid "+(noB||exp?"#fca5a5":"#e2e8f0"),borderRadius:12,padding:"10px 12px",marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -11963,7 +11979,15 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
           <div><label style={{fontSize:11,color:"#64748b"}}>צורת טיפול</label><select value={k.method||"ריסוס"} onChange={e=>upd(i,"method",e.target.value)} style={{...fld,padding:"8px 6px",fontSize:13}}>{KIT_METHODS.map(m=><option key={m}>{m}</option>)}</select></div>
         </div>
       </div>; })}
-    <div style={{background:"#f8fafc",border:"1.5px dashed #94a3b8",borderRadius:12,padding:12,marginTop:6,position:"relative"}}>
+    {kit.length===0&&<div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:24,textAlign:"center",color:"#64748b"}}>עדיין אין חומרים ברשימה — הוסף אותם בתיבה "+ הוסף חומר".</div>}
+   </div>
+   <div className="h360-side">
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:need?"#f0f9ff":"#f0fdf4",border:"1px solid "+(need?"#7dd3fc":"#86efac"),borderRadius:12,padding:"10px 12px",marginBottom:12}}>
+      <div style={{flex:1,minWidth:180,fontSize:14,color:need?"#075985":"#166534"}}>{need?"⏰ בדיקת אצוות חודשית — עבור על החומרים ובדוק שמספרי האצווה תואמים למה שיש לך ברכב.":"✅ האצוות נבדקו החודש"}{w&&w.kitCheckedAt?<span style={{display:"block",fontSize:12,color:"#64748b"}}>בדיקה אחרונה: {fmtDate(w.kitCheckedAt)}</span>:null}</div>
+      <button type="button" onClick={()=>{ save(kit,{kitCheckedAt:todayStr()}); showToast("✅ נרשם — האצוות מעודכנות"); }} style={{border:"none",background:"#16a34a",color:"#fff",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ בדקתי, הכל מעודכן</button>
+    </div>
+    {(missing>0||expired>0)&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>{missing>0?`חסר מספר אצווה ב-${missing} חומרים. `:""}{expired>0?`${expired} חומרים פג תוקפם.`:""}</div>}
+    <div style={{background:"#fff",border:"1.5px dashed #94a3b8",borderRadius:12,padding:12,position:"relative"}}>
       <div style={{fontWeight:800,fontSize:14,marginBottom:6}}>+ הוסף חומר {kit.length>=10?<span style={{fontWeight:500,color:"#b45309",fontSize:12}}>(כבר יש {kit.length} — בדרך כלל עד 10)</span>:null}</div>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="חפש לפי שם החומר…" style={fld}/>
       {sugg.length>0&&<div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,marginTop:4,overflow:"hidden"}}>
@@ -11977,6 +12001,18 @@ function MyChemicals({currentUser,workers,setWorkers,execLogs}){
         {vt.trim()&&<button type="button" onClick={()=>fromText(vt)} style={{border:"none",background:CLR.primary,color:"#fff",borderRadius:20,padding:"7px 16px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ עדכן</button>}
       </div>
     </div>
+    <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginTop:12}}>
+      <div style={{fontWeight:800,fontSize:14,marginBottom:2}}>📊 בשימוש ב-3 החודשים האחרונים</div>
+      <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>{usage.visits} יומני ביצוע{w?" של "+w.name:""}</div>
+      {usage.top.length===0?<div style={{fontSize:13,color:"#94a3b8"}}>עדיין אין נתונים</div>:
+        usage.top.map(([n,c])=>{ const inKit=kit.some(k=>k.name===n); const mx=usage.top[0][1]||1;
+          return <div key={n} style={{marginBottom:7}}>
+            <div style={{display:"flex",justifyContent:"space-between",gap:6,fontSize:13,alignItems:"center"}}><span style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</span>
+              <span style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}><b>{c}</b>{!inKit&&<button type="button" onClick={()=>add(n)} title="הוסף לרשימה שלי" style={{border:"1px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",borderRadius:8,padding:"1px 7px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ הוסף</button>}</span></div>
+            <div style={{height:5,background:"#f1f5f9",borderRadius:4,marginTop:3}}><div style={{height:5,width:Math.round(100*c/mx)+"%",background:inKit?"#16a34a":"#38bdf8",borderRadius:4}}/></div>
+          </div>; })}
+    </div>
+   </div>
   </div>;
 }
 
@@ -12515,7 +12551,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="151";
+const APP_BUILD="152";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12852,7 +12888,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים"};
+  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים",mychems:"החומרים שלי",trash:"סל מחזור"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
