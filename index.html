@@ -161,7 +161,7 @@ const { useState } = React;
 // ═══════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
-const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "המשלטים 1, תל אביב-יפו 6676132", phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני", licenseType: "מדביר במבנים ובשטח פתוח", licenseNum: "2849", licenseExpiry: "2030-02-15", licenseImg: "preview/assets/license.webp" };
+const COMPANY = { name: "הדברה 360", legalName: "זוהר אהרוני", payee: "זוהר אהרוני", taxId: "304856412", licensePrefix: "עוסק מורשה 304856412", address: "המשלטים 1, תל אביב-יפו 6676132", bank: { name: "בנק הפועלים", code: "12", branch: "604", account: "454953", holder: "זוהר אהרוני" }, phone: "055-9992266", email: "hadbara360@gmail.com", signer: "זוהר אהרוני", licenseType: "מדביר במבנים ובשטח פתוח", licenseNum: "2849", licenseExpiry: "2030-02-15", licenseImg: "preview/assets/license.webp" };
 // כתובת לניווט (Waze) — בלי דירה/קומה/כניסה, שמבלבלים את הניווט
 function navAddr(a){ return String(a||"").split(",").map(x=>x.trim()).filter(x=>x&&!/^(דירה|קומה|כניסה|דירת)\s/.test(x)).join(", "); }
 // "קומה 3 · דירה 1 · כניסה א׳"
@@ -1453,7 +1453,7 @@ function loadJsPdf(){
 function execLogFileName(log){ return execLogNiceName(log); }
 // מצייר את המסמך בעזרת הדפדפן עצמו (עברית מדויקת), ומחלק לעמודי A4 בגבולות של שורות/בלוקים
 async function execLogPdfBlob(log){ return htmlPdfBlob(execLogHtml({company:COMPANY,docNum:log.docNum||"",log,chemicals:CHEMICALS})); }
-async function htmlPdfBlob(innerHtml){
+async function htmlPdfBlob(innerHtml,opts){
   const JsPDF=await loadJsPdf();
   const W=794, PAGE_H=Math.floor(W*297/210), PAD=34;
   const css=`*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,'Segoe UI',sans-serif;} table{width:100%;border-collapse:collapse;}`;
@@ -1480,7 +1480,7 @@ async function htmlPdfBlob(innerHtml){
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xhtml}</foreignObject></svg>`;
     const img=new Image();
     await new Promise((res,rej)=>{ img.onload=res; img.onerror=()=>rej(new Error('ציור המסמך נכשל')); img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg); });
-    const SC=2; const full=document.createElement('canvas'); full.width=W*SC; full.height=H*SC;
+    const SC=(opts&&opts.scale)||2; const full=document.createElement('canvas'); full.width=W*SC; full.height=H*SC;
     const fx=full.getContext('2d'); fx.fillStyle="#fff"; fx.fillRect(0,0,full.width,full.height); fx.drawImage(img,0,0,full.width,full.height);
     full.toDataURL('image/jpeg',0.5); // בודק שהציור מותר (Safari חוסם) — זורק שגיאה אם לא
     const pdf=new JsPDF({unit:'mm',format:'a4',orientation:'portrait'});
@@ -1541,9 +1541,9 @@ async function sendExecLogWA(log,phone){
 function docNiceName(doc){ const d=String(doc.date||"").split("-"); const ds=d.length===3?d[2]+"."+d[1]+"."+d[0]:""; return doc.docType.replace("/"," ")+" "+String(doc.docSeq||"").padStart(4,"0")+" - "+(COMPANY.legalName||COMPANY.name)+(ds?" - "+ds:"")+".pdf"; }
 async function docPdfBlob(doc){
   const sign=await sigPrepare(doc); const copy=docOrigCopy(doc,false);
-  const b=await htmlPdfBlob(docHtml({...doc,copy,signed:!!sign}));
+  const b=await htmlPdfBlob(docHtml({...doc,copy,signed:!!sign}),{scale:3});
   if(!sign) return b;
-  try{ const sb2=await sigSignBlob(b,sign,doc); if(!copy) sigKeepOriginal(sb2,doc); return sb2; }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false})); }
+  try{ const sb2=await sigSignBlob(b,sign,doc); if(!copy) sigKeepOriginal(sb2,doc); return sb2; }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false}),{scale:3}); }
 }
 async function sendLogAndDocWA(log,doc,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
@@ -1554,7 +1554,7 @@ async function sendLogAndDocWA(log,doc,phone){
   try{
     const parts=[];
     if(log){ const {url}=await uploadExecLogPdf(log); parts.push("📋 יומן ביצוע מס׳ "+(log.docNum||"")+":\n"+url); }
-    if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,"D"+String(doc.invoiceNum||doc.docSeq||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
+    if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,({"חשבונית מס/קבלה":"R","חשבונית מס":"I","קבלה":"Q","חשבונית זיכוי":"C","חשבון עסקה":"E"}[doc.docType]||"D")+String(doc.docSeq||doc.invoiceNum||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
     const name=(log&&(log.contactName||log.clientName))||(doc&&((doc.cust&&doc.cust.contactName)||doc.customer))||"";
     const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
@@ -7989,35 +7989,31 @@ function docHtml(doc){
     return `<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:8px 10px;">${l.desc||""}</td><td style="padding:8px 10px;text-align:center;">${q}</td><td style="padding:8px 10px;text-align:center;">${l.unit||"יח׳"}</td><td style="padding:8px 10px;text-align:left;">${money(unitBefore)}</td><td style="padding:8px 10px;text-align:left;font-weight:600;">${money(unitBefore*q)}</td></tr>`; }).join("");
   const pays=(doc.payments||[]).filter(p=>parseFloat(p.amount));
   const c=doc.cust||{};
+  const side=[doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:"",doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:"",!T.receipt&&doc.payTerms&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:"",!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""].join("");
   return `
   <div style="max-width:740px;margin:0 auto;position:relative;">
     ${doc.preview?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:56px;font-weight:800;color:rgba(37,99,235,.12);transform:rotate(-18deg);pointer-events:none;">תצוגה מקדימה — עוד לא הופק</div>`:doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:16px;">
-      <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:60px;width:auto;display:block;"/>
-        <div style="font-size:12px;color:#333;margin-top:4px;"><b>${COMPANY.legalName||COMPANY.name}</b> · עוסק מורשה ${COMPANY.taxId}</div>
-        <div style="font-size:12px;color:#555;">${COMPANY.address||""}${COMPANY.phone?" · "+COMPANY.phone:""}${COMPANY.email?" · "+COMPANY.email:""}</div></div>
+      <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:64px;width:auto;display:block;margin-bottom:6px;"/>
+        <div style="font-size:15px;font-weight:800;color:#111;">${COMPANY.name}</div>
+        <div style="font-size:12px;color:#333;line-height:1.6;">${COMPANY.legalName&&COMPANY.legalName!==COMPANY.name?COMPANY.legalName+" · ":""}עוסק מורשה ${COMPANY.taxId}<br/>${COMPANY.address||""}<br/>${[COMPANY.phone,COMPANY.email].filter(Boolean).join(" · ")}</div></div>
       <div style="text-align:left;">
-        <div style="font-size:22px;font-weight:800;color:#1a5c3a;">${doc.docType}</div>
-        <div style="font-size:13px;color:#555;">מס׳ ${doc.preview?"יוקצה בהפקה":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</div>
+        <div style="font-size:24px;font-weight:800;color:#1a5c3a;line-height:1.2;">${doc.docType} <span style="white-space:nowrap;">${doc.preview?"":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</span></div>
+        ${doc.preview?`<div style="font-size:13px;color:#555;">המספר יוקצה בהפקה</div>`:""}
         ${doc.refund?`<div style="font-size:12px;font-weight:700;color:#b91c1c;">החזר כספי ללקוח</div>`:""}
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(doc.date)}</div>
         ${T.accounting?`<div style="font-size:12px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}${doc.signed?" · מסמך ממוחשב":""}</div>`:""}
         ${doc.allocationNum?`<div style="font-size:12px;color:#111;margin-top:2px;">מספר הקצאה: <b>${doc.allocationNum}</b></div>`:""}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:${side?"1fr 1fr":"1fr"};gap:14px;margin-bottom:16px;">
       <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">
         <div style="font-weight:700;color:#1a5c3a;">לכבוד</div>
         <div><b>${c.name||""}</b>${c.taxId?` · ע.מ./ח.פ. ${c.taxId}`:""}</div>
         ${c.contactName?`<div>איש קשר: ${c.contactName}</div>`:""}
         <div>${c.address||""}</div><div>${c.phone||""}${c.email?" · "+c.email:""}</div>
       </div>
-      <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">
-        ${doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:""}
-        ${doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:""}
-        ${!T.receipt&&doc.payTerms&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:""}
-        ${!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""}
-      </div>
+      ${side?`<div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">${side}</div>`:""}
     </div>
     ${doc.docType!=="קבלה"?`<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;">
       <thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:8px 10px;text-align:right;">תיאור</th><th style="padding:8px 10px;">כמות</th><th style="padding:8px 10px;">יחידה</th><th style="padding:8px 10px;text-align:left;">מחיר ליח׳ (לפני מע״מ)</th><th style="padding:8px 10px;text-align:left;">סה״כ</th></tr></thead>
@@ -8034,10 +8030,10 @@ function docHtml(doc){
       <tbody>${pays.map((p,i)=>`<tr style="background:${i%2?"#fff":"#f0fdfa"}"><td style="padding:7px 10px;">${p.method}</td><td style="padding:7px 10px;">${payDetailsText(p)||"—"}</td><td style="padding:7px 10px;text-align:center;">${fmtDate(p.date||doc.date)}</td><td style="padding:7px 10px;text-align:left;font-weight:600;">${money(p.amount)}</td></tr>`).join("")}
       <tr style="background:#ccfbf1;font-weight:800;"><td colspan="3" style="padding:8px 10px;">סה״כ התקבל</td><td style="padding:8px 10px;text-align:left;">${money(pays.reduce((s,p)=>s+(parseFloat(p.amount)||0),0))}</td></tr></tbody></table>`:""}
     ${doc.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;white-space:pre-wrap;"><b>הערות:</b> ${doc.notes}</div>`:""}
-    ${!T.receipt&&doc.docType!=="חשבונית זיכוי"?`<div style="font-size:12px;color:#444;margin-bottom:10px;">צ׳קים והעברות לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`:""}
+    ${!T.receipt&&doc.docType!=="חשבונית זיכוי"?(COMPANY.bank?`<div style="border:1px solid #d1e7da;background:#f6fbf8;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.7;margin-bottom:12px;"><div style="font-weight:800;color:#1a5c3a;">פרטים להעברה בנקאית</div>${COMPANY.bank.name} (${COMPANY.bank.code}) · סניף ${COMPANY.bank.branch} · חשבון ${COMPANY.bank.account}<br/>על שם: <b>${COMPANY.bank.holder}</b> · צ׳קים לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`:`<div style="font-size:12px;color:#444;margin-bottom:10px;">צ׳קים והעברות לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`):""}
     ${doc.footer?`<div style="font-size:12px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
-      <div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>
+      ${doc.signed?`<div style="font-size:12px;color:#1a5c3a;line-height:1.6;"><b>✔ חתום דיגיטלית</b><br/>${COMPANY.legalName||COMPANY.name}</div>`:`<div><div style="font-size:13px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:11px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>`}
       <div style="text-align:left;font-size:11px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב — חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
     </div>
   </div>`;
@@ -12237,7 +12233,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="140";
+const APP_BUILD="141";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
