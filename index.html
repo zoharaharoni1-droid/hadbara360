@@ -8353,13 +8353,30 @@ function DocsGuide({onClose}){
     </div>
   </Modal>;
 }
+const SUPA_DASH="https://supabase.com/dashboard/project/ilublhgawgfznxpdrfra";
+async function checkDocNumbering(){ try{ const {error}=await sb.from('doc_counters').select('doc_type').limit(1); return error?"❌ עוד לא הורץ ("+error.message+")":"✅ המספור בשרת מוכן"; }catch(e){ return "❌ "+(e.message||e); } }
+// 🔢 הכנת מספור — פעם אחת, לא מפעיל שום דבר
+function NumberingSetupModal({onClose}){
+  const [chk,setChk]=useState("בודק…"); React.useEffect(()=>{ checkDocNumbering().then(setChk); },[]);
+  const ok=/✅/.test(chk); const st={marginBottom:8,lineHeight:1.7};
+  return <Modal title="🔢 הכנת מספור החשבוניות (פעם אחת)" onClose={onClose} width={560}>
+    <div style={{fontSize:14}}>
+      <div style={{background:ok?"#f0fdf4":"#f8fafc",border:"1px solid "+(ok?"#86efac":"#e2e8f0"),borderRadius:10,padding:"8px 12px",marginBottom:12,fontWeight:700}}>{chk}</div>
+      {ok?<div style={st}>הכל מוכן. אין מה לעשות כאן יותר. ביום המעבר — "🚀 מעבר לחשבוניות רשמיות".</div>:<>
+      <div style={{...st,color:"#475569"}}>זה רק מכין בשרת מונה למספרי החשבוניות. זה <b>לא</b> מפעיל חשבוניות רשמיות ולא קובע מספרים.</div>
+      <div style={st}><b>1.</b> <Btn sm onClick={()=>{ navigator.clipboard&&navigator.clipboard.writeText(DOC_NUMBERS_SQL).then(()=>alert("✅ הקוד הועתק")); }}>📋 העתק קוד</Btn></div>
+      <div style={st}><b>2.</b> <a href={SUPA_DASH+"/sql/new"} target="_blank" rel="noopener" style={{fontWeight:700}}>פתח את Supabase ↗</a> → בחלון הגדול: הדבק → <b>Run</b> (אם שואל — לאשר). למטה יופיע <span dir="ltr">doc numbering ready</span>.</div>
+      <div style={st}><b>3.</b> <Btn sm v="secondary" onClick={()=>{ setChk("בודק…"); checkDocNumbering().then(setChk); }}>🔍 בדוק</Btn></div></>}
+    </div>
+  </Modal>;
+}
 // 🚀 הפעלת מצב רשמי
 function GoLiveModal({finance,onClose}){
   const [chk,setChk]=useState(""); const [busy,setBusy]=useState(false);
   const TYPES=["חשבונית מס/קבלה","חשבונית מס","קבלה","חשבונית זיכוי"];
   const [start,setStart]=useState(()=>Object.fromEntries(TYPES.map(t=>[t,"1"])));
   const [ok,setOk]=useState({company:false,accountant:false});
-  const check=async()=>{ setChk("בודק…"); try{ const {error}=await sb.from('doc_counters').select('doc_type').limit(1); setChk(error?"❌ עוד לא הורץ ("+error.message+")":"✅ המספור בשרת מוכן"); }catch(e){ setChk("❌ "+(e.message||e)); } };
+  const check=async()=>{ setChk("בודק…"); setChk(await checkDocNumbering()); }; React.useEffect(()=>{ check(); },[]);
   const activate=async()=>{ if(!/✅/.test(chk)) return alert("קודם צריך להריץ את קוד ה-SQL ולבדוק שהוא מוכן (שלב 1)."); if(!ok.company||!ok.accountant) return alert("סמן את שני האישורים");
     if(!confirm("להפעיל מצב רשמי? מעכשיו המסמכים שמופקים כאן הם חשבוניות וקבלות אמיתיות.")) return;
     setBusy(true); try{ await DOCSET_STORE.save([{official:true,since:todayStr(),start:Object.fromEntries(TYPES.map(t=>[t,String(parseInt(start[t])||1)]))}]); alert("✅ מצב רשמי הופעל"); onClose(); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
@@ -8383,7 +8400,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
-  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
   const custOf=l=>customers.find(x=>String(x.id)===String(l.customerId))||customers.find(x=>x.name===l.clientName);
@@ -8450,7 +8467,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   };
   return <div>
     {dset.official?<div style={{background:"#f0fdf4",border:"1px solid #86efac",color:"#166534",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""}: חשבוניות וקבלות שמופקות כאן הן מסמכים חשבונאיים אמיתיים, עם מספור רציף מהשרת.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{isAdminUser()&&<Btn sm v={sigK?"secondary":"primary"} onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>
-      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 הפעלת מצב רשמי</Btn>}{isAdminUser()&&<Btn sm v="secondary" onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>}
+      :<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 14px",fontSize:13,marginBottom:14,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span style={{flex:1}}>🧪 <b>מצב טיוטה:</b> המסמכים כאן לבדיקה בלבד (עם סימן "טיוטה"). המסמכים הרשמיים ממשיכים לצאת ב"יש חשבונית" עד שמפעילים מצב רשמי.</span><Btn sm v="secondary" onClick={()=>setGuide(true)}>📘 מדריך</Btn>{!mineOnly&&isAdminUser()&&<Btn sm v="secondary" onClick={()=>setNumSet(true)}>🔢 הכנת מספור (פעם אחת)</Btn>}{!mineOnly&&isAdminUser()&&<Btn sm onClick={()=>setGoLive(true)}>🚀 מעבר לחשבוניות רשמיות</Btn>}{isAdminUser()&&<Btn sm v="secondary" onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</Btn>}</div>}
     <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
       <StatCard label="מסמכים" value={docs.length}/>
       <StatCard label="סה״כ חשבוניות (כולל מע״מ)" value={money(sumInv)} bg="#dbeafe"/>
@@ -8523,6 +8540,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     {guide&&<DocsGuide onClose={()=>setGuide(false)}/>}
     {goLive&&<GoLiveModal finance={finance} onClose={()=>setGoLive(false)}/>}
     {signSet&&<SignSetupModal onClose={()=>setSignSet(false)}/>}
+    {numSet&&<NumberingSetupModal onClose={()=>setNumSet(false)}/>}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -11994,6 +12012,7 @@ function BackupSettings(){
       <Btn sm v="ghost" onClick={fromFile} disabled={busy}>📂 שחזר מקובץ</Btn>
       <Btn sm v="secondary" onClick={async()=>{ setBusy(true); try{ await downloadFullArchive(t=>setMsg(t)); setMsg("✅ הארכיון ירד למחשב — שמור אותו בתיקייה / בדיסק / בגוגל דרייב"); }catch(e){ setMsg("❌ "+(e.message||e)); } setBusy(false); }} disabled={busy}>📦 ארכיון מלא למחשב</Btn>
     </div>
+    <div style={{fontSize:12,color:"#64748b",marginBottom:8}}><a href={SUPA_DASH} target="_blank" rel="noopener">🗄 Supabase — הענן שבו שמורים הנתונים ↗</a></div>
     <div style={{fontSize:12,color:"#64748b",marginBottom:8}}>📦 ארכיון מלא = כל הנתונים + כל החשבוניות והקבלות החתומות (PDF) בקובץ ZIP אחד. מומלץ להוריד פעם ב-3 חודשים ולשמור גם מחוץ למערכת.</div>
     {msg&&<div style={{fontSize:13,marginBottom:8}}>{msg}</div>}
     {list===null?<div style={{fontSize:13,color:CLR.muted}}>טוען…</div>:!list.length?<div style={{fontSize:13,color:CLR.muted}}>עדיין אין גיבויים בענן</div>:
@@ -12218,7 +12237,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="139";
+const APP_BUILD="140";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
