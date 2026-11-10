@@ -8419,6 +8419,7 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
       <div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3}}>{[["open","פתוחים"],["paid","שולמו"]].map(([v,l])=><button key={v} type="button" onClick={()=>setView(v)} style={{border:"none",borderRadius:8,padding:"7px 16px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",background:view===v?"#fff":"transparent",color:view===v?(v==="open"?"#b91c1c":"#166534"):"#64748b",boxShadow:view===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>)}</div>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לקוח" style={{flex:1,minWidth:160,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14}}/>
       <Btn sm v="secondary" onClick={()=>setAdd({name:"",phone:"",amount:"",desc:"",date:todayStr(),source:"חוב"})}>+ חוב ידני</Btn>
+      {view==="open"&&openAll.some(d=>d.kind==="log")&&<Btn sm v="ghost" onClick={()=>{ const v=prompt("סגירת יומני ביצוע ישנים (שכבר טופלו ב'יש חשבונית')\nלסמן כשולמו את כל היומנים שלא שולמו עד תאריך (dd/mm/yyyy):",""); if(!v) return; const m=v.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/); if(!m) return alert("תאריך לא תקין"); const iso=(m[3].length===2?"20"+m[3]:m[3])+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0"); const L=openAll.filter(d=>d.kind==="log"&&String(d.date||"")<=iso); if(!L.length) return alert("אין יומנים עד התאריך הזה"); if(!confirm("לסמן "+L.length+" יומני ביצוע (סה״כ "+money(L.reduce((t,d)=>t+d.amount,0))+") כשולמו?")) return; const ids=new Set(L.map(d=>String(d.rec.id))); const at=new Date().toISOString(); setExecLogs(ls=>ls.map(x=>ids.has(String(x.id))?{...x,debtClosed:{at,ref:"טופל לפני המעבר"}}:x)); }}>✓ סגירת יומנים ישנים</Btn>}
     </div>
     {G.length===0&&<div style={{padding:30,textAlign:"center",color:"#64748b",background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>{view==="open"?"🎉 אין חובות פתוחים":"עוד אין חובות ששולמו"}</div>}
     <div style={{display:"grid",gap:10}}>
@@ -12415,7 +12416,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="144";
+const APP_BUILD="145";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
