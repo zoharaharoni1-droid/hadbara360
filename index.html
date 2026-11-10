@@ -11195,7 +11195,7 @@ function loadXlsx(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(__x
   __xlsx=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload=()=>res(window.XLSX); sc.onerror=()=>{ __xlsx=null; rej(new Error("טעינת רכיב האקסל נכשלה")); }; document.head.appendChild(sc); }); return __xlsx; }
 const IMP_FIELDS=[["name","שם לקוח",/^(שם( ה)?לקוח|שם|לקוח|customer|name)$/i],["docName","שם על המסמך",/שם על (ה)?מסמך|שם לחשבונית/],["phone","טלפון",/נייד|טלפון|טל[׳']?|phone|mobile/i],["phone2","טלפון נוסף",/טלפון (נוסף|2)|טל[׳'] נוסף|קווי/],["email","אימייל",/מייל|email|e-mail|דוא/i],["address","כתובת",/כתובת|רחוב|address/i],["city","עיר",/^עיר|ישוב|יישוב|city/i],["taxId","ח.פ / ע.מ / ת.ז",/ח\.?פ|ע\.?מ|ת\.?ז|מספר עוסק|עוסק|tax/i],["contactName","איש קשר",/איש קשר|contact/i],["notes","הערות",/הער|notes/i]];
 const normPh=p=>String(p||"").replace(/\D/g,"").replace(/^972/,"0");
-function guessCustKind(name,taxId){ const n=String(name||""); if(/ועד\s+(ה)?בית/.test(n)) return "בניין משותף"; if(/^גן\s|גן ילדים|גני |בית ספר|ביה["״]ס|ישיבה|תלמוד תורה/.test(n)) return "מוסד חינוך"; if(String(taxId||"").replace(/\D/g,"").length>=8||/בע["״]?מ|בעמ|ltd|inc|עמותה|שותפות|משרד/i.test(n)) return "עסק"; return ""; }
+function guessCustKind(name,taxId){ const n=String(name||""); if(/ועד\s+(ה)?בית/.test(n)) return "בניין משותף"; if(/^גן\s|גן ילדים|גני |בית ספר|ביה["״]ס|ישיבה|ישיבת|אולפנה|תלמוד תורה|מכללה/.test(n)) return "מוסד חינוך"; if(String(taxId||"").replace(/\D/g,"").length>=8||/בע["״]?מ|בעמ|ltd|inc|עמותה|שותפות|משרד/i.test(n)) return "עסק"; return ""; }
 function CustomerImport({customers,setCustomers,onClose}){
   const [rows,setRows]=useState(null); const [head,setHead]=useState([]); const [map,setMap]=useState({}); const [busy,setBusy]=useState(""); const [done,setDone]=useState(null);
   const onFile=async f=>{ if(!f) return; setBusy("קורא את הקובץ…"); try{ const X=await loadXlsx(); const wb=X.read(await f.arrayBuffer(),{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
@@ -11204,15 +11204,19 @@ function CustomerImport({customers,setCustomers,onClose}){
       const hi=Math.max(0,aoa.findIndex(r=>r.some(c=>/שם|name/i.test(String(c))))); const h=aoa[hi].map(c=>String(c).trim()); const data=aoa.slice(hi+1);
       const m={}; IMP_FIELDS.forEach(([k,,re])=>{ const i=h.findIndex((c,ix)=>re.test(c)&&!Object.values(m).includes(ix)); if(i>=0) m[k]=i; });
       if(m.name==null){ const i=h.findIndex(c=>/שם/.test(c)); if(i>=0) m.name=i; }
+      // טלפון: קודם נייד, והטלפון הרגיל כ"טלפון נוסף"
+      const mob=h.findIndex(c=>/נייד|mobile/i.test(c)), tel=h.findIndex(c=>/^(טלפון|טל[׳']?|phone)$/i.test(c));
+      if(mob>=0){ m.phone=mob; if(tel>=0&&tel!==mob) m.phone2=tel; }
+      const em=h.findIndex(c=>/אימייל|מייל|דואר אלקטרוני|email/i.test(c)); if(em>=0) m.email=em;
       setHead(h); setMap(m); setRows(data); }catch(e){ alert("לא הצלחתי לקרוא את הקובץ: "+(e.message||e)); } setBusy(""); };
-  const val=(r,k)=>map[k]!=null?String(r[map[k]]??"").trim():"";
+  const val=(r,k)=>{ if(map[k]==null) return ""; let v=String(r[map[k]]??"").replace(/[\u200e\u200f\u202a-\u202e]/g,"").trim(); if(v==="0"||v==="-1"||v==="-") v=""; if(k==="phone"||k==="phone2") v=v.replace(/[^0-9+\-]/g,"").replace(/^\+?972-?/,"0").replace(/^00/,"0"); return v; };
   const plan=React.useMemo(()=>{ if(!rows) return null; const byTax={},byPh={},byName={}; (customers||[]).forEach(c=>{ const t=String(c.taxId||"").replace(/\D/g,""); if(t) byTax[t]=c; const p=normPh(c.phone); if(p.length>=9) byPh[p]=c; if(c.name) byName[c.name.trim()]=c; });
     const seen=new Set(); const out={add:[],merge:[],skip:0};
-    rows.forEach(r=>{ const name=val(r,"name")||val(r,"docName"); if(!name){ out.skip++; return; } const tax=val(r,"taxId").replace(/\D/g,""); const ph=normPh(val(r,"phone"));
+    rows.forEach(r=>{ const name=val(r,"name")||val(r,"docName"); if(!name){ out.skip++; return; } const tax=val(r,"taxId").replace(/\D/g,""); const ph=normPh(val(r,"phone")||val(r,"phone2"));
       const key=tax||ph||name; if(seen.has(key)){ out.skip++; return; } seen.add(key);
       const ex=(tax&&byTax[tax])||(ph.length>=9&&byPh[ph])||byName[name];
-      const addr=[val(r,"address"),val(r,"city")].filter(Boolean).join(", ");
-      const rec={name,bizName:val(r,"docName")&&val(r,"docName")!==name?val(r,"docName"):"",phone:val(r,"phone"),email:val(r,"email"),address:addr,taxId:val(r,"taxId"),contactName:val(r,"contactName"),notes:val(r,"notes"),extra:val(r,"phone2")};
+      const ad=val(r,"address"), ct=val(r,"city"); const addr=ct&&!ad.includes(ct)?[ad,ct].filter(Boolean).join(", "):ad;
+      const rec={name,bizName:val(r,"docName")&&val(r,"docName")!==name?val(r,"docName"):"",phone:val(r,"phone")||val(r,"phone2"),email:val(r,"email"),address:addr,taxId:val(r,"taxId"),contactName:val(r,"contactName"),notes:val(r,"notes"),extra:val(r,"phone")&&val(r,"phone2")&&normPh(val(r,"phone2"))!==normPh(val(r,"phone"))?val(r,"phone2"):""};
       if(ex) out.merge.push({ex,rec}); else out.add.push(rec); });
     return out; },[rows,map,customers]);
   const run=()=>{ if(!plan) return; if(!confirm("להוסיף "+plan.add.length+" לקוחות חדשים ולהשלים פרטים חסרים ל-"+plan.merge.length+" קיימים?")) return;
@@ -12478,7 +12482,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="146";
+const APP_BUILD="147";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
