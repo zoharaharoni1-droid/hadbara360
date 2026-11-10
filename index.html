@@ -12227,7 +12227,8 @@ async function restoreBackupObj(b,onStep){
 function parseCsvText(t){ const rows=[]; let row=[],f='',q=false; for(let i=0;i<t.length;i++){ const c=t[i]; if(q){ if(c=='"'){ if(t[i+1]=='"'){f+='"';i++;} else q=false; } else f+=c; } else { if(c=='"') q=true; else if(c==','){row.push(f);f='';} else if(c=='\n'){row.push(f.replace(/\r$/,''));rows.push(row);row=[];f='';} else f+=c; } } if(f||row.length){row.push(f);rows.push(row);} return rows; }
 function YeshPdfArchive(){
   const [st,setSt]=useState(null); const [zips,setZips]=useState([]);
-  const run=async file=>{ if(!file) return; try{
+  const [tag,setTag]=useState("");
+  const run=async file=>{ if(!file) return; const tg=/ישן/.test(file.name||"")?"עסק ישן - ":""; setTag(tg); try{
     const rows=parseCsvText((await file.text()).replace(/^\uFEFF/,'')); const h=rows[0]||[]; const iN=h.indexOf("מס'"), iT=h.indexOf('סוג מסמך'), iC=h.indexOf('שם לקוח/ספק'), iD=h.indexOf('תאריך'), iU=h.indexOf('הורדה');
     if(iU<0) return alert("זה לא קובץ המסמכים של יש חשבונית (חסרה עמודת 'הורדה').");
     const seen=new Set(); const list=[]; rows.slice(1).forEach(r=>{ const u=r[iU]||''; if(!/^https:\/\/api\.yeshinvoice\.co\.il\//.test(u)) return; const k=r[iT]+'|'+r[iN]; if(seen.has(k)) return; seen.add(k); const d=r[iD]||''; list.push({y:d.slice(-4),m:+d.slice(3,5),d,t:r[iT]||'מסמך',n:r[iN],c:(r[iC]||'').replace(/[\\/:*?"<>|]/g,'').slice(0,40),u}); });
@@ -12236,7 +12237,7 @@ function YeshPdfArchive(){
     for(const [g,items] of groups){ const zip=new JSZip(); let i=0;
       const worker=async()=>{ while(i<items.length){ const x=items[i++]; let ok=false; for(let a=0;a<3&&!ok;a++){ try{ const r=await fetch(x.u); if(!r.ok) throw new Error(r.status); const b=await r.blob(); const dd=x.d.split('-'); zip.folder(x.t.replace('/','-')).file(dd[2]+'-'+dd[1]+'-'+dd[0]+' '+x.n+' '+x.c+'.pdf',b); ok=true; }catch(e){ await new Promise(r=>setTimeout(r,800)); } } if(!ok) fail.push(x.t+' '+x.n); done++; setSt({done,total:list.length,fail:fail.length,failList:fail.slice(0,30)}); } };
       await Promise.all([1,2,3,4,5].map(worker));
-      const blob=await zip.generateAsync({type:"blob"}); setZips(z=>[...z,{g,blob,count:items.length}]); saveBlobAs(blob,'יש חשבונית - מסמכים PDF - '+g+'.zip'); }
+      const blob=await zip.generateAsync({type:"blob"}); setZips(z=>[...z,{g,blob,count:items.length}]); saveBlobAs(blob,'יש חשבונית - מסמכים PDF - '+tg+g+'.zip'); }
     setSt(s0=>({...s0,finished:true}));
   }catch(e){ alert("שגיאה: "+(e.message||e)); } };
   return <div style={{border:"1px solid #e2e8f0",borderRadius:12,padding:12,marginTop:12,background:"#f8fafc"}}>
@@ -12245,8 +12246,9 @@ function YeshPdfArchive(){
     {!st&&<label style={{display:"inline-block",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px 16px",fontWeight:700,cursor:"pointer"}}>📂 בחר קובץ CSV של המסמכים<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>run(e.target.files[0])}/></label>}
     {st&&<div style={{fontSize:14}}>{st.finished?"✅ הסתיים":"⏳ מוריד…"} {st.done} מתוך {st.total}{st.fail?<span style={{color:"#b91c1c"}}> · לא ירדו {st.fail}</span>:""}
       <div style={{height:8,background:"#e2e8f0",borderRadius:6,margin:"6px 0"}}><div style={{height:8,width:Math.round(100*st.done/Math.max(1,st.total))+"%",background:"#16a34a",borderRadius:6}}/></div>
-      {zips.map(z=><Btn key={z.g} sm v="secondary" style={{margin:"4px 0 0 6px"}} onClick={()=>saveBlobAs(z.blob,'יש חשבונית - מסמכים PDF - '+z.g+'.zip')}>⬇️ {z.g} ({z.count} מסמכים, {Math.round(z.blob.size/1048576)}MB)</Btn>)}
-      {st.finished&&<div style={{fontSize:12,color:"#64748b",marginTop:6}}>כל הקבצים ירדו לתיקיית ההורדות. אם הדפדפן שאל "לאפשר הורדה של כמה קבצים" — לאשר. אפשר ללחוץ שוב על כל כפתור כדי להוריד מחדש.</div>}
+      {zips.map(z=><Btn key={z.g} sm v="secondary" style={{margin:"4px 0 0 6px"}} onClick={()=>saveBlobAs(z.blob,'יש חשבונית - מסמכים PDF - '+tag+z.g+'.zip')}>⬇️ {z.g} ({z.count} מסמכים, {Math.round(z.blob.size/1048576)}MB)</Btn>)}
+      {st.finished&&<div style={{fontSize:12,color:"#64748b",marginTop:6}}>כל הקבצים ירדו לתיקיית ההורדות. אם הדפדפן שאל "לאפשר הורדה של כמה קבצים" — לאשר. אין צורך ללחוץ על הכפתורים — הם רק להורדה חוזרת.</div>}
+      {st.finished&&<div style={{marginTop:10}}><Btn sm onClick={()=>{ setSt(null); setZips([]); }}>📂 גיבוי קובץ נוסף (למשל העסק הישן)</Btn></div>}
     </div>}
   </div>;
 }
@@ -12510,7 +12512,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="148";
+const APP_BUILD="149";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
