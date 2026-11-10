@@ -8622,6 +8622,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       <button type="button" style={tb} onClick={()=>setGuide(true)}>📘 מדריך</button>
       {isAdminUser()&&<button type="button" style={tb} onClick={()=>setSignSet(true)}>🔏 חתימה דיגיטלית{sigK?" ✓":""}</button>}
       {!dset.official&&!mineOnly&&isAdminUser()&&<button type="button" style={tb} onClick={()=>setNumSet(true)}>🔢 הכנת מספור (פעם אחת)</button>}
+      {!dset.official&&!mineOnly&&isAdminUser()&&<button type="button" style={{...tb,color:"#b91c1c",borderColor:"#fecaca"}} onClick={()=>{ const test=finance.filter(x=>!x.deleted&&isDocRec(x)&&x.docType&&!x.official); if(!test.length) return alert("אין מסמכי בדיקה למחיקה."); if(!confirm("למחוק את כל "+test.length+" מסמכי הבדיקה (טיוטה)?\nאלה לא חשבוניות אמיתיות. הם יעברו לסל המחזור.")) return; const ids=new Set(test.map(x=>x.id)); const now=new Date().toISOString(); setFinance(fs=>fs.map(x=>ids.has(x.id)?{...x,deleted:true,deletedAt:now}:x)); }}>🧹 מחיקת כל מסמכי הבדיקה</button>}
       {!dset.official&&!mineOnly&&isAdminUser()&&<button type="button" style={{...tb,background:"#1a5c3a",color:"#fff",border:"none"}} onClick={()=>setGoLive(true)}>🚀 מעבר לחשבוניות רשמיות</button>}
     </div>}
     {/* מסמך חדש */}
@@ -8705,6 +8706,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
             {isCred&&!f.refundedBy&&<button onClick={()=>openRefund(f,finance.find(x=>String(x.id)===String(f.refDocId)))} title="תיעוד החזר כסף ללקוח" style={ab("#b91c1c")}>↩ החזר כסף</button>}
             {T.invoice&&!isCred&&!f.creditedBy&&<button onClick={()=>follow(f,"חשבונית זיכוי")} title="ביטול מלא או חלקי של המסמך" style={ab("#b91c1c")}>✕ ביטול (זיכוי)</button>}
             {!T.accounting&&<button onClick={()=>{if(window.confirm("להעביר לארכיון?"))softDelete(setFinance,f.id);}} style={ab("#64748b")}>📁 לארכיון</button>}
+            {T.accounting&&!legacy&&!f.official&&isAdminUser()&&<button onClick={()=>{if(window.confirm("למחוק את מסמך הבדיקה "+(f.invoiceNum||"")+"?\n(זה מסמך טיוטה, לא חשבונית אמיתית. יעבור לסל המחזור.)"))softDelete(setFinance,f.id);}} style={ab("#b91c1c")}>🗑️ מחק (בדיקה)</button>}
           </div>
         </div>;})}
     </div>
@@ -12512,7 +12514,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="149";
+const APP_BUILD="150";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
