@@ -7103,6 +7103,32 @@ function NewWorkerModal({onClose,onSave,initial}){
   </Modal>;
 }
 
+// ── מצב הטיפול האחרון של לקוח: טיפול → יומן ביצוע → חשבונית → תשלום ──
+function custOwnLog(c,l){ return l&&!l.deleted&&(String(l.customerId)===String(c.id)||(!l.customerId&&String(l.clientName||"").trim()===String(c.name||"").trim())); }
+function custJobState(c,appointments,execLogs,finance){
+  const logs=(execLogs||[]).filter(l=>custOwnLog(c,l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||(b.id-a.id));
+  const log=logs[0]||null; const today=todayStr();
+  const appts=(appointments||[]).filter(a=>String(a.customerId)===String(c.id)&&a.status!=="בוטל");
+  const nextAppt=appts.filter(a=>(a.date||"")>=today&&a.status!=="בוצע").sort((a,b)=>String(a.date).localeCompare(String(b.date)))[0]||null;
+  const lastDate=[c.lastTreatment,log&&log.date,...appts.filter(a=>a.status==="בוצע"||(a.date||"")<today).map(a=>a.date)].filter(Boolean).sort().pop()||"";
+  if(!log) return {log:null,logs,lastDate,nextAppt,steps:null,need:""};
+  const draft=!!log.draft, inv=logHasDoc(log,finance);
+  const paid=!!(log.paymentDone||log.debtClosed||log.paymentStatus==="paid");
+  const office=log.paymentStatus==="office";
+  const debt=!paid&&!office?(parseFloat(log.paymentDebt||log.agreedPrice||log.paymentAmount)||0):0;
+  const steps=[{k:"טיפול",st:"ok"},{k:"יומן ביצוע",st:draft?"warn":"ok"},{k:"חשבונית",st:inv?"ok":"todo"},{k:"תשלום",st:paid?"ok":office?"office":"todo"}];
+  const need=draft?"log":!inv?"inv":(!paid&&!office)?"pay":"";
+  return {log,logs,lastDate,nextAppt,steps,need,inv,paid,office,debt};
+}
+function JobSteps({steps}){
+  if(!steps) return null;
+  const ic={ok:"✓",warn:"✏️",todo:"⏳",office:"🏢"}, col={ok:["#166534","#dcfce7"],warn:["#0369a1","#e0f2fe"],todo:["#b45309","#fff7ed"],office:["#475569","#f1f5f9"]};
+  return <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
+    {steps.map((x,i)=><React.Fragment key={x.k}>{i>0&&<span style={{color:"#cbd5e1",fontSize:11}}>›</span>}
+      <span style={{fontSize:12,fontWeight:700,color:col[x.st][0],background:col[x.st][1],borderRadius:20,padding:"2px 8px",whiteSpace:"nowrap"}}>{ic[x.st]} {x.k}</span></React.Fragment>)}
+  </div>;
+}
+const NEED_TXT={log:"✏️ להשלים את יומן הביצוע",inv:"🧾 חסרה חשבונית",pay:"💳 ממתין לתשלום"};
 function Customers({customers,setCustomers,appointments,setAppointments,workers,collabs=[],finance,setFinance,execLogs,currentUser}){
   const [srch,setSrch]=useState("");
   const [sel,setSel]=useState(null);
@@ -7114,8 +7140,16 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const [showImport,setShowImport]=useState(false);
   React.useEffect(()=>{ const id=window.__h360OpenCustomer; if(id==null) return; window.__h360OpenCustomer=null; const c=customers.find(x=>String(x.id)===String(id)); if(c) setSel(c); },[]);
   const [showCalc,setShowCalc]=useState(false);
-  const [invAppt,setInvAppt]=useState(null);
+  const [invAppt,setInvAppt]=useState(null); const [invLog,setInvLog]=useState(null);
   const [schedFor,setSchedFor]=useState(null);
+  const jobSt=React.useMemo(()=>{ const m={}; (customers||[]).forEach(c=>{ if(!c.deleted) m[String(c.id)]=custJobState(c,appointments,execLogs,finance); }); return m; },[customers,appointments,execLogs,finance]);
+  const tel=p=>"tel:"+String(p||"").replace(/[^\d+]/g,"");
+  const waL=p=>"https://wa.me/"+sendIntl(p);
+  const goNewLog=c=>{ window.__h360PendingExec=c; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); };
+  const goEditLog=l=>{ window.__h360ExecAction={type:"edit",id:l.id}; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); };
+  const ab={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:9,padding:"7px 10px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4};
+  const needBtn=(c,st)=>st.need==="log"?<button onClick={e=>{e.stopPropagation();goEditLog(st.log);}} style={{...ab,justifyContent:"center",background:"#0284c7",color:"#fff",border:"none"}}>✏️ השלם יומן</button>
+    :st.need==="inv"&&currentUser.role!=="מדביר"?<button onClick={e=>{e.stopPropagation();setInvLog(st.log);}} style={{...ab,justifyContent:"center",background:"#0284c7",color:"#fff",border:"none"}}>🧾 הפק חשבונית</button>:null;
   const [filterStatus,setFilterStatus]=useState("הכל");
   const [filterType,setFilterType]=useState("הכל");
   const [showArchive,setShowArchive]=useState(false);
@@ -7160,7 +7194,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       </button>
       <Btn sm onClick={()=>setShowNew(true)}>+ לקוח חדש</Btn>
     </div>
-    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"nowrap",overflowX:"auto",alignItems:"center",whiteSpace:"nowrap",paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
       <span style={{fontSize:12,color:CLR.muted}}>סטטוס:</span>
       {["הכל","פעיל","חוב","לא פעיל"].map(st=>(
         <button key={st} type="button" onClick={()=>setFilterStatus(st)}
@@ -7184,24 +7218,23 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
     {!showArchive&&archivedCustomers.length>0&&<div style={{background:"#f9fafb",border:"1px solid #e5e7eb",borderRadius:10,padding:"8px 14px",marginBottom:10,fontSize:12,color:"#6b7280"}}>
       📦 {archivedCustomers.length} לקוחות בארכיון (לא פעילים מעל שנה)
     </div>}
-    <div style={{display:"flex",flexWrap:"wrap",gap:14}}>
-      {filtered.map(c=><div key={c.id} onClick={()=>setSel(c)}
-        style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:"14px 18px",width:280,cursor:"pointer"}}
-        onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,0.09)"}
-        onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"start"}}>
-          <div><div style={{fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:5}}>
-            {c.tag==="vip"&&<span>⭐</span>}{c.tag==="new"&&<span>🆕</span>}{c.tag==="problem"&&<span>⚠️</span>}{c.tag==="loyal"&&<span>💚</span>}
-            {c.name}</div><div style={{fontSize:12,color:CLR.muted}}>{c.phone}</div></div>
-          <Badge status={c.status}/>
+    <div className="h360-grid">
+      {filtered.map(c=>{ const st=jobSt[String(c.id)]||{}; const bc=st.need==="log"||st.need==="inv"?"#38bdf8":st.need==="pay"||c.status==="חוב"?"#f87171":st.log?"#16a34a":"#cbd5e1";
+        return <div key={c.id} onClick={()=>setSel(c)} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+bc,borderRadius:12,padding:"10px 12px",cursor:"pointer"}}>
+        <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"baseline"}}>
+          <div style={{fontWeight:800,fontSize:15,color:"#0f172a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.tag==="vip"?"⭐ ":c.tag==="problem"?"⚠️ ":""}{c.name}</div>
+          <div style={{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}}>{st.lastDate?fmtDate(st.lastDate):"לקוח חדש"}</div>
         </div>
-        <div style={{fontSize:12,color:CLR.muted,marginBottom:3}}>📍 {c.address}</div>
-        <div style={{fontSize:12,color:CLR.muted,marginBottom:10}}>🏠 {c.propertyType}{c.rooms?` | ${c.rooms} חד'`:""} | קו' {c.floor}</div>
-        <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${CLR.border}`,paddingTop:8,fontSize:12}}>
-          <span style={{color:CLR.muted}}>{c.lastTreatment?fmtDate(c.lastTreatment):"טרם טופל"}</span>
-          <span style={{fontWeight:600,color:CLR.primary}}>₪{c.totalPaid}</span>
+        <div style={{fontSize:12,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"2px 0 6px"}}>{[c.address,c.phone].filter(Boolean).join(" · ")||"—"}</div>
+        {st.steps?<JobSteps steps={st.steps}/>:st.nextAppt?<span style={{fontSize:12,fontWeight:700,color:"#0369a1",background:"#e0f2fe",borderRadius:20,padding:"2px 10px"}}>📅 תור ב-{fmtDate(st.nextAppt.date)}</span>:<span style={{fontSize:12,color:"#94a3b8"}}>{st.lastDate?"טופל — אין יומן ביצוע במערכת":"עוד לא בוצע טיפול"}</span>}
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8,paddingTop:8,borderTop:"1px solid #f1f5f9"}} onClick={e=>e.stopPropagation()}>
+          {needBtn(c,st)}
+          {c.phone&&<a href={tel(c.phone)} style={ab}>📞 חייג</a>}
+          {c.phone&&<a href={waL(c.phone)} target="_blank" rel="noreferrer" style={{...ab,color:"#15803d",borderColor:"#bbf7d0"}}>💬</a>}
+          <button onClick={()=>goNewLog(c)} style={ab}>📋 יומן{st.log?" נוסף":""}</button>
+          <button onClick={()=>setSel(c)} style={{...ab,marginRight:"auto",color:"#0369a1"}}>פרטים ‹</button>
         </div>
-      </div>)}
+      </div>; })}
     </div>
     {sel&&editingCust&&<Modal title={"✏️ עריכת פרטי לקוח — "+sel.name} onClose={()=>setEditingCust(false)} width={640}>
       <OrderForm key={"edit-"+sel.id} mode="customer" initialCustomer={sel} workers={workers} customers={customers}
@@ -7209,6 +7242,24 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         onDone={()=>{ setEditingCust(false); showToast("✅ פרטי הלקוח עודכנו"); }} onCancel={()=>setEditingCust(false)}/>
     </Modal>}
     {sel&&!editingCust&&<Modal title={`🗂️ תיק הדברה – ${sel.name}`} onClose={()=>setSel(null)} width={600}>
+      {(()=>{ const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const l=st.log;
+        return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(st.need?"#38bdf8":l?"#16a34a":"#cbd5e1"),borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+          <div style={{fontWeight:800,fontSize:17}}>{sel.name}</div>
+          <div style={{fontSize:13,color:"#64748b",margin:"2px 0 8px"}}>{[sel.address,sel.phone].filter(Boolean).join(" · ")||"—"}</div>
+          {l?<>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>הטיפול האחרון · {fmtDate(l.date)}{l.docNum?" · יומן "+l.docNum:""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,3).join(", "):""}</div>
+            <JobSteps steps={st.steps}/>
+            {st.need&&<div style={{marginTop:8,fontSize:13,fontWeight:700,color:"#0369a1"}}>{NEED_TXT[st.need]}{st.need==="pay"&&st.debt?" — ₪"+st.debt:""}</div>}
+          </>:<div style={{fontSize:13,color:"#94a3b8"}}>{st.nextAppt?"📅 תור קרוב: "+fmtDate(st.nextAppt.date)+(st.nextAppt.time?" "+st.nextAppt.time:""):st.lastDate?"טופל ב-"+fmtDate(st.lastDate)+" (אין יומן ביצוע במערכת)":"עוד לא בוצע טיפול"}</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6,marginTop:10}}>
+            {needBtn(sel,st)}
+            {l&&!l.draft&&<button onClick={()=>sendExecLogWA(l,sel.phone)} style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח יומן</button>}
+            <button onClick={()=>goNewLog(sel)} style={{...ab,justifyContent:"center"}}>📋 יומן ביצוע {l?"נוסף":"חדש"}</button>
+            {sel.phone&&<a href={tel(sel.phone)} style={{...ab,justifyContent:"center"}}>📞 חייג</a>}
+            {sel.phone&&<a href={waL(sel.phone)} target="_blank" rel="noreferrer" style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>💬 וואטסאפ</a>}
+            {sel.address&&<a href={"https://waze.com/ul?q="+encodeURIComponent(navAddr(sel.address))+"&navigate=yes"} target="_blank" rel="noreferrer" style={{...ab,justifyContent:"center",color:"#0369a1"}}>🚙 ניווט</a>}
+          </div>
+        </div>; })()}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
         {!editingCust
           ? <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Btn sm onClick={()=>setEditingCust(true)}>✏️ ערוך פרטים</Btn>
@@ -7256,11 +7307,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           ])}
           {c.intakeText&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:"#166534",margin:"4px 0"}}>📝 הפרטים כפי שנרשמו</div><div style={{whiteSpace:"pre-wrap",fontSize:14}}>{c.intakeText}</div></div>}
           {box("📍 כתובת",[row("כתובת",c.address),row(isBizC||c.propertyType==="חנות"?"קומה / יחידה":"כניסה / קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":"")])}
-          {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}>
-            <a href={"https://waze.com/ul?q="+encodeURIComponent(nav)+"&navigate=yes"} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#e0f7ff",color:"#0369a1",fontWeight:700,textDecoration:"none",fontSize:13}}>🚙 Waze</a>
-            <a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#ecfdf5",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>🗺️ Google Maps</a>
-            {c.phone&&<a href={"https://wa.me/972"+String(c.phone).replace(/\D/g,"").replace(/^0/,"")} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#dcfce7",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>💬 וואטסאפ</a>}
-          </div>}
+          {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}><a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#ecfdf5",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>🗺️ פתח במפה</a></div>}
           {box("🏠 פרטי הנכס",[
             row("סוג נכס",c.propertyType),
             row("חדרים",["דירה","בית פרטי"].includes(c.propertyType)?c.rooms:""),
@@ -7302,7 +7349,6 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         {currentUser.role!=="מדביר"&&<Btn sm onClick={()=>{setSchedFor(sel);setSel(null);}}>📅 שבץ תור ליומן</Btn>}
       </div>
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        <Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>{ window.__h360PendingExec=sel; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); }}>📋 יומן ביצוע חדש</Btn>
         {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})}>🧾 חשבונית / קבלה</Btn>}
         {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>{ window.__h360PendingOrder=sel; setSel(null); window.__h360Nav&&window.__h360Nav("neworder"); }}>📝 הזמנת עבודה</Btn>}
       </div>
@@ -7410,6 +7456,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"ג'וקים",price:schedFor.lastPrice||""}}
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
+    {invLog&&(()=>{ const {type,prefill}=docPrefillFromLog(invLog,customers); return <DocModal type={type} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={prefill} onClose={()=>setInvLog(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setInvLog(null);}}/>; })()}
     {invAppt&&(()=>{ const _lg=invAppt.id==null?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
   </div>;
 }
@@ -12598,7 +12645,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="153";
+const APP_BUILD="154";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
