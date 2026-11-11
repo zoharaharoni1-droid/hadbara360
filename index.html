@@ -5164,11 +5164,23 @@ function Section({children}){
   return <div style={{fontSize:13,fontWeight:700,color:CLR.primary,margin:"16px 0 10px",borderBottom:`2px solid ${CLR.primaryLight}`,paddingBottom:6}}>{children}</div>;
 }
 
-function PestMultiPicker({selected,onChange,customPest,setCustomPest}){
+// ＋ פתיחת שדות משניים (נפתח לבד אם כבר יש בהם משהו)
+function MoreFields({label,filled,children}){
+  const [open,setOpen]=useState(!!filled); React.useEffect(()=>{ if(filled) setOpen(true); },[filled]);
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 12px",margin:"2px 0 8px",borderRadius:10,border:"1.5px dashed #bae6fd",background:"#f0f9ff",color:"#0369a1",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{fontSize:18,lineHeight:1}}>＋</span>{label}</button>;
+  return <div style={{borderRight:"3px solid #bae6fd",paddingRight:10,margin:"2px 0 8px"}}>{children}
+    <button type="button" onClick={()=>setOpen(false)} style={{border:"none",background:"none",color:"#64748b",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"2px 0"}}>− הסתר</button></div>;
+}
+function PestMultiPicker({selected,onChange,customPest,setCustomPest,main}){
   const toggle=p=>selected.includes(p)?onChange(selected.filter(x=>x!==p)):onChange([...selected,p]);
+  const rest=main?PEST_TYPES_CRM.filter(p=>!main.includes(p)):[];
+  const [more,setMore]=useState(()=>!!main&&(selected.some(p=>!main.includes(p))));
+  React.useEffect(()=>{ if(main&&selected.some(p=>!main.includes(p))) setMore(true); },[selected.join("|")]);
+  const list=main?(more?[...main,...rest]:main):PEST_TYPES_CRM;
   return <div>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-      {PEST_TYPES_CRM.map(p=>{
+      {main&&!more&&<button type="button" onClick={()=>setMore(true)} style={{order:99,background:"#f0f9ff",color:"#0369a1",border:"1.5px dashed #bae6fd",borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:700,fontFamily:"inherit"}}>＋ עוד מזיקים</button>}
+      {list.map(p=>{
         const on=selected.includes(p);
         return <button key={p} type="button" onClick={()=>toggle(p)}
           style={{background:on?CLR.primary:CLR.surface,color:on?"#fff":CLR.muted,border:`1px solid ${on?CLR.primary:CLR.border}`,borderRadius:20,padding:"5px 14px",fontSize:13,cursor:"pointer",fontWeight:on?600:400}}>
@@ -6193,7 +6205,7 @@ function ClientIdentity({v,onChange,sharedHint=""}){
     </>}
   </div>;
 }
-function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null,initialAppt=null}){
+function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null,initialAppt=null,onShowCal=null}){
   const custOnly=mode==="customer";
   // 📝 טיוטה: מה שמילאת נשמר לבד — אפשר לעבור ללשונית אחרת ולחזור להמשיך
   const DK=draftKey?"h360_draft_"+draftKey:null;
@@ -6378,6 +6390,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       {existingId!=null&&!initialCustomer&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
       <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""}
         onChange={x=>setF(p=>({...p,clientKind:x.kind,name:x.name,phone:x.phone,placeName:x.place||"",bizName:x.doc||"",taxId:x.taxId||""}))}/>
+      {(()=>{ const extra=<>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>👥 אנשי קשר / טלפונים נוספים <span style={{fontSize:11}}>(טלפון המקום, דייר, בעל הדירה, מנהל…)</span></label>
@@ -6389,7 +6402,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       </div>
 
       <Sel label="כיצד הגיע הלקוח?" value={f.source||""} onChange={v=>set("source",v)}
-        options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/>
+        options={["","פה לפה / המלצה","גוגל","פייסבוק","אינסטגרם","עלון / שלט","חיפוש אינטרנט","לקוח חוזר","אחר"]}/></>;
+        return isBizClient?extra:<MoreFields label="אימייל, איש קשר נוסף, איך הגיע הלקוח" filled={!!(f.email||(f.extraContacts||[]).length||f.source)}>{extra}</MoreFields>; })()}
     </FieldCard>
 
     <FieldCard title="כתובת">
@@ -6401,8 +6415,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           <input list="h360-streets" value={f.street||""} onChange={e=>handleAddressChange("street",e.target.value)} placeholder="לדוגמה: הרצל 12" autoComplete="off" style={ADDR_INPUT}/>
           <datalist id="h360-streets">{ilStreets.map(st=><option key={st} value={st+" "}/>)}</datalist></div>
       </G2>
-      {!f.propertyType&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>קומה ומספר דירה / חנות יופיעו אחרי שתבחר סוג נכס למטה.</div>}
-      {isApt&&<G2>
+      {!f.propertyType&&isBizClient&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>קומה ומספר חנות יופיעו אחרי שתבחר סוג נכס למטה.</div>}
+      {(isApt||(!f.propertyType&&!isBizClient))&&<G2>
         <Sel label="קומה" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
         <Sel label="מס׳ דירה" value={f.aptNum} onChange={v=>set("aptNum",v)} options={APT_NUMS}/>
       </G2>}
@@ -6410,6 +6424,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         <Sel label="קומה (מינוס = מתחת לקרקע)" value={f.floor} onChange={v=>set("floor",v)} options={FLOORS}/>
         <Inp label="מס׳ חנות / יחידה (לא חובה)" value={f.aptNum||""} onChange={v=>set("aptNum",v)} placeholder="למשל: 12"/>
       </G2>}
+ <MoreFields label="כניסה, קוד בניין, חניה ופרטים נוספים" filled={!!(f.addrMore||f.entrance||f.buildingCode||f.parking!=null||f.elevator!=null)}>
       <Inp label="📌 פרטים נוספים לכתובת (לא חובה)" value={f.addrMore||""} onChange={v=>set("addrMore",v)} placeholder="למשל: קניון סינמה סיטי, ליד הכניסה הצפונית"/>
       {(isApt||isShared)&&<G2>
         <Sel label="כניסה" value={f.entrance||""} onChange={v=>set("entrance",v)} options={["","א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ז׳","ח׳","ט׳","י׳"]}/>
@@ -6434,6 +6449,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
             style={{width:80,padding:"5px 8px",borderRadius:8,border:`1px solid #d1d5db`,fontSize:13,background:"#f9fafb",boxSizing:"border-box"}}/>
         </div>
       </div>
+      </MoreFields>
     </FieldCard>
 
     <FieldCard title="פרטי הנכס">
@@ -6481,8 +6497,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     <FieldCard title="פרטי ההדברה המבוקשת" extra="(ניתן להשלים אחר כך)">
       <div style={{marginBottom:12}}>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:6}}>מזיקים לטיפול (אפשר לבחור כמה)</label>
-        <PestMultiPicker selected={f.pests} onChange={v=>set("pests",v)} customPest={f.customPest} setCustomPest={v=>set("customPest",v)}/>
-        {allPests().length>0&&<button type="button" onClick={()=>setShowWAConfirm("prep")} style={{marginTop:6,border:"1px dashed #93c5fd",background:"#eff6ff",color:"#1e40af",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי — {allPests().join(", ")}</button>}
+        <PestMultiPicker main={["תיקן אמריקאי","תיקן גרמני","חולדות","נמלים","חרקי מזון"]} selected={f.pests} onChange={v=>set("pests",v)} customPest={f.customPest} setCustomPest={v=>set("customPest",v)}/>
+        {false&&<button type="button" onClick={()=>setShowWAConfirm("prep")} style={{marginTop:6,border:"1px dashed #93c5fd",background:"#eff6ff",color:"#1e40af",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי — {allPests().join(", ")}</button>}
       </div>
       <div>
         <label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>מחיר סופי שסוכם (₪)</label>
@@ -6499,6 +6515,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
           }} style={{background:CLR.accent,color:"#fff",border:"none",borderRadius:8,padding:"0 12px",cursor:"pointer",fontSize:18}} title="מחשבון מחיר">🧮</button>
         </div>
       </div>
+      <MoreFields label="הצעת מחיר והנחיות ללקוח" filled={!!(quote&&quote.properties&&quote.properties.length)}>
+      {allPests().length>0&&<button type="button" onClick={()=>setShowWAConfirm("prep")} style={{marginTop:10,border:"1px dashed #93c5fd",background:"#eff6ff",color:"#1e40af",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי — {allPests().join(", ")}</button>}
       {/* Quote breakdown (client-facing, editable) */}
       {quote&&quote.properties&&quote.properties.length>0&&<div style={{marginTop:12,background:CLR.surface,borderRadius:8,padding:"12px 14px"}}>
         <div style={{fontSize:12,fontWeight:700,color:CLR.primary,marginBottom:8}}>📋 פירוט ללקוח (מהמחשבון — ניתן לערוך)</div>
@@ -6519,17 +6537,19 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       }} style={{marginTop:12,width:"100%",background:"#fff",border:`1px solid ${CLR.primary}`,color:CLR.primary,borderRadius:8,padding:"9px",cursor:"pointer",fontWeight:600,fontSize:14}}>
         📤 שלח הצעת מחיר ללקוח (וואטסאפ / מייל / PDF)
       </button>
+      </MoreFields>
     </FieldCard>
 
     <FieldCard title="זמן מועדף להגעה">
+      {onShowCal&&<button type="button" onClick={onShowCal} style={{width:"100%",marginBottom:10,padding:"9px",borderRadius:10,border:"1px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>📅 הצג את יומני המדבירים</button>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,alignItems:"end"}}>
         <div style={{gridColumn:"1 / -1"}}><Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/></div>
-        <label style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:8,fontSize:14,cursor:"pointer",background:f.allDay?"#fef9c3":"#f8fafc",border:`1px solid ${f.allDay?"#fcd34d":CLR.border}`,borderRadius:10,padding:"10px 12px",marginBottom:4}}>
-          <input type="checkbox" checked={!!f.allDay} onChange={e=>set("allDay",e.target.checked)} style={{width:18,height:18}}/>
-          <span><b>☀️ במהלך היום</b> — בלי שעה קבועה, לא חוסם את היומן</span>
-        </label>
         {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>}
         {!f.allDay&&<Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>}
+        <label style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",background:f.allDay?"#f0f9ff":"transparent",border:`1px solid ${f.allDay?"#bae6fd":"transparent"}`,borderRadius:8,padding:"4px 8px",marginTop:-6,width:"fit-content"}}>
+          <input type="checkbox" checked={!!f.allDay} onChange={e=>set("allDay",e.target.checked)} style={{width:16,height:16}}/>
+          <span>☀️ במהלך היום <span style={{color:CLR.muted,fontSize:12}}>(בלי שעה קבועה)</span></span>
+        </label>
         {!f.allDay&&<div style={{gridColumn:"1 / -1",marginTop:-4}}>
           <button type="button" onClick={()=>set("showRanges",!f.showRanges)} style={{background:f.showRanges?CLR.primary:"#fff",color:f.showRanges?"#fff":CLR.primary,border:`1px solid ${CLR.primary}`,borderRadius:20,padding:"6px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{f.showRanges?"✕ סגור":"+ טווחים מוכנים"}</button>
           {f.showRanges&&<div style={{border:`1px solid ${CLR.border}`,borderRadius:10,padding:10,marginTop:8,background:"#f8fafc"}}>
@@ -6547,7 +6567,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </>}
     <FieldCard title={custOnly?"הערות קבועות על הלקוח":"הערות להזמנה הזו"}>
       {f.custNotes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"7px 10px",fontSize:13,marginBottom:8}}>⚠️ <b>הערות קבועות על הלקוח:</b> {f.custNotes}</div>}
-      <QuickChips chips={QUICK_NOTES} onPick={addNote} isOn={notesHas}/>
+      <QuickChips chips={custOnly?QUICK_NOTES:QUICK_NOTES.filter(c=>/בעל חיים|ילדים|הריון|חצי שעה/.test(c))} onPick={addNote} isOn={notesHas}/>
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder={custOnly?"מה חשוב לזכור על הלקוח בכל ביקור (כלב, קוד שער, משלם רק בביט…)":"מה המדביר צריך לדעת על הביקור הזה (חניה, שעה, להתקשר לפני…)"}/>
     </FieldCard>
 
@@ -6904,7 +6924,7 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
         </div>
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
-      <OrderForm draftKey="neworder" workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
+      <OrderForm draftKey="neworder" onShowCal={wide?null:()=>setShowCal(true)} workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
         onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
@@ -12645,7 +12665,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="154";
+const APP_BUILD="155";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
