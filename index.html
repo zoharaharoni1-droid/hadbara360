@@ -1528,7 +1528,8 @@ async function uploadPdfBlob(blob,numStr,date,niceName){
   return {url:su.data.signedUrl,blob};
 }
 // שליחה בוואטסאפ: קובץ PDF רשמי (קישור ישיר) ישר לצ'אט של הלקוח
-async function sendExecLogWA(log,phone){
+function sendExecLogWA(log,phone){ if(window.__h360Send) return window.__h360Send({log,phone}); return sendExecLogWA0(log,phone); }
+async function sendExecLogWA0(log,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
   if(!ph) return alert("אין טלפון ללקוח");
   const w=window.open("","_blank");
@@ -1552,7 +1553,8 @@ async function docPdfBlob(doc){
   if(!sign) return b;
   try{ const sb2=await sigSignBlob(b,sign,doc); if(!copy) sigKeepOriginal(sb2,doc); return sb2; }catch(e){ alert("החתימה הדיגיטלית נכשלה ("+(e.message||e)+") — המסמך יוצא בלי חתימה."); return htmlPdfBlob(docHtml({...doc,copy,signed:false}),{scale:3}); }
 }
-async function sendLogAndDocWA(log,doc,phone){
+function sendLogAndDocWA(log,doc,phone){ if(window.__h360Send) return window.__h360Send({log,doc,phone}); return sendLogAndDocWA0(log,doc,phone); }
+async function sendLogAndDocWA0(log,doc,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
   if(!ph) return alert("אין טלפון ללקוח");
   if(doc&&docNeedsSig(doc)&&!sigUnlockedPem()&&sigKey()) await sigEnsureUnlocked();
@@ -1577,6 +1579,71 @@ async function shareLogAndDocPdf(log,doc){
     if(navigator.canShare&&navigator.canShare({files})){ await navigator.share({files,title:COMPANY.name}); try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} return; }
     files.forEach((f,i)=>setTimeout(()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500); },i*600));
   }catch(e){ if(e&&e.name==="AbortError") return; alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
+}
+// ── 📤 שליחה ללקוח: בחירת נמען וערוץ (וואטסאפ / וואטסאפ ביזנס / SMS / מייל / קובץ) ──
+async function prepareSendText(log,doc){
+  const parts=[];
+  if(log){ const {url}=await uploadExecLogPdf(log); parts.push((doc?"📋 יומן ביצוע מס׳ "+(log.docNum||"")+":\n":"📄 יומן ביצוע מס׳ "+(log.docNum||"")+" · "+fmtDate(log.date)+"\nלצפייה והורדה:\n")+url); }
+  if(doc){ const b=await docPdfBlob(doc); const {url}=await uploadPdfBlob(b,({"חשבונית מס/קבלה":"R","חשבונית מס":"I","קבלה":"Q","חשבונית זיכוי":"C","חשבון עסקה":"E"}[doc.docType]||"D")+String(doc.docSeq||doc.invoiceNum||""),doc.date,docNiceName(doc)); parts.push("🧾 "+doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+":\n"+url); }
+  const name=(log&&(log.contactName||log.clientName))||(doc&&((doc.cust&&doc.cust.contactName)||doc.customer))||"";
+  const intro=log&&!doc?"מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name:doc&&!log?"מצורף המסמך — "+COMPANY.name:"מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name;
+  const text=["שלום "+name+" 👋","",intro,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
+  const subject=log&&doc?"יומן ביצוע ו"+doc.docType+" — "+COMPANY.name:log?"יומן ביצוע מס׳ "+(log.docNum||"")+" — "+COMPANY.name:doc.docType+" מס׳ "+String(doc.docSeq||"").padStart(4,"0")+" — "+COMPANY.name;
+  return {text,subject};
+}
+function sendIntl(ph){ const d=String(ph||"").replace(/[^0-9]/g,""); return d.startsWith("972")?d:d.replace(/^0/,"972"); }
+function sendLinks(ph,em,{text,subject}){
+  const t=encodeURIComponent(text), intl=sendIntl(ph), local=String(ph||"").replace(/[^0-9+]/g,"");
+  const ua=navigator.userAgent||""; const android=/Android/i.test(ua), ios=/iPhone|iPad|iPod/i.test(ua);
+  const wa="https://wa.me/"+intl+"?text="+t;
+  return { wa, android, ios,
+    wab: android?"intent://send?phone="+intl+"&text="+t+"#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url="+encodeURIComponent(wa)+";end":wa,
+    sms: "sms:"+local+(ios?"&":"?")+"body="+t,
+    mail: "mailto:"+String(em||"").replace(/[^A-Za-z0-9@._+\-]/g,"")+"?subject="+encodeURIComponent(subject)+"&body="+t };
+}
+function SendModal({log,doc,phone,customers=[],saved,onClose}){
+  const cid=(log&&log.customerId)||(doc&&doc.customerId);
+  const c=(customers||[]).find(x=>cid!=null&&String(x.id)===String(cid))||(customers||[]).find(x=>log&&x.name===log.clientName)||(customers||[]).find(x=>doc&&x.name===doc.customer)||{};
+  const opts=[...new Set([phone,log&&log.phone,c.phone,c.phone2,c.contactPhone,doc&&(doc.cust||{}).phone].map(x=>String(x||"").trim()).filter(Boolean))];
+  const [ph,setPh]=useState(opts[0]||""); const [em,setEm]=useState(c.email||(doc&&(doc.cust||{}).email)||""); const [other,setOther]=useState(!opts.length);
+  const [ready,setReady]=useState(null); const [err,setErr]=useState("");
+  React.useEffect(()=>{ let off=false; (async()=>{ try{ if(doc&&docNeedsSig(doc)&&!sigUnlockedPem()&&sigKey()) await sigEnsureUnlocked(); const r=await prepareSendText(log,doc); if(!off) setReady(r); }catch(e){ if(off) return; setErr(e.message||String(e)); if(log&&!doc) setReady({text:execLogWAText(log),subject:"יומן ביצוע — "+COMPANY.name}); } })(); return ()=>{off=true;}; },[]);
+  const name=(log&&log.clientName)||(doc&&(doc.customer||(doc.cust&&doc.cust.name)))||"";
+  const what=log&&doc?"יומן ביצוע + "+doc.docType:log?"יומן ביצוע "+(log.docNum||""):doc.docType;
+  const okPh=ph.replace(/\D/g,"").length>=9, okEm=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.trim());
+  const L=ready?sendLinks(ph,em.trim(),ready):null;
+  const done=()=>{ try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} setTimeout(onClose,300); };
+  const chBtn=(href,label,bg,fg,ok,need,extra={})=>ok&&L?<a href={href} target={/^https?:/.test(href)?"_blank":undefined} rel="noopener" onClick={done} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 10px",borderRadius:12,background:bg,color:fg,fontWeight:700,fontSize:15,textDecoration:"none",border:extra.border||"none"}}>{label}</a>
+    :<button type="button" onClick={()=>alert(!L?"רגע — מכין את הקישור…":need)} style={{padding:"12px 10px",borderRadius:12,background:"#f1f5f9",color:"#94a3b8",fontWeight:700,fontSize:15,border:"none",fontFamily:"inherit",cursor:"pointer"}}>{label}</button>;
+  const lab={fontSize:13,fontWeight:700,color:"#334155",display:"block",marginBottom:4};
+  const inp={width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,boxSizing:"border-box",direction:"ltr",textAlign:"right",fontFamily:"inherit"};
+  const chip=on=>({border:"1px solid "+(on?"#0284c7":"#e2e8f0"),background:on?"#f0f9ff":"#fff",color:on?"#0369a1":"#334155",borderRadius:20,padding:"5px 11px",fontSize:13,cursor:"pointer",fontFamily:"inherit"});
+  return <Modal title={saved?"✅ נשמר — שליחה ללקוח":"📤 שליחת "+what} onClose={onClose} width={460}>
+    <div style={{fontSize:14,marginBottom:12}}>שליחה ל<b>{name||"הלקוח"}</b>
+      <div style={{fontSize:12,marginTop:4,color:ready?"#15803d":err?"#b91c1c":"#64748b"}}>{ready?(err?"⚠️ ה-PDF לא נוצר — יישלח סיכום בטקסט":"✓ הקישור ל-PDF מוכן"):err?"⚠️ "+err:"⏳ מכין את ה-PDF והקישור…"}</div>
+    </div>
+    <label style={lab}>📞 לאיזה מספר</label>
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+      {opts.map(o=><button key={o} type="button" onClick={()=>{setPh(o);setOther(false);}} style={chip(!other&&ph===o)}>{o}{String(o)===String(c.phone||"")?" · הלקוח":""}</button>)}
+      <button type="button" onClick={()=>{setOther(true);setPh("");}} style={chip(other)}>✏️ מספר אחר</button>
+    </div>
+    {other&&<input autoFocus value={ph} onChange={e=>setPh(e.target.value)} inputMode="tel" placeholder="050-1234567" style={{...inp,marginBottom:6}}/>}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,margin:"8px 0 14px"}}>
+      {chBtn(L&&L.wa,"💬 וואטסאפ","#25D366","#fff",okPh,"כתוב מספר טלפון תקין")}
+      {chBtn(L&&L.wab,"💼 וואטסאפ ביזנס","#075E54","#fff",okPh,"כתוב מספר טלפון תקין")}
+      <div style={{gridColumn:"1 / -1"}}>{chBtn(L&&L.sms,"✉️ הודעת SMS (בלי וואטסאפ)","#fff","#0369a1",okPh,"כתוב מספר טלפון תקין",{border:"1.5px solid #7dd3fc"})}</div>
+    </div>
+    {L&&!L.android&&<div style={{fontSize:11,color:"#94a3b8",marginTop:-8,marginBottom:10}}>{L.ios?"באייפון: וואטסאפ ביזנס נפתח אם הוא האפליקציה היחידה המותקנת. SMS נשלח מהאייפון.":"במחשב: נפתחת אפליקציית הוואטסאפ שמותקנת. SMS עובד בעיקר מהטלפון."}</div>}
+    <label style={lab}>📧 במייל</label>
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <input value={em} onChange={e=>setEm(e.target.value)} inputMode="email" placeholder="name@example.com" style={{...inp,flex:1}}/>
+      <div style={{flexShrink:0,width:120}}>{chBtn(L&&L.mail,"📧 שלח","#0284c7","#fff",okEm,"כתוב כתובת מייל תקינה")}</div>
+    </div>
+    <div style={{display:"grid",gap:8}}>
+      <Btn full v="secondary" onClick={()=>{ onClose(); shareLogAndDocPdf(log||null,doc||null); }}>📎 שיתוף / הורדה של קובץ ה-PDF</Btn>
+      <Btn full v="ghost" onClick={onClose}>{saved?"לא עכשיו":"ביטול"}</Btn>
+    </div>
+  </Modal>;
 }
 // מילוי חשבונית מתוך יומן ביצוע — שורה קצרה אחת (בלי פירוט היומן)
 const LOG_PAY_TO_DOC={"מזומן":"מזומן","ביט":"ביט","PayBox":"פייבוקס","פייבוקס":"פייבוקס","העברה בנקאית":"העברה בנקאית","העברה":"העברה בנקאית","אשראי":"כרטיס אשראי","כרטיס אשראי":"כרטיס אשראי","צ'ק":"צ׳ק","צ׳ק":"צ׳ק"};
@@ -2994,7 +3061,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
     </div>}
     <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
       {onBack&&<Btn v="ghost" sm onClick={onBack}>← {saved?"תיקון":"חזרה לעריכה"}</Btn>}
-      <Btn sm onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח — חזור לתיקון והוסף טלפון"); if(linkedDoc) sendLogAndDocWA(logForSend,linkedDoc,phone); else sendExecLogWA(logForSend,phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 {linkedDoc?"שלח ללקוח (יומן + חשבונית)":"שלח ללקוח"}</Btn>
+      <Btn sm onClick={()=>{ if(linkedDoc) sendLogAndDocWA(logForSend,linkedDoc,phone); else sendExecLogWA(logForSend,phone); }} style={{background:"#25D366",color:"#fff",border:"none"}}>📤 {linkedDoc?"שלח ללקוח (יומן + חשבונית)":"שלח ללקוח"}</Btn>
       <Btn sm v="secondary" onClick={()=>linkedDoc?shareLogAndDocPdf(logForSend,linkedDoc):shareExecLogPdf(logForSend)}>📎 {linkedDoc?"2 קבצי PDF":"קובץ PDF"}</Btn>
       <Btn sm v="secondary" onClick={()=>printExecLog({...log,docNum})}>🖨️ הדפסה</Btn>
       {saved&&<Btn sm v="secondary" onClick={()=>sendReviewRequest(log.clientName,phone)} style={{background:"#fef9c3",color:"#854d0e",border:"1px solid #fde047"}}>⭐ בקשת ביקורת</Btn>}
@@ -3128,7 +3195,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     setFormKey(k=>k+1); setMode("new"); },[]);
   const [autoInv,setAutoInv]=useState(false);
   const saveDocTab=rec=>{ const saved={...rec,id:nextId(finance||[])}; setFinance&&setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]); if(rec.execLogId) setExecLogs(ls=>ls.map(x=>String(x.id)===String(rec.execLogId)?{...x,invoiceNum:rec.invoiceNum}:x)); return saved; };
-  const handlePreview=(data,opt={})=>{ if(opt.draft){ handleSave({...data,draft:true}); finish(); setTimeout(()=>showToast("📝 נשמר כטיוטה — אפשר להשלים מרשימת יומני הביצוע"),100); return; } const log=handleSave(data);setPreviewData(data);setExtracted(data);setAutoInv(!!opt.invoice);setMode("preview");if(opt.send&&data.phone) sendExecLogWA(log,data.phone);};
+  const handlePreview=(data,opt={})=>{ if(opt.draft){ handleSave({...data,draft:true}); finish(); setTimeout(()=>showToast("📝 נשמר כטיוטה — אפשר להשלים מרשימת יומני הביצוע"),100); return; } const log=handleSave(data);setPreviewData(data);setExtracted(data);setAutoInv(!!opt.invoice);setMode("preview");if(opt.send) sendExecLogWA(log,data.phone);};
 
   if(viewLog) return(
     <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"system-ui,sans-serif"}}>
@@ -3193,7 +3260,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
         {l.draft?<button onClick={()=>openEdit(l)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✏️ השלם</button>
           :<button onClick={()=>setViewLog(l)} style={{...ib,color:"#0369a1"}}>👁 צפה</button>}
         {!l.draft&&<button onClick={()=>printExecLog(l)} style={ib}>📄 PDF</button>}
-        {!l.draft&&<button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendExecLogWA(l,ph);}} style={{...ib,color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח</button>}
+        {!l.draft&&<button onClick={()=>{ sendExecLogWA(l,ph);}} style={{...ib,color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח</button>}
         {!l.draft&&<button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendReviewRequest(l.clientName,ph); setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,reviewRequestedAt:todayStr()}:x)); }} title="בקשת ביקורת בגוגל" style={ib}>⭐ ביקורת</button>}
         <button onClick={()=>openDup(l)} title="שכפל ליומן חדש עם תאריך היום" style={ib}>⧉</button>
         {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nהיומן יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקה (לסל המחזור)" style={{...ib,color:"#dc2626",borderColor:"#fecaca",marginRight:"auto"}}>🗑️ מחק</button>}
@@ -3933,7 +4000,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,onOpenInvo
   const [savedInvoice,setSavedInvoice]=useState(null);
 
   const handleApprove=()=>{ setStep("done"); };
-  const autoSave=(d,opt={})=>{ if(opt.draft){ onSave({...d,draft:true},savedLog); showToast("📝 נשמר כטיוטה — אפשר להשלים מיומני הביצוע"); onClose(); return; } const log=onSave(d,savedLog); setSavedLog(log); setPreviewData(d); setAutoInv(!!opt.invoice); setStep("preview"); if(opt.send&&d.phone) sendExecLogWA(log,d.phone); };
+  const autoSave=(d,opt={})=>{ if(opt.draft){ onSave({...d,draft:true},savedLog); showToast("📝 נשמר כטיוטה — אפשר להשלים מיומני הביצוע"); onClose(); return; } const log=onSave(d,savedLog); setSavedLog(log); setPreviewData(d); setAutoInv(!!opt.invoice); setStep("preview"); if(opt.send) sendExecLogWA(log,d.phone); };
 
   const handleCreateInvoice=()=>{
     const vat=Math.round(appt.price*0.18);
@@ -4167,7 +4234,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginTop:10}}>
           <button type="button" onClick={()=>printExecLog(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>👁 צפה</button>
           <button type="button" onClick={()=>onFillLog(appt)} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך</button>
-          <button type="button" onClick={()=>{ if(!phone) return alert("אין טלפון ללקוח"); sendExecLogWA(lg,phone); }} style={pill("#25D366","#fff")}>📤 שלח ללקוח</button>
+          <button type="button" onClick={()=>{ sendExecLogWA(lg,phone); }} style={pill("#25D366","#fff")}>📤 שלח ללקוח</button>
           <button type="button" onClick={()=>shareExecLogPdf(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>📄 PDF</button>
         </div>
       </DetSec>
@@ -8473,27 +8540,7 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
   </div>;
 }
 // 💬 שליחת מסמך — ללקוח או למספר אחר (למשל הנהלת החשבונות שלו)
-function SendDocModal({doc,saved,phone,customers=[],onClose}){
-  const c=(customers||[]).find(x=>String(x.id)===String(doc.customerId))||{};
-  const opts=[...new Set([phone,c.phone,c.phone2,c.contactPhone,(doc.cust||{}).phone].map(x=>String(x||"").trim()).filter(Boolean))];
-  const [ph,setPh]=useState(opts[0]||"");
-  const name=doc.customer||(doc.cust&&doc.cust.name)||"";
-  const send=()=>{ const n=ph.replace(/[^0-9+]/g,""); if(n.replace(/\D/g,"").length<9) return alert("כתוב מספר טלפון תקין"); onClose(); sendLogAndDocWA(null,doc,n); };
-  return <Modal title={saved?"✅ "+doc.docType+" "+(doc.official?String(doc.docSeq||"").padStart(4,"0"):"(טיוטה)")+" נשמרה":"💬 שליחת "+doc.docType} onClose={onClose} width={440}>
-    <div style={{fontSize:14,marginBottom:10}}>{saved?"לשלוח ל":"שליחה ל"}<b>{name}</b>{!doc.official&&doc.draft!==false&&<div style={{fontSize:12,color:"#92400e",marginTop:4}}>זו טיוטה — יוצאת עם סימן "טיוטה". מתאים לבדיקה.</div>}</div>
-    <label style={{fontSize:13,fontWeight:700,color:"#334155"}}>למספר וואטסאפ</label>
-    <input value={ph} onChange={e=>setPh(e.target.value)} inputMode="tel" placeholder="למשל 050-1234567" style={{width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:17,boxSizing:"border-box",margin:"4px 0 6px",direction:"ltr",textAlign:"right"}}/>
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
-      {opts.map(o=><button key={o} type="button" onClick={()=>setPh(o)} style={{border:"1px solid "+(ph===o?"#16a34a":"#e2e8f0"),background:ph===o?"#f0fdf4":"#fff",borderRadius:20,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>📞 {o}</button>)}
-      <button type="button" onClick={()=>setPh("")} style={{border:"1px dashed #94a3b8",background:"#fff",borderRadius:20,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>✏️ מספר אחר (הנהלת חשבונות…)</button>
-    </div>
-    <div style={{display:"grid",gap:8}}>
-      <Btn full onClick={send}>💬 שלח בוואטסאפ</Btn>
-      <Btn full v="secondary" onClick={()=>{ onClose(); shareLogAndDocPdf(null,doc); }}>📤 שיתוף / הורדת PDF (מייל וכו׳)</Btn>
-      <Btn full v="ghost" onClick={onClose}>{saved?"לא עכשיו":"ביטול"}</Btn>
-    </div>
-  </Modal>;
-}
+function SendDocModal({doc,saved,phone,customers=[],onClose}){ return <SendModal doc={doc} saved={saved} phone={phone} customers={customers} onClose={onClose}/>; }
 // 🔢 הכנת מספור — פעם אחת, לא מפעיל שום דבר
 function NumberingSetupModal({onClose}){
   const [chk,setChk]=useState("בודק…"); React.useEffect(()=>{ checkDocNumbering().then(setChk); },[]);
@@ -12551,7 +12598,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="152";
+const APP_BUILD="153";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12830,6 +12877,8 @@ function App(){
     if(Object.keys(upd).length) setExecLogs(ls=>ls.map(l=>upd[l.id]&&!l.customerId?{...l,customerId:upd[l.id]}:l));
   },20000); return ()=>clearTimeout(t); },[authUser&&authUser.id]);
   // סימון "יומן נשלח ללקוח" כששולחים בוואטסאפ / משתפים PDF
+  const [sendReq,setSendReq]=useState(null);
+  React.useEffect(()=>{ window.__h360Send=r=>setSendReq(r); return ()=>{ if(window.__h360Send) delete window.__h360Send; }; },[]);
   React.useEffect(()=>{ window.__h360MarkLogSent=log=>{ if(!log) return; setExecLogs(ls=>ls.map(l=>((log.id!=null&&String(l.id)===String(log.id))||(log.docNum&&String(l.docNum)===String(log.docNum)))&&!l.sentAt?{...l,sentAt:new Date().toISOString()}:l)); }; },[]);
   // One-time: give old logs (EL-xxxxxx) simple serial numbers starting at 1001, in creation order
   React.useEffect(()=>{
@@ -13071,6 +13120,7 @@ function App(){
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
             {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments} execLogs={execLogs} finance={activeFinance}/>}
             {tab==="trash"&&<TrashBin items={trashItems} currentUser={user}/>}
+            {sendReq&&<SendModal log={sendReq.log} doc={sendReq.doc} phone={sendReq.phone} customers={customers} onClose={()=>setSendReq(null)}/>}
             </div>
 
         
