@@ -6906,6 +6906,8 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
 }
 
 function NewOrderPage({customers,setCustomers,appointments,setAppointments,workers,goToCustomers}){
+  // 📲 הודעה ששותפה מוואטסאפ ("שיתוף" → הדברה 360) — ממלאת את ההזמנה אוטומטית
+  const [shared]=useState(()=>{ try{ const t=sessionStorage.getItem("h360_share"); if(t){ sessionStorage.removeItem("h360_share"); return {text:t,n:Date.now()}; } }catch(e){} return null; });
   const recent=appointments.filter(a=>!isPersonal(a)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||b.id-a.id);
   const [wide,setWide]=useState(()=>window.innerWidth>=1150);
   React.useEffect(()=>{const f=()=>setWide(window.innerWidth>=1150);window.addEventListener("resize",f);return()=>window.removeEventListener("resize",f);},[]);
@@ -6924,7 +6926,8 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
         </div>
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
-      <OrderForm draftKey="neworder" onShowCal={wide?null:()=>setShowCal(true)} workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
+      {shared&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:13,color:"#166534"}}>📲 ההודעה מהוואטסאפ נקלטה ומולאה בטופס — בדוק, השלם ושמור.</div>}
+      <OrderForm draftKey="neworder" initialParsed={shared} onShowCal={wide?null:()=>setShowCal(true)} workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
         onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
@@ -12665,7 +12668,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="155";
+const APP_BUILD="156";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12707,6 +12710,8 @@ function SettingsPage({isAdmin,onReset,workers=[],appointments=[],setAppointment
     </details>}
   </div>;
 }
+// 📲 קליטת הודעה ששותפה לאפליקציה (Web Share Target) — ?title=&text=&url=
+(function(){ try{ const q=new URLSearchParams(location.search); if(q.has("text")||q.has("title")||q.has("url")){ const t=[q.get("title"),q.get("text"),q.get("url")].filter(Boolean).join("\n").trim(); if(t) sessionStorage.setItem("h360_share",t); history.replaceState(null,"",location.pathname); } }catch(e){} })();
 function App(){
   const [authUser,setAuthUser]=React.useState(()=>{
     try{const u=localStorage.getItem('crm_auth');return u?JSON.parse(u):null;}catch{return null;}
@@ -12749,6 +12754,7 @@ function App(){
   const defaultTab = authUser?.role==="מדביר" ? "fieldview" : "dashboard";
   const [tab,setTab]=useState(()=>{
     try{
+      if(sessionStorage.getItem("h360_share")&&authUser?.role!=="מדביר") return "neworder";
       const saved=localStorage.getItem("h360_last_tab");
       if(saved && authUser?.role==="מדביר" && saved==="fieldview") return saved;
       if(saved && authUser?.role!=="מדביר" && saved!=="fieldview") return saved;

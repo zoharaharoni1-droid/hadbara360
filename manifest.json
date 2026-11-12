@@ -41,5 +41,14 @@
   ],
   "screenshots": [],
   "id": "/hadbara360/",
-  "scope": "/hadbara360/"
+  "scope": "/hadbara360/",
+  "share_target": {
+    "action": "/hadbara360/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }
