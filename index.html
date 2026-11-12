@@ -4536,6 +4536,7 @@ function showToast(msg){
   }catch(e){}
 }
 function useTouchDrag(onDrop){
+  const LIFT=80; // נקודת היעד מעל האצבע — כדי שהאצבע לא תסתיר את השעה
   const st=React.useRef(null);
   const [drag,setDrag]=useState(null); // {id,label,x,y,key}
   const cleanup=()=>{ const s0=st.current; if(!s0) return; clearTimeout(s0.timer); cancelAnimationFrame(s0.raf||0);
@@ -4548,20 +4549,26 @@ function useTouchDrag(onDrop){
     const s0={id:a.id,label,x0:t.clientX,y0:t.clientY,x:t.clientX,y:t.clientY,active:false,target:null};
     s0.mv=ev=>{ const q=ev.touches[0]; s0.x=q.clientX; s0.y=q.clientY;
       if(!s0.active){ if(Math.abs(s0.x-s0.x0)>10||Math.abs(s0.y-s0.y0)>10) cleanup(); return; }
-      ev.preventDefault(); s0.target=targetAt(s0.x,s0.y); setDrag({id:s0.id,label:s0.label,x:s0.x,y:s0.y,key:s0.target&&s0.target.key}); };
+      ev.preventDefault(); s0.target=targetAt(s0.x,s0.y-LIFT); setDrag({id:s0.id,label:s0.label,x:s0.x,y:s0.y,key:s0.target&&s0.target.key}); };
     s0.en=()=>{ const was=s0.active, tg=s0.target; cleanup(); if(was&&tg) onDrop(s0.id,tg.date,tg.time); };
     s0.timer=setTimeout(()=>{ s0.active=true; try{navigator.vibrate&&navigator.vibrate(35);}catch(_){}
-      s0.bodyOv=document.body.style.overflow; s0.target=targetAt(s0.x,s0.y);
+      s0.bodyOv=document.body.style.overflow; s0.target=targetAt(s0.x,s0.y-LIFT);
       setDrag({id:s0.id,label:s0.label,x:s0.x,y:s0.y,key:s0.target&&s0.target.key});
-      const scroll=()=>{ if(!s0.active) return; const H=window.innerHeight; if(s0.y<90) window.scrollBy(0,-12); else if(s0.y>H-90) window.scrollBy(0,12); s0.raf=requestAnimationFrame(scroll); }; s0.raf=requestAnimationFrame(scroll);
+      const scroll=()=>{ if(!s0.active) return; const H=window.innerHeight; if(s0.y-LIFT<90) window.scrollBy(0,-12); else if(s0.y>H-70) window.scrollBy(0,12); s0.raf=requestAnimationFrame(scroll); }; s0.raf=requestAnimationFrame(scroll);
     },450);
     document.addEventListener("touchmove",s0.mv,{passive:false}); document.addEventListener("touchend",s0.en); document.addEventListener("touchcancel",s0.en);
     st.current=s0;
   };
   // אחרי גרירה — לא לפתוח את הכרטיס בלחיצה שמגיעה מיד אחריה
   const justDragged=()=>!!(st.current&&st.current.suppress&&Date.now()-st.current.suppress<600);
-  const ghost=drag&&<div style={{position:"fixed",left:drag.x,top:drag.y,transform:"translate(-50%,-120%) rotate(-2deg)",background:"#fff",border:`2px solid ${CLR.primary}`,borderRadius:12,padding:"8px 14px",fontWeight:700,fontSize:14,boxShadow:"0 12px 30px rgba(0,0,0,.3)",zIndex:99998,pointerEvents:"none",whiteSpace:"nowrap",direction:"rtl"}}>
-    ✋ {drag.label}<div style={{fontSize:11,fontWeight:500,color:drag.key?CLR.primary:"#94a3b8"}}>{drag.key?("שחרר → "+(drag.key.split("|")[1]||fmtDate(drag.key.split("|")[0]))):"גרור למשבצת"}</div></div>;
+  const tgt=drag&&drag.key?drag.key.split("|"):null;
+  const tgtTxt=tgt?(tgt[1]||"במהלך היום")+" · "+fmtDate(tgt[0]):"גרור למשבצת";
+  const ghost=drag&&<>
+    <div style={{position:"fixed",left:0,right:0,top:drag.y-LIFT,borderTop:"2px dashed "+(tgt?CLR.primary:"#94a3b8"),zIndex:99997,pointerEvents:"none"}}/>
+    <div style={{position:"fixed",left:drag.x,top:drag.y-LIFT,width:14,height:14,borderRadius:"50%",background:tgt?CLR.primary:"#94a3b8",border:"2px solid #fff",boxShadow:"0 0 0 2px "+(tgt?CLR.primary:"#94a3b8"),transform:"translate(-50%,-50%)",zIndex:99998,pointerEvents:"none"}}/>
+    <div style={{position:"fixed",left:drag.x,top:drag.y-LIFT-14,transform:"translate(-50%,-100%)",background:"#fff",border:`2px solid ${CLR.primary}`,borderRadius:12,padding:"6px 12px",fontWeight:700,fontSize:13,boxShadow:"0 10px 26px rgba(0,0,0,.28)",zIndex:99998,pointerEvents:"none",whiteSpace:"nowrap",direction:"rtl",maxWidth:"70vw",overflow:"hidden",textOverflow:"ellipsis"}}>✋ {drag.label}</div>
+    <div style={{position:"fixed",top:10,left:"50%",transform:"translateX(-50%)",background:tgt?CLR.primary:"#475569",color:"#fff",borderRadius:14,padding:"8px 18px",fontWeight:800,fontSize:20,boxShadow:"0 8px 24px rgba(0,0,0,.3)",zIndex:99999,pointerEvents:"none",whiteSpace:"nowrap",direction:"rtl"}}>{tgt?"🕐 ":""}{tgtTxt}</div>
+  </>;
   const cardProps=(a,label)=>({onTouchStart:e=>start(e,a,label),onContextMenu:e=>e.preventDefault(),style:{WebkitTouchCallout:"none",WebkitUserSelect:"none",userSelect:"none"}});
   return {drag,ghost,cardProps,justDragged,start};
 }
@@ -12668,7 +12675,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="156";
+const APP_BUILD="157";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
