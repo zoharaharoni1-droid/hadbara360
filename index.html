@@ -4107,7 +4107,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   const isStaff=currentUser.role!=="מדביר";
   const [showHist,setShowHist]=useState(false);
   const [sheet,setSheet]=useState(null); // "phone" | "nav" | "quick"
-  const [sec,setSec]=useState({task:false,log:false,doc:false,notes:false});
+  const [sec,setSec]=useState({task:true,log:false,doc:false,notes:false});
   const tog=k=>setSec(s=>({...s,[k]:!s[k]}));
   const [noteTxt,setNoteTxt]=useState("");
   const saveEdit=(extra={})=>{
@@ -4162,6 +4162,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
           <div style={{fontSize:20,fontWeight:900,color:"#0f172a",lineHeight:1.25,cursor:onViewCustomer&&appt.customerId?"pointer":"default"}} onClick={()=>onViewCustomer&&appt.customerId&&onViewCustomer(appt.customerId)}>{appt.customerName}</div>
           {contact&&<div style={{fontSize:13,color:"#475569",marginTop:2}}>👤 איש קשר: {contact}</div>}
         </div>
+        {onEditFull&&onSaveEdit&&appt.kind!=="free"&&!editMode&&<button type="button" onClick={()=>onEditFull(appt)} title="עריכת התור" style={{height:36,borderRadius:10,border:"1px solid #1a5c3a",background:"#fff",color:"#1a5c3a",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",padding:"0 10px",flexShrink:0,alignSelf:"center"}}>✏️ עריכה</button>}
         <button type="button" onClick={()=>setSheet("quick")} title="פעולות מהירות" style={{width:44,height:44,borderRadius:14,border:"none",background:"#0f172a",color:"#fff",fontSize:20,cursor:"pointer",flexShrink:0,boxShadow:"0 4px 12px rgba(15,23,42,.25)"}}>⚡</button>
       </div>
       {phone?<button type="button" onClick={()=>setSheet("phone")} style={row}><span style={{fontSize:18}}>📞</span><span style={{flex:1,direction:"ltr",textAlign:"right",fontWeight:700}}>{phone}</span><span style={{fontSize:12,color:"#16a34a",fontWeight:700}}>התקשר / וואטסאפ ›</span></button>
@@ -4169,8 +4170,13 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {appt.address?<button type="button" onClick={()=>setSheet("nav")} style={row}><span style={{fontSize:18}}>📍</span><span style={{flex:1,fontWeight:700}}>{appt.address}{appt.unit?<span style={{fontWeight:500,color:"#64748b"}}> · {appt.unit}</span>:null}</span><span style={{fontSize:12,color:"#2563eb",fontWeight:700}}>ניווט ›</span></button>:null}
       <div style={{...row,cursor:"default",marginBottom:0}}><span style={{fontSize:18}}>🕐</span><span style={{flex:1,fontWeight:700}}>{fmtDate(appt.date)} · {isAllDay(appt)?ALL_DAY_TW:<span dir="ltr" style={{whiteSpace:"nowrap",display:"inline-block"}}>{appt.timeWindow||appt.time||""}</span>}</span><ProgressBadge prog={prog}/></div>
     </div>
-    {onEditFull&&onSaveEdit&&appt.kind!=="free"&&!editMode&&<button type="button" onClick={()=>onEditFull(appt)} style={{width:"100%",marginBottom:12,padding:"12px",borderRadius:12,border:"1.5px solid #1a5c3a",background:"#fff",color:"#1a5c3a",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✏️ עריכת התור — כל הפרטים (לקוח, מזיקים, שעה / כל היום…)</button>}
-    {appt.kind!=="free"&&!editMode&&(()=>{ const ps=Array.isArray(appt.pests)&&appt.pests.length?appt.pests:String(appt.pestType||"").split(/\s*[,،+]\s*/).filter(Boolean); return ps.length&&buildPrepOnlyText({name:"",pests:ps})?<button type="button" onClick={()=>sendPrepWA(appt.contactName||appt.customerName,appt.phone||((customers||[]).find(c=>c.id===appt.customerId)||{}).phone,ps)} style={{width:"100%",marginBottom:12,padding:"10px",borderRadius:12,border:"1px solid #93c5fd",background:"#eff6ff",color:"#1e40af",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📋 שלח ללקוח הנחיות לפני / בזמן / אחרי ({ps.join(", ")})</button>:null; })()}
+    {appt.kind!=="free"&&!editMode&&appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:isStaff?"1fr 1fr":"1fr",gap:8,marginBottom:10}}>
+      {lg?<button type="button" onClick={()=>onFillLog(appt)} style={{...pill("#f0fdf4","#166534","#86efac"),padding:"12px 8px",fontSize:15}}>📋 יומן {lg.docNum||""} ✓</button>
+        :<button type="button" onClick={()=>onFillLog(appt)} style={{...pill(CLR.primary,"#fff"),padding:"12px 8px",fontSize:15}}>✍️ מלא יומן ביצוע</button>}
+      {isStaff&&(docs.length?<button type="button" onClick={()=>tog("doc")} style={{...pill("#eff6ff","#1d4ed8","#93c5fd"),padding:"12px 8px",fontSize:15}}>🧾 {(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")} ✓</button>
+        :<button type="button" onClick={()=>onInvoice(appt)} style={{...pill("#0f766e","#fff"),padding:"12px 8px",fontSize:15}}>🧾 חשבונית / קבלה</button>)}
+    </div>}
+    {appt.kind!=="free"&&!editMode&&(()=>{ const ps=Array.isArray(appt.pests)&&appt.pests.length?appt.pests:String(appt.pestType||"").split(/\s*[,،+]\s*/).filter(Boolean); return ps.length&&buildPrepOnlyText({name:"",pests:ps})?<button type="button" onClick={()=>sendPrepWA(appt.contactName||appt.customerName,appt.phone||((customers||[]).find(c=>c.id===appt.customerId)||{}).phone,ps)} style={{width:"100%",marginBottom:10,padding:"7px 10px",borderRadius:10,border:"1px dashed #93c5fd",background:"#f8fbff",color:"#1e40af",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>📋 שלח הנחיות לפני / בזמן / אחרי</button>:null; })()}
     {appt.kind==="free"&&<div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:14,padding:"12px 14px",marginBottom:12}}>
       <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:6}}>✍️ רישום מהיר</div>
       <div style={{whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.5,color:"#0f172a"}}>{appt.freeText||appt.rawMsg}</div>
@@ -4242,7 +4248,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
           <button type="button" onClick={()=>shareExecLogPdf(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>📄 PDF</button>
         </div>
       </DetSec>
-      :appt.status!=="בוטל"&&<button type="button" onClick={()=>onFillLog(appt)} style={{...pill(CLR.primary,"#fff"),width:"100%",padding:"13px",fontSize:16,marginBottom:10}}>✍️ מלא יומן ביצוע</button>}
+      :null}
 
     {/* ── חשבונית / קבלה ── */}
     {docs.length>0?<DetSec icon="🧾" title="חשבונית / קבלה" sub={docs.map(d=>(d.docType||"חשבונית")+" "+(d.invoiceNum||"")).join(" · ")} open={sec.doc} onToggle={()=>tog("doc")} accent="#1d4ed8"
@@ -4255,7 +4261,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         </div>)}
         {isStaff&&<button type="button" onClick={()=>onInvoice(appt)} style={{...pill("#fff","#1d4ed8","#93c5fd"),width:"100%",marginTop:10}}>+ מסמך נוסף</button>}
       </DetSec>
-      :isStaff&&appt.status!=="בוטל"&&(lg||appt.status==="בוצע")&&<button type="button" onClick={()=>onInvoice(appt)} style={{...pill("#eff6ff","#1d4ed8","#93c5fd"),width:"100%",padding:"12px",fontSize:15,marginBottom:10}}>🧾 הפק חשבונית / קבלה</button>}
+      :null}
 
     {/* ── הערות מעקב ── */}
     <DetSec icon="💬" title="הערות מעקב" sub={followups.length?followups[followups.length-1].text:"למשל: הלקוח התקשר — המלכודת נפלה, צריך לחזור"} open={sec.notes} onToggle={()=>tog("notes")} accent="#7c3aed"
@@ -12679,7 +12685,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="159";
+const APP_BUILD="160";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
