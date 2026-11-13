@@ -96,6 +96,8 @@ function loadScript(urls,cb,i){
     .mob-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   }
   html{overflow-x:hidden}
+  .h360-nohints .h360-hint{display:none!important}
+  .h360-nohints input::placeholder,.h360-nohints textarea::placeholder{color:transparent}
   .h360-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:10px;align-items:start}
   .h360-split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
   .h360-split>.h360-side{position:sticky;top:12px}
@@ -5241,7 +5243,7 @@ function FieldCard({title,extra,children}){
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,paddingBottom:10,borderBottom:`1px solid #eef0f2`}}>
       <div style={{width:4,height:16,background:CLR.primary,borderRadius:2}}/>
       <span style={{fontSize:13,fontWeight:700,color:CLR.primary}}>{title}</span>
-      {extra&&<span style={{fontSize:11,color:CLR.muted,fontWeight:400}}>{extra}</span>}
+      {extra&&<span className={typeof extra==="string"?"h360-hint":undefined} style={{fontSize:11,color:CLR.muted,fontWeight:400,marginRight:typeof extra==="string"?0:"auto"}}>{extra}</span>}
     </div>
     {children}
   </div>;
@@ -6217,7 +6219,7 @@ function IntakeTextBox({value,onChange,onFill,cityNames,custOnly}){
     ...(res.notes||[]).filter(cleanNote).map(n=>"📝 הערה: "+n)].filter(Boolean):[];
   return <div className="h360-intake" style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
     <b style={{color:"#166534",fontSize:15}}>📝 כתוב חופשי · ✨ מילוי חכם</b>
-    <div style={{fontSize:12,color:"#166534",margin:"2px 0 8px"}}>נשמר כמו שהוא, וכולם רואים אותו — גם המדביר בשטח. אפשר לשמור רק את זה, ולהשלים את השדות למטה מתי שנוח.</div>
+    <div className="h360-hint" style={{fontSize:12,color:"#166534",margin:"2px 0 8px"}}>נשמר כמו שהוא, וכולם רואים אותו — גם המדביר בשטח. אפשר לשמור רק את זה, ולהשלים את השדות למטה מתי שנוח.</div>
     <textarea value={value||""} onChange={e=>upd(e.target.value)} rows={4} placeholder={"למשל: יובל משווארמה שמש, 0521234567, הרצל 12 ראשון לציון, ג׳וקים במטבח, לבוא ביום שלישי בבוקר"} style={{width:"100%",boxSizing:"border-box",padding:"10px",borderRadius:10,border:"1px solid #86efac",fontSize:15,fontFamily:"inherit",resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
       <MicButton label="🎤 דבר" onText={add}/>
@@ -6227,7 +6229,7 @@ function IntakeTextBox({value,onChange,onFill,cityNames,custOnly}){
     {res&&(chips.length>0)&&<div style={{marginTop:8}}>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontSize:12}}>{c}</span>)}</div>
       <button type="button" onClick={()=>onFill(res,value)} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✨ מלא את השדות למטה מהטקסט</button>
-      <div style={{fontSize:11,color:"#64748b",marginTop:4,textAlign:"center"}}>הטקסט נשאר כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
+      <div className="h360-hint" style={{fontSize:11,color:"#64748b",marginTop:4,textAlign:"center"}}>הטקסט נשאר כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
     </div>}
   </div>;
 }
@@ -6357,6 +6359,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const ilCityCode=(ilCities.find(c=>c.name===String(f.city||"").trim())||{}).code;
   const ilStreets=useIlStreets(ilCityCode);
   const notesHas=t=>String(f.notes||"").split(",").map(x=>x.trim()).includes(t);
+  const [chipsOpen,setChipsOpen]=useState(false); const [myChips,setMyChips]=useState(()=>{ try{ return JSON.parse(localStorage.getItem("h360_note_chips")||"[]"); }catch(e){ return []; } });
   const addNote=t=>{ if(notesHas(t)) return; set("notes",f.notes?f.notes+", "+t:t); };
 
   const allPests=()=>[...f.pests,...(f.customPest.trim()?[f.customPest.trim()]:[])];
@@ -6640,19 +6643,26 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         </div>}
       </div>
       {f.prefDate&&<div style={{fontSize:12,color:CLR.primary}}>🕐 {f.allDay?<>הגעה: {fmtDate(f.prefDate)} · במהלך היום</>:<>חלון הגעה: {fmtDate(f.prefDate)} בין {f.timeFrom} ל-{f.timeTo}</>}</div>}
-      {f.prefDate&&!f.allDay&&<div style={{fontSize:11,color:CLR.muted,marginTop:4}}>💡 אפשר לשבץ כמה עבודות באותו חלון שעות — היומן לא חוסם חפיפות.</div>}
+      {f.prefDate&&!f.allDay&&<div className="h360-hint" style={{fontSize:11,color:CLR.muted,marginTop:4}}>💡 אפשר לשבץ כמה עבודות באותו חלון שעות — היומן לא חוסם חפיפות.</div>}
     </FieldCard>
 
     </>}
-    <FieldCard title={custOnly?"הערות קבועות על הלקוח":"הערות להזמנה הזו"}>
-      {f.custNotes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"7px 10px",fontSize:13,marginBottom:8}}>⚠️ <b>הערות קבועות על הלקוח:</b> {f.custNotes}</div>}
-      <QuickChips chips={custOnly?QUICK_NOTES:QUICK_NOTES.filter(c=>/בעל חיים|ילדים|הריון|חצי שעה/.test(c))} onPick={addNote} isOn={notesHas}/>
+    <FieldCard title={custOnly?"הערות קבועות על הלקוח":"הערות להזמנה הזו"} extra={custOnly?null:<button type="button" onClick={()=>setChipsOpen(x=>!x)} style={{border:"1px solid #bae6fd",background:chipsOpen?"#f0f9ff":"#fff",color:"#0369a1",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{chipsOpen?"− הסתר":"＋ לחצנים מהירים"}</button>}>
+      {f.custNotes&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:8,padding:"7px 10px",fontSize:13,marginBottom:8}}>⚠️ <b>הערות קבועות על הלקוח:</b> {f.custNotes}</div>}
+      {custOnly?<QuickChips chips={QUICK_NOTES} onPick={addNote} isOn={notesHas}/>
+        :chipsOpen&&<div style={{marginBottom:4}}>
+          <QuickChips chips={[...QUICK_NOTES.filter(c=>/בעל חיים|ילדים|הריון|חצי שעה/.test(c)),...myChips]} onPick={addNote} isOn={notesHas}/>
+          <div style={{display:"flex",gap:10,marginTop:-4,marginBottom:10,flexWrap:"wrap"}}>
+            <button type="button" onClick={()=>{ const t=(prompt("טקסט ללחצן מהיר חדש (למשל: יש קוד לשער)")||"").trim(); if(!t) return; const n=[...myChips.filter(x=>x!==t),t]; setMyChips(n); try{localStorage.setItem("h360_note_chips",JSON.stringify(n));}catch(e){} addNote(t); }} style={{border:"1px dashed #93c5fd",background:"#fff",color:"#0369a1",borderRadius:20,padding:"4px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>＋ לחצן חדש</button>
+            {myChips.length>0&&<button type="button" onClick={()=>{ const t=prompt("איזה לחצן להסיר?\n"+myChips.join("\n")); if(!t) return; const n=myChips.filter(x=>x!==t.trim()); setMyChips(n); try{localStorage.setItem("h360_note_chips",JSON.stringify(n));}catch(e){} }} style={{border:"none",background:"none",color:"#94a3b8",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>הסר לחצן</button>}
+          </div>
+        </div>}
       <Txt label="" value={f.notes} onChange={v=>set("notes",v)} rows={2} placeholder={custOnly?"מה חשוב לזכור על הלקוח בכל ביקור (כלב, קוד שער, משלם רק בביט…)":"מה המדביר צריך לדעת על הביקור הזה (חניה, שעה, להתקשר לפני…)"}/>
     </FieldCard>
 
     {/* Schedule — בחירת מדביר בלחיצה */}
     {!custOnly&&<div style={{background:CLR.primaryLight,border:`1px solid ${CLR.primary}33`,borderRadius:12,padding:"14px 18px",marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:700,color:CLR.primary,marginBottom:10}}>📅 שיגור למדביר <span style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(לחיצה על שם = שיגור ליומן שלו בשמירה)</span></div>
+      <div style={{fontSize:14,fontWeight:700,color:CLR.primary,marginBottom:10}}>📅 שיגור למדביר <span className="h360-hint" style={{fontWeight:400,color:CLR.muted,fontSize:12}}>(לחיצה על שם = שיגור ליומן שלו בשמירה)</span></div>
       {routeSuggestion&&!schedWorker&&<div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>🗺️ מוצע לפי אזור: <b>{routeSuggestion.name}</b></div>}
       <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
         {workers.filter(w=>isTech(w)&&w.status==="פעיל").map(w=>{const on=doSchedule&&String(schedWorker)===String(w.id);return <button key={w.id} type="button"
@@ -6985,6 +6995,7 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
 }
 
 function NewOrderPage({customers,setCustomers,appointments,setAppointments,workers,goToCustomers}){
+  const [hints,setHints]=useState(()=>{ try{ const v=localStorage.getItem("h360_order_hints"); if(v!=null) return v==="1"; }catch(e){} return window.innerWidth>=900; });
   // 📲 הודעה ששותפה מוואטסאפ ("שיתוף" → הדברה 360) — ממלאת את ההזמנה אוטומטית
   const [shared]=useState(()=>{ try{ const t=sessionStorage.getItem("h360_share"); if(t){ sessionStorage.removeItem("h360_share"); return {text:t,n:Date.now()}; } }catch(e){} return null; });
   const recent=appointments.filter(a=>!isPersonal(a)).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||b.id-a.id);
@@ -6997,11 +7008,14 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
   React.useEffect(()=>{ if(slot.date) setViewDate(slot.date); },[slot.date]);
   const doPick=p=>{ setPick({...p,n:Date.now()}); setShowCal(false); };
   const panel=compact=><AvailabilityPanel appointments={appointments} workers={workers} date={viewDate} setDate={setViewDate} sel={slot} onPick={doPick} compact={compact}/>;
-  const form=<div style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:wide?"22px 24px":"16px"}}>
+  const form=<div className={hints?undefined:"h360-nohints"} style={{background:CLR.white,border:`1px solid ${CLR.border}`,borderRadius:12,padding:wide?"22px 24px":"16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,flexWrap:"wrap"}}>
         <div>
-          <h2 style={{color:CLR.primary,fontSize:18,margin:"0 0 6px"}}>📝 הזמנת עבודה חדשה</h2>
-          <p style={{color:CLR.muted,fontSize:13,margin:"0 0 16px"}}>קליטת לקוח, פרטי ההדברה, זמן מועדף ומחיר — עם אפשרות לשגר ישירות ליומן של מדביר.</p>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",margin:"0 0 6px"}}>
+            <h2 style={{color:CLR.primary,fontSize:18,margin:0}}>📝 הזמנת עבודה חדשה</h2>
+            <button type="button" onClick={()=>{ const v=!hints; setHints(v); try{localStorage.setItem("h360_order_hints",v?"1":"0");}catch(e){} }} style={{border:"1px solid "+(hints?"#0284c7":"#cbd5e1"),background:hints?"#f0f9ff":"#fff",color:hints?"#0369a1":"#64748b",borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>💡 {hints?"הסתר הסברים":"הסברים"}</button>
+          </div>
+          <p className="h360-hint" style={{color:CLR.muted,fontSize:13,margin:"0 0 16px"}}>קליטת לקוח, פרטי ההדברה, זמן מועדף ומחיר — עם אפשרות לשגר ישירות ליומן של מדביר.</p>
         </div>
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
@@ -12747,7 +12761,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="164";
+const APP_BUILD="165";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
