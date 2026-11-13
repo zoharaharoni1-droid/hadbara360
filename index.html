@@ -2598,7 +2598,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [scopeAdd,setScopeAdd]=useState("");
   const regAll=useRegProducts(); const TM_REF=React.useRef(null);
   const chemNames=React.useMemo(()=>[...new Set([...kit.map(k=>k.name),...regAll.map(r=>r[0]),...Object.keys(chemMem||{}),...myChemicals(execLogs,defaultWorker.name),...CHEMICALS.map(c=>c.name)])],[regAll,chemMem]);
-  const [review,setReview]=useState(null); const [showPrev,setShowPrev]=useState(false);
+  const [review,setReview]=useState(null); const [showPrev,setShowPrev]=useState(false); const [barMore,setBarMore]=useState(false);
   // סוג היומן — נשמר לכל מדביר: "steps" לפי שלבים / "flat" רציף
   const modeKey="h360_logmode_"+String(defaultWorker.name||"x");
   const [logMode,setLogModeS]=useState(()=>{ try{ return localStorage.getItem(modeKey)||"steps"; }catch(e){ return "steps"; } });
@@ -2959,7 +2959,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <button onClick={addExtraWorker} style={{marginTop:10,background:"none",border:"1px dashed #86efac",borderRadius:8,padding:"6px 14px",fontSize:12,color:CLR.primary,cursor:"pointer",fontFamily:"inherit",width:"100%"}}>+ הוסף מדביר נוסף</button>
     </div>
     </>)}
-    <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.96)",backdropFilter:"blur(6px)",padding:"10px 0 calc(10px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
+    <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.97)",backdropFilter:"blur(6px)",padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
     {(()=>{
       const buildData=()=>({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
       const problems=send=>{ const P=[]; const add=(sec,label,block)=>P.push({sec,label,block:!!block});
@@ -3007,14 +3007,16 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           <Btn style={{flex:"2 1 180px",background:"#0f766e",border:"none"}} onClick={()=>{setShowPrev(false);go(false,true);}}>🧾 שמור והמשך לחשבונית</Btn>
         </div>
       </Modal></div>,document.body)}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Btn full onClick={()=>go(false,true)} style={{flex:"2 1 220px",background:"#0f766e",border:"none"}}>🧾 שמור והמשך לחשבונית</Btn>
-        <Btn full onClick={()=>go(true)} style={{flex:"1 1 150px",background:"#25D366",border:"none"}}>📤 שמור ושלח</Btn>
-        <Btn full v="secondary" onClick={()=>go(false)} style={{flex:"1 1 100px"}}>💾 שמור</Btn>
-        <Btn full v="ghost" onClick={()=>onPreview(buildData(),{draft:true})} style={{flex:"1 1 100%",padding:"9px",border:"1.5px dashed #f59e0b",color:"#92400e",background:"#fffbeb"}}>📝 שמור טיוטה — אשלים אחר כך</Btn>
-        <Btn full v="ghost" onClick={()=>setShowPrev(true)} style={{flex:"1 1 100%",padding:"8px"}}>👁️ תצוגה מקדימה של היומן</Btn>
-      </div></>; })()}
-    {!valid&&<div style={{fontSize:12,color:CLR.muted,textAlign:"center",marginTop:6}}>* חובה: שם לקוח, כתובת, מזיקים + רמת נגיעות, חומר או מוצר הדברה, אצווה לכל חומר</div>}
+      {(()=>{ const bb={border:"none",borderRadius:10,padding:"10px 6px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",color:"#fff",flex:"1 1 0",minWidth:0};
+        return <div style={{display:"flex",gap:6}}>
+          <button type="button" onClick={()=>go(false,true)} style={{...bb,background:"#0f766e",flex:"1.4 1 0"}}>🧾 שמור + חשבונית</button>
+          <button type="button" onClick={()=>go(true)} style={{...bb,background:"#25D366"}}>📤 שמור ושלח</button>
+          <button type="button" onClick={()=>go(false)} style={{...bb,background:"#fff",color:CLR.primary,border:"1px solid #cbd5e1",flex:"0 0 auto",padding:"10px 12px"}}>💾</button>
+          <button type="button" onClick={()=>setBarMore(true)} style={{...bb,background:"#fff",color:"#334155",border:"1px solid #cbd5e1",flex:"0 0 auto",padding:"10px 12px"}}>⋯</button>
+        </div>; })()}
+      {barMore&&<ActionSheet title="עוד אפשרויות" items={[{icon:"💾",label:"שמור בלבד",onClick:()=>go(false)},{icon:"📝",label:"טיוטה — אשלים אחר כך",onClick:()=>onPreview(buildData(),{draft:true})},{icon:"👁️",label:"תצוגה מקדימה",onClick:()=>setShowPrev(true)}]} onClose={()=>setBarMore(false)}/>}
+      </>; })()}
+    {!valid&&<div style={{fontSize:11,color:CLR.muted,textAlign:"center",marginTop:4}}>* חובה: לקוח, כתובת, מזיקים + נגיעות, חומר + אצווה</div>}
     </div>
   </div></CompactCtx.Provider>;
 }
@@ -12677,7 +12679,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="158";
+const APP_BUILD="159";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
