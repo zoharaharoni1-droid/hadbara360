@@ -1792,7 +1792,7 @@ function jobProgress(appt, execLogs, finance){
   if(workDone) return {stage:"בוצע",label:"הבא: "+next,color:"#d97706",steps,next};
   if(appt.status==="בדרך") return {stage:"בדרך",label:"בדרך ללקוח",color:"#2563eb",steps,next:null};
   if(appt.status==="הגעתי") return {stage:"הגעתי",label:"בטיפול",color:"#ea580c",steps,next:null};
-  return {stage:"ממתין",label:"ממתין לביצוע",color:"#854d0e",steps,next:null};
+  return {stage:"ממתין",label:"ממתין לביצוע",color:"#0284c7",steps,next:null};
 }
 
 // Small horizontal progress tracker
@@ -4155,13 +4155,13 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   ]:[];
   const doneCount=logChecks.filter(x=>x[1]).length;
   const [v2,setV2]=useState(()=>{ try{ return localStorage.getItem("h360_appt_ui")!=="old"; }catch(e){ return true; } });
-  const freeBlk=<>{appt.kind==="free"&&<div style={{background:"#fffbeb",border:"1.5px solid #fcd34d",borderRadius:14,padding:"12px 14px",marginBottom:12}}>
-      <div style={{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:6}}>✍️ רישום מהיר</div>
+  const freeBlk=<>{appt.kind==="free"&&<div style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 2px rgba(2,132,199,.06)"}}>
+      <div style={{fontSize:13,fontWeight:800,color:"#0369a1",marginBottom:6}}>✍️ רישום מהיר</div>
       <div style={{whiteSpace:"pre-wrap",fontSize:15,lineHeight:1.5,color:"#0f172a"}}>{appt.freeText||appt.rawMsg}</div>
-      {onConvertFree&&<button type="button" onClick={()=>onConvertFree(appt)} style={{marginTop:10,width:"100%",padding:"11px",borderRadius:10,border:"none",background:CLR.primary,color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 השלם להזמנת עבודה מסודרת</button>}
-      <div style={{fontSize:11,color:"#92400e",marginTop:6}}>ההשלמה ממלאת את הטופס מהמלל, ואחרי השמירה הרישום הזה מוחלף בתור המסודר.</div>
+      {!v2&&onConvertFree&&<button type="button" onClick={()=>onConvertFree(appt)} style={{marginTop:10,width:"100%",padding:"11px",borderRadius:10,border:"none",background:CLR.primary,color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 השלם להזמנת עבודה מסודרת</button>}
+      {!v2&&<div style={{fontSize:11,color:"#64748b",marginTop:6}}>ההשלמה ממלאת את הטופס מהמלל, ואחרי השמירה הרישום הזה מוחלף בתור המסודר.</div>}
     </div>}</>;
-  const editBlk=<>{editMode&&<div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"14px",marginBottom:10}}>
+  const editBlk=<>{editMode&&<div style={{background:"#f8fbff",border:"1px solid #bae6fd",borderRadius:12,padding:"14px",marginBottom:10}}>
       <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>✏️ עריכת תור</div>
       <G2 gap={8}>
         <Inp label="תאריך" type="date" value={editData.date} onChange={v=>setE("date",v)}/>
@@ -4271,7 +4271,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       return <button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:T[0],color:T[1],border:"1px solid "+T[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
         <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span></button>; };
     const lineRow=(icon,label,on,right)=><button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 4px",border:"none",borderBottom:"1px solid #f1f5f9",background:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"#0f172a",textAlign:"right"}}><span style={{fontSize:17}}>{icon}</span><span style={{flex:1,fontWeight:600}}>{label}</span>{right}<span style={{color:"#cbd5e1"}}>‹</span></button>;
-    const canQuick=onSaveEdit&&appt.kind!=="free";
+    const canQuick=!!onSaveEdit;
     const openQuick=()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);};
     return <Modal title="פרטי תור" onClose={onClose} width={520}>
       <div style={{marginBottom:12}}>
@@ -4292,11 +4292,11 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </div>
       {appt.status==="בוטל"&&<div style={{background:"#fee2e2",color:"#991b1b",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600}}>❌ התור בוטל</div>}
       {freeBlk}
-      {appt.kind!=="free"&&appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+      {appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
         {lg?tile("📋","יומן ביצוע ✓",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח":"לא נשלח"),()=>onFillLog(appt),"ok"):tile("✍️","מלא יומן ביצוע","אחרי הטיפול",()=>onFillLog(appt),"go")}
         {isStaff&&(docs.length?tile("🧾",(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")+" ✓",docs[0].invoiceNum||"",()=>tog("doc"),"ok"):tile("🧾","חשבונית / קבלה","אפשר גם לפני היומן",()=>onInvoice(appt),"inv"))}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
-        {onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt))}
+        {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
       </div>}
       {editBlk}
       {!prog.personal&&<div style={{background:"#f8fafc",borderRadius:12,padding:"8px 10px",marginBottom:12}}><ProgressTrack steps={prog.steps}/>{prog.next&&<div style={{fontSize:12,color:"#0369a1",fontWeight:700,marginTop:4}}>⬅ הבא: {prog.next}</div>}</div>}
@@ -12754,7 +12754,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="162";
+const APP_BUILD="163";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
