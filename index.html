@@ -2373,9 +2373,14 @@ async function transcribeAudio(blob){
 const canPickContact=()=>{ try{ return !!(navigator.contacts&&navigator.contacts.select&&window.isSecureContext); }catch(e){ return false; } };
 function ContactPickBtn({onPick}){
   if(!canPickContact()) return null;
-  const pick=async()=>{ try{ const res=await navigator.contacts.select(["name","tel"],{multiple:false}); const c=res&&res[0]; if(!c) return;
-      const name=((c.name||[])[0]||"").trim(); let tel=((c.tel||[])[0]||"").replace(/[^\d+]/g,""); if(tel.startsWith("+972")) tel="0"+tel.slice(4); else if(tel.startsWith("972")) tel="0"+tel.slice(3);
-      onPick({name,tel}); }catch(e){ if(e&&e.name!=="AbortError") alert("לא הצלחתי לפתוח את אנשי הקשר"); } };
+  const pick=async()=>{ try{
+      let props=["name","tel"]; try{ const sup=await navigator.contacts.getProperties(); props=props.filter(p=>sup.includes(p)); if(!props.length) props=["tel"]; }catch(_){}
+      // בחלק ממכשירי סמסונג בחירה עם V מחזירה רשימה ריקה כשמבקשים איש קשר אחד — לכן מבקשים "כמה" ולוקחים את הראשון
+      const res=await navigator.contacts.select(props,{multiple:true});
+      const c=(res||[]).find(x=>x&&((x.tel||[]).length||(x.name||[]).length));
+      if(!c){ alert("לא התקבל איש קשר מהטלפון.\nנסה שוב: לחץ על השם (שיופיע V) ואז 'בוצע'.\nאם זה לא עובד — העתק את המספר ולחץ '📥 הדבק'."); return; }
+      const name=String((c.name||[])[0]||"").trim(); let tel=String((c.tel||[]).find(t=>/\d{6}/.test(String(t).replace(/\D/g,"")))||(c.tel||[])[0]||"").replace(/[^\d+]/g,""); if(tel.startsWith("+972")) tel="0"+tel.slice(4); else if(tel.startsWith("972")) tel="0"+tel.slice(3);
+      onPick({name,tel}); try{ showToast("✅ נוסף: "+[name,tel].filter(Boolean).join(" · ")); }catch(_){} }catch(e){ if(e&&e.name!=="AbortError") alert("לא הצלחתי לפתוח את אנשי הקשר ("+(e&&e.message||e)+")"); } };
   return <button type="button" onClick={pick} style={{border:"1.5px solid #93c5fd",background:"#fff",color:"#1d4ed8",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📇 מאנשי הקשר</button>;
 }
 const contactLine=({name,tel})=>[name?"איש קשר "+name:"",tel?"טלפון "+tel:""].filter(Boolean).join(" ");
@@ -6207,7 +6212,7 @@ function fillWithHighlight(container,doFill){
 }
 // ═══ 📝 תיאור חופשי + מילוי חכם: הטקסט נשמר כמו שהוא (כולם רואים), ואפשר גם למלא ממנו את השדות ═══
 const cleanNote=n=>{ const t=String(n||"").trim(); return t.length>=3&&t.length<=90&&!/\d{7,}/.test(t.replace(/[\s-]/g,"")); };
-function IntakeTextBox({value,onChange,onFill,cityNames,custOnly}){
+function IntakeTextBox({value,onChange,onFill,cityNames,custOnly,onContact}){
   const res=React.useMemo(()=>value&&String(value).trim()?waParse(value,cityNames):null,[value,cityNames.length]);
   const upd=v=>onChange(v);
   const add=t=>upd((value?value.replace(/\s+$/,"")+(/[.,\n]$/.test(value.trim())?" ":", "):"")+t);
@@ -6223,7 +6228,7 @@ function IntakeTextBox({value,onChange,onFill,cityNames,custOnly}){
     <textarea value={value||""} onChange={e=>upd(e.target.value)} rows={4} placeholder={"למשל: יובל משווארמה שמש, 0521234567, הרצל 12 ראשון לציון, ג׳וקים במטבח, לבוא ביום שלישי בבוקר"} style={{width:"100%",boxSizing:"border-box",padding:"10px",borderRadius:10,border:"1px solid #86efac",fontSize:15,fontFamily:"inherit",resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
       <MicButton label="🎤 דבר" onText={add}/>
-      <ContactPickBtn onPick={c=>add(contactLine(c))}/>
+      <ContactPickBtn onPick={c=>{ add(contactLine(c)); onContact&&onContact(c); }}/>
       <button type="button" onClick={paste} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>
     </div>
     {res&&(chips.length>0)&&<div style={{marginTop:8}}>
@@ -6461,7 +6466,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <button type="button" onClick={()=>setRestored(false)} style={{border:"1px solid #fcd34d",background:"#fff",color:"#92400e",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ המשך</button>
       <button type="button" onClick={startFresh} style={{border:"1px solid #fecaca",background:"#fff",color:"#b91c1c",borderRadius:10,padding:"6px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑️ התחל חדש</button>
     </div>}
-    <IntakeTextBox value={f.rawMsg} onChange={v=>set("rawMsg",v)} onFill={(r,raw)=>fillWithHighlight(ofRef,()=>applyWA(r,raw,true))} cityNames={ilCities.map(c=>c.name)} custOnly={custOnly}/>
+    <IntakeTextBox onContact={c=>{ if(c.tel&&!String(f.phone||"").trim()) set("phone",c.tel); if(c.name&&!String(f.name||"").trim()) set("name",c.name); }} value={f.rawMsg} onChange={v=>set("rawMsg",v)} onFill={(r,raw)=>fillWithHighlight(ofRef,()=>applyWA(r,raw,true))} cityNames={ilCities.map(c=>c.name)} custOnly={custOnly}/>
     <FieldCard title="פרטי לקוח">
       <div style={{marginBottom:12}}>
         <button type="button" onClick={()=>setShowExistingSearch(true)}
@@ -12761,7 +12766,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="165";
+const APP_BUILD="166";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
