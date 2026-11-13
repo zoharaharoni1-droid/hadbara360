@@ -8361,7 +8361,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       </div>}
       {custAppts.length>0&&<div style={{marginTop:6}}><label style={lbl}>קשר לתור (לא חובה)</label>
         <select value={apptId} onChange={e=>{setApptId(e.target.value);const a=appointments.find(x=>String(x.id)===e.target.value);if(a&&!lines[0].desc) setLines([{desc:"הדברת "+(a.pestType||"")+(a.address?" – "+a.address:""),qty:"1",unit:"יח׳",price:String(a.price||"")}]);}} style={inp}>
-          <option value="">—</option>{custAppts.map(a=><option key={a.id} value={a.id}>{fmtDate(a.date)} · {a.pestType} · ₪{a.price}</option>)}</select></div>}
+          <option value="">—</option>{custAppts.map(a=><option key={a.id} value={a.id}>{fmtDate(a.date)} · {(Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType)||"תור"}{a.address?" · "+a.address:""}</option>)}</select></div>}
     </div>
 
     {receiptOnly&&!P.refText&&!P.refund&&<div style={{...card,paddingBottom:4}}><Inp label="עבור חשבונית מס מספר (לא חובה — למשל חשבונית שהופקה ב'יש חשבונית')" value={extRef} onChange={setExtRef} placeholder="למשל 80118"/></div>}
@@ -12685,7 +12685,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="160";
+const APP_BUILD="161";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
