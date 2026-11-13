@@ -638,7 +638,7 @@ function AdminPanel({authUser,onClose}){
   );
 }
 
-const PEST_TYPES_CRM = ["ג'וקים","תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","נמלת האש","חרקי מזון","דג הכסף","פשפש המיטה","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים","צרעות","שלשולים"];
+const PEST_TYPES_CRM = ["תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","נמלת האש","חרקי מזון","דג הכסף","פשפש המיטה","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים","צרעות","שלשולים"];
 // מזיקים עם רמת נגיעות לכל מזיק: "תיקן אמריקאי (בינונית), נמלים (קלה)"
 const pestsWithLevels=l=>{ const lv=(l&&l.pestLevels)||{}; return (l&&l.pest||[]).map(p=>lv[p]?p+" (נגיעות "+lv[p]+")":p).join(", ")+((!l||!l.pestLevels||!Object.keys(l.pestLevels).length)&&l&&l.pestLevel?" · נגיעות "+l.pestLevel:""); };
 const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
@@ -968,7 +968,7 @@ const PEST_GUIDANCE = {
   "דבורים": ["לא להתקרב לנחיל/לקן","פינוי האזור בזמן הטיפול","טיפול בשעות החשכה מומלץ"],
   "צרעות": ["לא להתקרב לקן","פינוי האזור בזמן הטיפול","טיפול בשעות החשכה מומלץ"],
   "שלשולים": ["איתור אזורי לחות","פינוי גישה למרתף/חצר"],
-  "ג'וקים": ["פינוי גישה למטבח ולחדרי שירות","אין לשטוף משטחים מטופלים 24 שעות","פינוי קצר לפי סוג הטיפול"],
+  "תיקן אמריקאי": ["פינוי גישה למטבח ולחדרי שירות","אין לשטוף משטחים מטופלים 24 שעות","פינוי קצר לפי סוג הטיפול"],
 };
 
 
@@ -5571,46 +5571,39 @@ const prepMerged=()=>{ const saved=PREP_STORE.get(); const defs=prepDefaults(); 
   const out=saved.map(x=>{ if(x.v===PREP_VER||x.edited) return x; const d=defs.find(dd=>dd.pest===x.pest); return d?{...d,id:x.id}:x; });
   defs.forEach(d=>{ if(!out.some(x=>x.pest===d.pest)) out.push(d); }); return out; };
 const prepFor=pest=>{ const L=prepMerged(); const P=String(pest||"").trim(); return L.find(x=>x.pest===P)||L.find(x=>(x.aliases||[]).includes(P))||L.find(x=>[x.pest,...(x.aliases||[])].some(a=>a.length>2&&P.includes(a))); };
+// הנחיות לכמה מזיקים — הודעה אחת מאוחדת: מה שמשותף מופיע פעם אחת, ומה שייחודי מסומן בשם המזיק
+const PREP_TOPICS=[["panels",/לפנות.{0,12}הפאנלים/],["furniture",/רהיטים כבדים|ארונות גדולים/],["sink",/מתחת לכיור/],["dishes",/כלים|סירים/],["winB",/לפתוח חלונות לפני/],["access",/קיימת גישה לכל האזורים/],
+  ["waitOut",/להמתין מחוץ/],["mask",/מסכת נשימה|ציוד מגן/],["winD",/חלונות (?:פתוחים )?בזמן ההדברה|פתיחת חלונות בזמן/],["enter1h",/שעה אחת לפחות|במשך שעתיים לפחות/],["babies",/תינוקות עד גיל/],["pets",/בעלי חיים לאזור המטופל במשך/],
+  ["dry",/התייבשו לחלוטין/],["wash24",/24 השעות/],["crawl",/תינוק זוחל/],["food",/במגע עם מזון/],["wet",/נותרו אזורים רטובים/],["field",/הנחיות המדביר בשטח גוברות/],["efficacy",/יעילות ההדברה תלויה/],["walkthrough",/סיור קצר/]];
+const prepTopic=t=>{ const f=PREP_TOPICS.find(([k,re])=>re.test(t)); return f?f[0]:"t:"+t; };
+const prepPestLabel=p=>p==="ג'וקים"||p==="ג׳וקים"?"תיקן אמריקאי":p;
 function prepSectionLines(pests){
-  const lines=[];
-  const seenP=new Set(); const relevantPests = pests.filter(p=>{ const e=prepFor(p); if(!e||seenP.has(e.pest)) return false; seenP.add(e.pest); return true; });
-  if(relevantPests.length>0){
-    relevantPests.forEach(pest=>{
-      const inst = prepFor(pest);
-      lines.push("");
-      lines.push("━━━━━━━━━━━━━━━━━━━━");
-      lines.push("📌 *הנחיות — "+pest+"*");
-      lines.push("━━━━━━━━━━━━━━━━━━━━");
-      if(inst.before&&inst.before.length){
-        lines.push("");
-        lines.push("🔵 *לפני הטיפול:*");
-        inst.before.forEach(t=>lines.push("• "+t));
-      }
-      if(inst.during&&inst.during.length){
-        lines.push("");
-        lines.push("🟡 *בזמן הטיפול:*");
-        inst.during.forEach(t=>lines.push("• "+t));
-      }
-      if(inst.after&&inst.after.length){
-        lines.push("");
-        lines.push("🟢 *לאחר הטיפול:*");
-        inst.after.forEach(t=>lines.push("• "+t));
-      }
-      if(inst.important&&inst.important.length){
-        lines.push("");
-        lines.push("❗ *דגשים חשובים:*");
-        inst.important.forEach(t=>lines.push("• "+t));
-      }
-    });
-    lines.push("");
-    lines.push("━━━━━━━━━━━━━━━━━━━━");
-    lines.push("✅ *יעילות ההדברה תלויה בהכנת המקום ובשמירה על ההנחיות.*");
-  }
+  const seenP=new Set(); const list=[];
+  (pests||[]).forEach(p=>{ const e=prepFor(p); if(!e||seenP.has(e.pest)) return; seenP.add(e.pest); list.push({name:prepPestLabel(e.pest==="תיקן אמריקאי"?"תיקן אמריקאי":e.pest),inst:e}); });
+  if(!list.length) return [];
+  const multi=list.length>1; const lines=[];
+  const parts=[["before","🔵 *לפני הטיפול*"],["during","🟡 *בזמן הטיפול*"],["after","🟢 *אחרי הטיפול*"],["important","❗ *חשוב לדעת*"]];
+  const usedTopics=new Set();
+  parts.forEach(([k,title])=>{
+    const common=new Map(); const own=[];
+    list.forEach(({name,inst})=>(inst[k]||[]).forEach(t=>{ const tp=prepTopic(t); if(tp==="efficacy") return;
+      if(tp.startsWith("t:")){ if(!own.some(o=>o.t===t)) own.push({name,t}); return; }
+      if(usedTopics.has(tp)&&!common.has(tp)) return;
+      const cur=common.get(tp); if(!cur||t.length>cur.length) common.set(tp,t); }));
+    [...common.keys()].forEach(tp=>usedTopics.add(tp));
+    if(!common.size&&!own.length) return;
+    lines.push("",title);
+    [...common.values()].forEach(t=>lines.push("• "+t));
+    if(multi){ list.forEach(({name})=>{ const mine=own.filter(o=>o.name===name); if(mine.length){ lines.push("_"+name+":_"); mine.forEach(o=>lines.push("• "+o.t)); } }); }
+    else own.forEach(o=>lines.push("• "+o.t));
+  });
   return lines;
 }
 // 📋 הודעה עם ההנחיות בלבד (לפני / בזמן / אחרי) — לשליחה מהזמנת עבודה, מהיומן או מכל מקום
 function buildPrepOnlyText({name,pests}){ const sec=prepSectionLines(pests||[]); if(!sec.length) return "";
-  return ["שלום"+(name?" *"+String(name).trim().split(" ")[0]+"*":"")+" 👋","","לקראת ההדברה — ריכזנו עבורך מה חשוב לעשות לפני הטיפול, בזמן הטיפול ואחריו:",...sec,"","לשאלות נשמח לעמוד לרשותך 😊",COMPANY.name+" 🦟"].join("\n"); }
+  const names=[...new Set((pests||[]).filter(p=>prepFor(p)).map(p=>prepPestLabel(prepFor(p).pest)))];
+  const nm=names.length>1?names.slice(0,-1).join(", ")+" ו"+names[names.length-1]:names[0];
+  return ["שלום"+(name?" *"+String(name).trim().split(" ")[0]+"*":"")+" 👋","","לקראת הטיפול ב*"+nm+"*, הנה מה שחשוב לדעת:",...sec,"","יעילות הטיפול תלויה גם בהכנה ובשמירה על ההנחיות 🙏","לשאלות — אנחנו כאן 😊",COMPANY.name].join("\n"); }
 function sendPrepWA(name,phone,pests){ const text=buildPrepOnlyText({name,pests}); if(!text) return alert("אין עדיין הנחיות למזיקים האלה — אפשר להוסיף ב'תבניות הודעה' ← 'לפני / בזמן / אחרי'");
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972"); if(ph) window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(text),"_blank"); else shareText(text); }
 function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, address, company}){
@@ -5746,7 +5739,7 @@ function suggestWorker(address, workers){
 // ═══ הדבקת הודעת וואטסאפ → מילוי אוטומטי של הזמנת עבודה (בתוך הדפדפן, בלי שירות חיצוני) ═══
 const WA_CITIES=["תל אביב","תל-אביב","ת\"א","יפו","רמת גן","ר\"ג","גבעתיים","בני ברק","ב\"ב","פתח תקווה","פתח תקוה","פ\"ת","חולון","בת ים","ראשון לציון","ראשל\"צ","רחובות","נס ציונה","יבנה","לוד","רמלה","יהוד","יהוד-מונוסון","אור יהודה","קריית אונו","קרית אונו","גבעת שמואל","סביון","גני תקווה","הרצליה","רמת השרון","רעננה","כפר סבא","הוד השרון","נתניה","ראש העין","אלעד","שוהם","מודיעין","אשדוד","אשקלון","ירושלים","חיפה","באר שבע","גדרה","קריית עקרון","מזכרת בתיה","באר יעקב","אזור","כפר יונה","טייבה","קלנסווה","כפר קאסם","ראש פינה","אריאל","גבעת שמואל","קריית גת","כפר שמריהו","אבן יהודה","קדימה","צורן","תל מונד","זכרון יעקב","חדרה","בית שמש","מעלה אדומים"];
 const WA_CITY_NORM={"תל-אביב":"תל אביב","ת\"א":"תל אביב","ר\"ג":"רמת גן","ב\"ב":"בני ברק","פ\"ת":"פתח תקווה","פתח תקוה":"פתח תקווה","ראשל\"צ":"ראשון לציון","ראשון":"ראשון לציון","קרית אונו":"קריית אונו","יהוד-מונוסון":"יהוד"};
-const WA_PESTS=[[/ג.?וק|תיקנ|תיקן/,"ג'וקים"],[/אמריקא/,"תיקן אמריקאי"],[/גרמני/,"תיקן גרמני"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/נמל/,"נמלים"],[/יתוש/,"יתושים"],[/טרמיט/,"טרמיטים"],[/זבוב/,"זבובים"],[/פרעוש|פרושים|פירעוש/,"פרעושים"],[/עכביש/,"עכבישים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/שלשול/,"שלשולים"],[/פשפש/,"פשפש מיטה"],[/קרצי/,"קרציות"],[/(?<![א-ת])(?:ה|ב)?נחש(?:ים)?(?![א-ת])/,"נחש"],[/(?<![א-ת])יונ(ים|ה)(?![א-ת])/,"יונים"],[/דג.?הכסף|דג כסף/,"דג הכסף"],[/(?<![א-ת])עש(?![א-ת])/,"עש"],[/חדקונית/,"חדקונית"],[/חיפושי/,"חיפושיות"],[/ברחש/,"ברחשים"],[/עקרב/,"עקרבים"],[/צרצר/,"צרצרים"],[/תריפס|טריפס/,"תריפסים"],[/(?<![א-ת])זבובונ|יתושונ|דרוזופיל/,"זבובוני פירות"]];
+const WA_PESTS=[[/ג.?וק|תיקנ|תיקן/,"__roach"],[/אמריקא/,"תיקן אמריקאי"],[/גרמני/,"תיקן גרמני"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/נמל/,"נמלים"],[/יתוש/,"יתושים"],[/טרמיט/,"טרמיטים"],[/זבוב/,"זבובים"],[/פרעוש|פרושים|פירעוש/,"פרעושים"],[/עכביש/,"עכבישים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/שלשול/,"שלשולים"],[/פשפש/,"פשפש מיטה"],[/קרצי/,"קרציות"],[/(?<![א-ת])(?:ה|ב)?נחש(?:ים)?(?![א-ת])/,"נחש"],[/(?<![א-ת])יונ(ים|ה)(?![א-ת])/,"יונים"],[/דג.?הכסף|דג כסף/,"דג הכסף"],[/(?<![א-ת])עש(?![א-ת])/,"עש"],[/חדקונית/,"חדקונית"],[/חיפושי/,"חיפושיות"],[/ברחש/,"ברחשים"],[/עקרב/,"עקרבים"],[/צרצר/,"צרצרים"],[/תריפס|טריפס/,"תריפסים"],[/(?<![א-ת])זבובונ|יתושונ|דרוזופיל/,"זבובוני פירות"]];
 const WA_NUM_WORDS={"אחד":1,"אחת":1,"שתיים":2,"שניים":2,"שני":2,"שתי":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10};
 // מילים של מזיקים (לניקוי כתובת/שם) ושמות חברות שדומים למזיקים ("סטופ פשפש", "אנטי ג'וק"...)
 const WA_PEST_WORD=/(?:הדברת\s+|ריסוס\s+|טיפול\s+ב?)?[א-ת'׳]*(?:פשפש|חיפושי|ברחש|עקרב|צרצר|ג['׳]?וק|תיקנ|תיקן|נמל|עכבר|חולד|מכרסמ|יתוש|זבוב|פרעוש|פרושים|טרמיט|צרע|דבור|עכביש|קרצי|שלשול|מזיק)[א-ת'׳]*/g;
@@ -5778,7 +5771,7 @@ function waParse(raw, cityNames){
   if(!out.brand){ const sl=lines.find(isSrcLine); if(sl) out.brand=sl; }
   const pt=text.replace(WA_BRAND," ");
   const pests=[]; WA_PESTS.forEach(([re,name])=>{ if(re.test(pt)&&!pests.includes(name)) pests.push(name); });
-  if(pests.includes("תיקן אמריקאי")||pests.includes("תיקן גרמני")){ const i=pests.indexOf("ג'וקים"); if(i>=0) pests.splice(i,1); }
+  { const i=pests.indexOf("__roach"); if(i>=0){ if(pests.includes("תיקן אמריקאי")||pests.includes("תיקן גרמני")) pests.splice(i,1); else pests[i]="תיקן אמריקאי"; } }
   if(pests.length){ out.pests=pests; out.found.push("מזיק"); }
   // סוג נכס
   const PT=[[/בניין משותף|בנין משותף|ועד בית|ועד הבית|חדר מדרגות|לובי/,"בניין משותף"],[/בית פרטי|וילה|קוטג|דו.?משפחתי|בית קרקע/,"בית פרטי"],[/מסעדה|בית קפה|פיצרי/,"מסעדה"],[/משרד/,"משרד"],[/גן ילדים|גנון|פעוטון/,"גן ילדים"],[/מחסן/,"מחסן"],[/חנות|עסק|מאפי|סופר|מספרה|קיוסק/,"עסק"],[/מלון|צימר/,"מלון"],[/דירה|דירת|דירות|חדרים|חד׳|חד'/,"דירה"]];
@@ -7562,7 +7555,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}/>}
     {showCalc&&<PriceCalc onClose={()=>setShowCalc(false)} onDone={()=>setShowCalc(false)}/>}
     {schedFor&&<NewApptModal customers={customers} workers={workers} collabs={collabs}
-      prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"ג'וקים",price:schedFor.lastPrice||""}}
+      prefill={{customerId:schedFor.id,address:schedFor.address,pestType:schedFor.pestType||"תיקן אמריקאי",price:schedFor.lastPrice||""}}
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
     {invLog&&(()=>{ const {type,prefill}=docPrefillFromLog(invLog,customers); return <DocModal type={type} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={prefill} onClose={()=>setInvLog(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setInvLog(null);}}/>; })()}
@@ -7947,7 +7940,7 @@ function StandaloneInvoiceModal({customers,appointments,onClose,onSave,prefill})
         {custAppts.map(a=><option key={a.id} value={a.id}>{a.pestType} · {fmtDate(a.date)} · ₪{a.price}</option>)}
       </select>
     </div>}
-    <Inp label="תיאור השירות" value={desc} onChange={setDesc} placeholder="הדברת ג'וקים – רחוב הרצל 12"/>
+    <Inp label="תיאור השירות" value={desc} onChange={setDesc} placeholder="הדברת תיקן אמריקאי – רחוב הרצל 12"/>
     <G2>
       <Inp label="סכום לפני מע״מ (₪)" type="number" value={amount} onChange={setAmount}/>
       <Sel label="אמצעי תשלום" value={payMethod} onChange={setPayMethod} options={["מזומן","העברה בנקאית","ביט","PayBox","צ'ק","אשראי"]}/>
@@ -8177,7 +8170,7 @@ function SignSetupModal({onClose}){
 async function nextOfficialSeq(type){ const st=docSet(); const {data,error}=await sb.rpc('next_doc_seq',{p_type:type,p_min:parseInt((st.start||{})[type])||1}); if(error) throw new Error(error.message||"שגיאת מספור"); if(!(data>0)) throw new Error("לא התקבל מספר מהשרת"); return data; }
 const PAY_METHODS_DOC = ["מזומן","ביט","פייבוקס","העברה בנקאית","צ׳ק","כרטיס אשראי","ניכוי במקור","אחר"];
 const PAY_ICON = {"מזומן":"💵","ביט":"🅑","פייבוקס":"🅿️","העברה בנקאית":"🏦","צ׳ק":"🧾","כרטיס אשראי":"💳","ניכוי במקור":"📉","אחר":"…"};
-const DOC_ITEM_DEFAULTS = ["הדברת תיקן אמריקאי (ג׳וקים) – ריסוס פנלים וניקוזים","הדברת תיקן גרמני – ג׳לים ומלכודות","הדברת נמלים","הדברת פרעושים","לכידת מכרסמים","הסרת קן צרעות","הדברת פשפש מיטה","הדברת בניין – חדר מדרגות, חצר וביובים","אחזקה חודשית – הדברה משולבת","ביקור חוזר / טיפול המשך"];
+const DOC_ITEM_DEFAULTS = ["הדברת תיקן אמריקאי – ריסוס פנלים וניקוזים","הדברת תיקן גרמני – ג׳לים ומלכודות","הדברת נמלים","הדברת פרעושים","לכידת מכרסמים","הסרת קן צרעות","הדברת פשפש מיטה","הדברת בניין – חדר מדרגות, חצר וביובים","אחזקה חודשית – הדברה משולבת","ביקור חוזר / טיפול המשך"];
 const PAY_TERMS = ["מיידי","שוטף","שוטף + 30","שוטף + 45","שוטף + 60","שוטף + 90"];
 const docTypeOf = f => f.docType || (f.category==="חשבונית" ? "חשבונית מס/קבלה" : "");
 const isDocRec = f => f && !f.deleted && f.category==="חשבונית";
@@ -8394,8 +8387,8 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   return <Modal title={"🧾 "+(P.refund?"קבלה על החזר כספי ללקוח":type)+(official&&T.accounting?"":" (טיוטה)")} onClose={onClose} width={720}>
     {P.refund&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>↩ <b>החזר כספי:</b> הסכום בקבלה הזו במינוס — הוא מתעד שהחזרת ללקוח כסף בעקבות {P.refText||"חשבונית הזיכוי"}. בחר איך החזרת (מזומן, העברה, ביט…) והקלד את הסכום עם מינוס.</div>}
     <SmartBox color="#2563eb" bg="#eff6ff" border="#93c5fd" contacts parse={t=>parseDoc(t,{customers})} onApply={applyDoc}
-      hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת ג׳וקים 350 שקל, שילם במזומן".'
-      placeholder={"למשל: חשבונית ליוסי כהן על הדברת ג'וקים 350 שקל, שילם בביט"}
+      hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת תיקנים 350 שקל, שילם במזומן".'
+      placeholder={"למשל: חשבונית ליוסי כהן על הדברת תיקנים 350 שקל, שילם בביט"}
       chips={r=>[spChip("מסמך",r.docType),spChip("לקוח",r.customerName&&r.customerName+(r.customerId?" ✓":" (לקוח מזדמן)")),spChip("ח.פ",r.taxId),spChip("מע״מ",r.inclVat===false?"לפני מע״מ":""),...(r.lines||[]).map(l=>spChip("שורה",l.desc+" · "+(+l.qty>1?l.qty+" × ":"")+"₪"+l.price)),r.payment&&spChip("תשלום",r.payment.method+(r.payment.amount?" ₪"+r.payment.amount:"")+(r.payment.payments?" · "+r.payment.payments+" תשלומים":"")),spChip("תאריך",r.date&&fmtDate(r.date)),spChip("תנאים",r.payTerms),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     {!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
@@ -12754,7 +12747,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="163";
+const APP_BUILD="164";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
