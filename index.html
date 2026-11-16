@@ -5054,8 +5054,9 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
   const [done,setDone]=useState(null); const voice=React.useRef(false); const fired=React.useRef(false);
   const clean=txt.replace(QA_TRIGGER,"").trim();
   const trig=txt.trim().match(QA_TRIGGER);
-  const r=React.useMemo(()=>clean?waParse(clean,cityNames):null,[clean]);
-  const autoKind=r?qaKind(clean,r):"job"; const k=kind||autoKind;
+  const r0=React.useMemo(()=>clean?waParse(clean,cityNames):null,[clean]);
+  const [ov,setOv]=useState({}); const r=r0?sfMerge(r0,ov):null;
+  const autoKind=r?qaKind(clean,r0):"job"; const k=kind||autoKind;
   React.useEffect(()=>{ if(trig&&trig[1]){ const w=qaWorker(trig[1],workers,me); if(w) setWid(String(w.id)); } },[trig&&trig[1]]);
   const w=techs.find(x=>String(x.id)===String(wid))||me||null;
   const today=todayStr();
@@ -5093,7 +5094,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       <div style={{fontSize:15,color:"#334155"}}>{done.label}</div>
       <div style={{fontSize:14,color:CLR.muted,marginTop:2}}>{when}</div>
       <div style={{display:"flex",gap:8,marginTop:16}}>
-        <Btn full onClick={()=>{setDone(null);setTxt("");setKind(null);fired.current=false;}}>+ עוד אחד</Btn>
+        <Btn full onClick={()=>{setDone(null);setTxt("");setKind(null);setOv({});fired.current=false;}}>+ עוד אחד</Btn>
         <Btn full v="secondary" onClick={onClose}>סגור</Btn>
         <Btn full v="ghost" style={{color:"#dc2626"}} onClick={()=>{onUndo(done);setDone(null);fired.current=false;}}>↩ בטל</Btn>
       </div>
@@ -5106,7 +5107,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       <MicButton label="🎤 דבר" onText={t=>{voice.current=true;setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t);}}/>
       <ContactPickBtn onPick={c=>setTxt(x=>(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":", "):"")+contactLine(c))}/>
       <button type="button" onClick={paste} style={{border:"1.5px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק מהלוח</button>
-      {txt&&<button type="button" onClick={()=>{setTxt("");setKind(null);fired.current=false;}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>נקה</button>}
+      {txt&&<button type="button" onClick={()=>{setTxt("");setKind(null);setOv({});fired.current=false;}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#64748b",borderRadius:20,padding:"7px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>נקה</button>}
     </div>
     {r&&<>
       <div style={{display:"flex",gap:6,marginBottom:10}}>
@@ -5115,10 +5116,8 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       </div>
       <div style={{background:"#f8fafc",border:"1px solid "+CLR.border,borderRadius:12,padding:"10px 12px",marginBottom:10,fontSize:14,lineHeight:1.7}}>
         {k==="personal"?<div><b>📌 {qaTitle(clean)}</b></div>:<>
-          <div><b>👤 {r.name||"לא צוין"}</b>{r.phone?" · 📞 "+r.phone:""}{r.brand?<span style={{color:CLR.muted}}> · נשלח מ{r.brand}</span>:null}</div>
-          <div>🐛 {(r.pests||[]).join(", ")||<span style={{color:"#b45309"}}>מזיק לא זוהה</span>}{r.price?" · 💰 ₪"+r.price:""}</div>
-          <div>📍 {[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", ")||<span style={{color:"#b45309"}}>כתובת לא זוהתה</span>}{r.aptNum?" · דירה "+r.aptNum:""}{r.floor?" · קומה "+r.floor:""}</div>
-          {(r.propertyType||r.rooms)&&<div>🏠 {[r.propertyType,r.rooms?r.rooms+" חד׳":"",r.hasYard===false?"ללא חצר":r.hasYard?"עם חצר":""].filter(Boolean).join(" · ")}</div>}
+          <SmartChips res={r0} ov={ov} setOv={setOv}/>
+          {r.brand?<div style={{color:CLR.muted,fontSize:12}}>נשלח מ{r.brand}</div>:null}
         </>}
         <div>🕐 {when}</div>
       </div>
@@ -6473,8 +6472,42 @@ function fillWithHighlight(container,doFill){
 }
 // ═══ 📝 תיאור חופשי + מילוי חכם: הטקסט נשמר כמו שהוא (כולם רואים), ואפשר גם למלא ממנו את השדות ═══
 const cleanNote=n=>{ const t=String(n||"").trim(); return t.length>=3&&t.length<=90&&!/\d{7,}/.test(t.replace(/[\s-]/g,"")); };
+// ✏️ משבצות המילוי החכם — לוחצים על משבצת כדי לתקן / להשלים (גובר על מה שזוהה מהטקסט)
+const SF_MAIN=["name","phone","city","street","buildingNum","pests","prefDate","time"];
+const SF_OPT=["bizName","floor","aptNum","rooms","propertyType","price"];
+const SF_LBL={name:"👤 שם",bizName:"🏪 מקום",phone:"📞 טלפון",city:"🏙️ עיר",street:"📍 רחוב",buildingNum:"מס׳ בית",floor:"קומה",aptNum:"דירה",rooms:"חדרים",propertyType:"🏠 נכס",pests:"🐛 מזיק",price:"💰 מחיר",prefDate:"📅 תאריך",time:"🕐 שעה"};
+function sfVal(r,k){ if(!r) return ""; if(k==="time") return r.timeFrom?r.timeFrom+(r.timeTo?"–"+r.timeTo:""):""; const v=r[k]; if(v==null) return ""; return Array.isArray(v)?v.join(", "):String(v); }
+function sfMerge(res,ov){ if(!res&&!Object.keys(ov||{}).length) return res; const r={...(res||{})};
+  Object.entries(ov||{}).forEach(([k,v])=>{ v=String(v==null?"":v).trim();
+    if(k==="pests") r.pests=v?v.split(/\s*[,،]\s*/).filter(Boolean):[];
+    else if(k==="time"){ const m=v.match(/(\d{1,2})(?::(\d{2}))?\s*(?:[-–]|עד|ל)?\s*(?:(\d{1,2})(?::(\d{2}))?)?/); if(v&&m){ r.timeFrom=String(m[1]).padStart(2,"0")+":"+(m[2]||"00"); r.timeTo=m[3]?String(m[3]).padStart(2,"0")+":"+(m[4]||"00"):""; } else { r.timeFrom=""; r.timeTo=""; } }
+    else if(k==="phone") r.phone=v.replace(/[^\d+]/g,"");
+    else r[k]=v; });
+  if(r.propertyType==="בניין משותף") delete r.rooms;
+  return r; }
+function SmartChips({res,ov,setOv,fields}){
+  const [ed,setEd]=useState(null); const [val,setVal]=useState("");
+  const r=sfMerge(res,ov); const keys=[...(fields||SF_MAIN),...SF_OPT.filter(k=>!(fields||SF_MAIN).includes(k)&&sfVal(r,k))];
+  const open=k=>{ setEd(k); setVal(sfVal(r,k)); };
+  const save=()=>{ setOv(o=>({...o,[ed]:val})); setEd(null); };
+  const reset=()=>{ setOv(o=>{ const n={...o}; delete n[ed]; return n; }); setEd(null); };
+  const inpType=ed==="prefDate"?"date":ed==="phone"?"tel":ed==="price"||ed==="buildingNum"||ed==="rooms"||ed==="floor"||ed==="aptNum"?"text":"text";
+  return <div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:ed?6:8}}>{keys.map(k=>{ const v=sfVal(r,k); const has=!!v; const edited=ov&&k in ov; const on=ed===k;
+      return <button key={k} type="button" onClick={()=>on?setEd(null):open(k)} style={{background:on?"#dbeafe":has?"#fff":"transparent",border:(has?"1px solid ":"1.5px dashed ")+(on?"#3b82f6":edited?"#60a5fa":has?"#bbf7d0":"#f59e0b"),color:has?"#0f172a":"#b45309",borderRadius:20,padding:"4px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:has?500:700}}>
+        {has?SF_LBL[k]+": "+(k==="prefDate"?fmtDate(v):v):"+ "+SF_LBL[k]}{edited?" ✏️":""}</button>; })}</div>
+    {ed&&<div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"6px 8px"}}>
+      <b style={{fontSize:13,whiteSpace:"nowrap"}}>{SF_LBL[ed]}</b>
+      {ed==="propertyType"?<select autoFocus value={val} onChange={e=>setVal(e.target.value)} style={{flex:1,minWidth:0,padding:"8px",borderRadius:8,border:"1px solid #93c5fd",fontSize:15,fontFamily:"inherit"}}><option value="">—</option>{["דירה","בית פרטי","בניין משותף","עסק","מסעדה","משרד","מוסד"].map(x=><option key={x}>{x}</option>)}</select>
+        :<input autoFocus type={inpType} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); save(); } }} placeholder={ed==="pests"?"למשל: תיקן אמריקאי, נמלים":ed==="time"?"למשל: 10:00-12:00":""} dir={ed==="phone"?"ltr":undefined} style={{flex:1,minWidth:0,padding:"8px",borderRadius:8,border:"1px solid #93c5fd",fontSize:15,fontFamily:"inherit"}}/>}
+      <button type="button" onClick={save} style={{border:"none",background:"#2563eb",color:"#fff",borderRadius:8,padding:"8px 12px",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓</button>
+      {ov&&ed in ov&&<button type="button" onClick={reset} title="חזרה למה שזוהה מהטקסט" style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"8px 9px",cursor:"pointer"}}>↺</button>}
+    </div>}
+  </div>;
+}
 function IntakeTextBox({value,onChange,onFill,cityNames,custOnly,onContact}){
-  const res=React.useMemo(()=>value&&String(value).trim()?waParse(value,cityNames):null,[value,cityNames.length]);
+  const res0=React.useMemo(()=>value&&String(value).trim()?waParse(value,cityNames):null,[value,cityNames.length]);
+  const [ov,setOv]=useState({}); const res=res0?sfMerge(res0,ov):null;
   const upd=v=>onChange(v);
   const add=t=>upd((value?value.replace(/\s+$/,"")+(/[.,\n]$/.test(value.trim())?" ":", "):"")+t);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t) upd((value?value+"\n":"")+t); }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
@@ -6492,8 +6525,9 @@ function IntakeTextBox({value,onChange,onFill,cityNames,custOnly,onContact}){
       <ContactPickBtn onPick={c=>{ add(contactLine(c)); onContact&&onContact(c); }}/>
       <button type="button" onClick={paste} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"6px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>
     </div>
-    {res&&(chips.length>0)&&<div style={{marginTop:8}}>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontSize:12}}>{c}</span>)}</div>
+    {res&&<div style={{marginTop:8}}>
+      <SmartChips res={res0} ov={ov} setOv={setOv} fields={custOnly?["name","phone","city","street","buildingNum"]:undefined}/>
+      {chips.filter(c=>/^(👥|📝)/.test(c)).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.filter(c=>/^(👥|📝)/.test(c)).map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"3px 10px",fontSize:12}}>{c}</span>)}</div>}
       <button type="button" onClick={()=>onFill(res,value)} style={{width:"100%",padding:"10px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✨ מלא את השדות למטה מהטקסט</button>
       <div className="h360-hint" style={{fontSize:11,color:"#64748b",marginTop:4,textAlign:"center"}}>הטקסט נשאר כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
     </div>}
@@ -13047,7 +13081,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="185";
+const APP_BUILD="186";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
