@@ -12780,7 +12780,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="169";
+const APP_BUILD="170";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -12867,6 +12867,8 @@ function App(){
   const [tab,setTab]=useState(()=>{
     try{
       if(sessionStorage.getItem("h360_share")&&authUser?.role!=="מדביר") return "neworder";
+      // בטלפון — נכנסים ישר ליומן
+      if(window.innerWidth<900 && authUser?.role!=="מדביר") return "calendar";
       const saved=localStorage.getItem("h360_last_tab");
       if(saved && authUser?.role==="מדביר" && saved==="fieldview") return saved;
       if(saved && authUser?.role!=="מדביר" && saved!=="fieldview") return saved;
@@ -13214,10 +13216,13 @@ function App(){
             <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
             <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
           </button>
-          {/* Logo */}
-          <div style={{flex:1,display:"flex",alignItems:"center"}}><img src="logo.png" alt="הדברה 360" style={{height:36,width:"auto",display:"block"}}/></div>
-          {/* Page name */}
-          <div style={{fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>{tabLabel[tab]||tab}</div>
+          {/* Logo + page name — באמצע */}
+          <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            <img src="logo.png" alt="הדברה 360" style={{height:32,width:"auto",display:"block",flexShrink:0}}/>
+            <div style={{fontSize:13,color:"#0f172a",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{tabLabel[tab]||tab}</div>
+          </div>
+          {/* קיצור דרך ליומן */}
+          {permOf(authUser,"calendar")&&<button aria-label="יומן" title="יומן עבודה" onClick={()=>{setTab("calendar");try{window.scrollTo(0,0);}catch(_){}}} style={{background:tab==="calendar"?"#e0f2fe":"#f1f5f9",border:tab==="calendar"?"1px solid #7dd3fc":"1px solid transparent",borderRadius:8,padding:"6px 7px",cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>📅</button>}
           {/* Refresh data — בלי לטעון מחדש את הדף, לא מאבדים טפסים פתוחים */}
           <button aria-label="רענון נתונים" title="רענון נתונים" onClick={e=>{window.dispatchEvent(new Event('h360-refresh'));reloadLeads();const b=e.currentTarget;b.style.opacity=0.4;setTimeout(()=>{b.style.opacity=1;},700);}} style={{background:"#f1f5f9",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",color:"#0f172a",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"opacity .2s"}}>🔄</button>
           {/* Search */}
