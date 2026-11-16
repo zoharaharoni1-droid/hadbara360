@@ -1619,11 +1619,16 @@ async function prepareSendText(log,doc){
   return {text,subject};
 }
 function sendIntl(ph){ const d=String(ph||"").replace(/[^0-9]/g,""); return d.startsWith("972")?d:d.replace(/^0/,"972"); }
+// וואטסאפ רגיל — תמיד האפליקציה הרגילה בטלפון שלך (לא ביזנס), מכל מספר/סים
+function waRegHref(intl,text){ const ua=navigator.userAgent||""; const t=text?encodeURIComponent(text):""; const web="https://wa.me/"+intl+(t?"?text="+t:"");
+  if(/Android/i.test(ua)) return "intent://send?phone="+intl+(t?"&text="+t:"")+"#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url="+encodeURIComponent(web)+";end";
+  if(/iPhone|iPad|iPod/i.test(ua)) return "whatsapp://send?phone="+intl+(t?"&text="+t:"");
+  return web; }
 function sendLinks(ph,em,{text,subject}){
   const t=encodeURIComponent(text), intl=sendIntl(ph), local=String(ph||"").replace(/[^0-9+]/g,"");
   const ua=navigator.userAgent||""; const android=/Android/i.test(ua), ios=/iPhone|iPad|iPod/i.test(ua);
   const wa="https://wa.me/"+intl+"?text="+t;
-  return { wa, android, ios,
+  return { wa:waRegHref(intl,text), android, ios,
     wab: android?"intent://send?phone="+intl+"&text="+t+"#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url="+encodeURIComponent(wa)+";end":wa,
     sms: "sms:"+local+(ios?"&":"?")+"body="+t,
     mail: "mailto:"+String(em||"").replace(/[^A-Za-z0-9@._+\-]/g,"")+"?subject="+encodeURIComponent(subject)+"&body="+t };
@@ -4129,7 +4134,7 @@ function ActionSheet({title,items,onClose}){
   </div>,document.body);
 }
 const waNum=p=>String(p||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
-const phoneItems=(phone,text)=>[{icon:"📞",label:"התקשר",href:"tel:"+phone,bg:"#dcfce7",color:"#166534"},{icon:"💬",label:"וואטסאפ",href:"https://wa.me/"+waNum(phone)+(text?"?text="+encodeURIComponent(text):""),bg:"#d1fae5",color:"#065f46"},{icon:"✉️",label:"הודעה (SMS)",href:"sms:"+phone,bg:"#e0f2fe",color:"#075985"}];
+const phoneItems=(phone,text)=>[{icon:"📞",label:"התקשר",href:"tel:"+phone,bg:"#dcfce7",color:"#166534"},{icon:"💬",label:"וואטסאפ",href:waRegHref(waNum(phone),text||""),bg:"#d1fae5",color:"#065f46"},{icon:"✉️",label:"הודעה (SMS)",href:"sms:"+phone,bg:"#e0f2fe",color:"#075985"}];
 const navItems=addr=>[{icon:"🚙",label:"Waze",href:`https://waze.com/ul?q=${encodeURIComponent(navAddr(addr))}&navigate=yes`,bg:"#e0f7ff",color:"#0369a1"},{icon:"🗺️",label:"Google Maps",href:`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(navAddr(addr))}`,bg:"#e8f0fe",color:"#1a56db"}];
 function DetSec({icon,title,sub,open,onToggle,children,accent="#0f172a",right}){
   return <div style={{border:"1px solid #e2e8f0",borderRadius:14,marginBottom:10,overflow:"hidden",background:"#fff"}}>
@@ -4312,7 +4317,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     const ps=Array.isArray(appt.pests)&&appt.pests.length?appt.pests:String(appt.pestType||"").split(/\s*[,،+]\s*/).filter(Boolean);
     const qb=(icon,label,on,extra={})=>{ const st={flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"10px 4px",borderRadius:14,background:"#f8fafc",border:"1px solid #eef2f7",color:"#0f172a",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"none",opacity:extra.dis?.4:1};
       const inner=<><span style={{fontSize:22,lineHeight:1}}>{icon}</span>{label}</>;
-      return extra.href?<a href={extra.href} target="_blank" rel="noreferrer" style={st}>{inner}</a>:<button type="button" disabled={extra.dis} onClick={on} style={st}>{inner}</button>; };
+      return extra.href?<a href={extra.href} target={/^https?:/.test(extra.href)?"_blank":undefined} rel="noreferrer" style={st}>{inner}</a>:<button type="button" disabled={extra.dis} onClick={on} style={st}>{inner}</button>; };
     const tile=(icon,label,sub,on,tone)=>{ const T={go:["#16a34a","#fff","#16a34a"],ok:["#f0fdf4","#166534","#bbf7d0"],inv:["#0f766e","#fff","#0f766e"],plain:["#fff","#0f172a","#e2e8f0"]}[tone||"plain"];
       return <button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:T[0],color:T[1],border:"1px solid "+T[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
         <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span></button>; };
@@ -4333,7 +4338,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </div>
       <div style={{display:"flex",gap:8,marginBottom:14}}>
         {qb("📞","חייג",()=>phone&&setSheet("phone"),{dis:!phone})}
-        {phone?qb("💬","וואטסאפ",null,{href:"https://wa.me/"+waNum(phone)}):qb("💬","וואטסאפ",null,{dis:true})}
+        {phone?qb("💬","וואטסאפ",null,{href:waRegHref(waNum(phone),"")}):qb("💬","וואטסאפ",null,{dis:true})}
         {qb("🚙","ניווט",()=>appt.address&&setSheet("nav"),{dis:!appt.address})}
         {qb("⚡","עוד",()=>setSheet("quick"))}
       </div>
@@ -12845,7 +12850,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="174";
+const APP_BUILD="175";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
