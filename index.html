@@ -3318,12 +3318,23 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
 }
 
 // לקוח שבוצע לו טיפול בלי כרטיס לקוח — נשמר אוטומטית בלקוחות (או מתחבר ללקוח קיים לפי טלפון)
+// משלים בכרטיס הלקוח שדות ריקים מתוך יומן הביצוע (לא דורס מה שכבר רשום)
+function custFillBlanks(id,lg,setCustomers){ if(id==null||!setCustomers||!lg) return; let got=[];
+  setCustomers(cs=>cs.map(c=>{ if(String(c.id)!==String(id)) return c; const nx={...c}; const blank=v=>!String(v||"").trim()||String(v).trim()==="—";
+    const put=(k,v,l)=>{ if(String(v||"").trim()&&blank(c[k])){ nx[k]=String(v).trim(); got.push(l); } };
+    put("phone",lg.phone,"טלפון"); put("address",[lg.address,lg.unit].filter(Boolean).join(", "),"כתובת"); put("contactName",lg.contactName,"איש קשר");
+    put("taxId",lg.taxId,"ח.פ"); put("placeName",lg.placeName,"שם המקום"); put("email",lg.email,"אימייל");
+    if(String(lg.clientName||"").trim()&&lg.clientName.trim()!==String(c.name||"").trim()&&blank(c.bizName)&&lg.clientKind==="biz"){ nx.bizName=lg.clientName.trim(); got.push("שם על המסמכים"); }
+    if(blank(c.propertyType)&&lg.place&&lg.place.type){ nx.propertyType=lg.place.type; got.push("סוג נכס"); }
+    return got.length?{...nx,updatedAt:new Date().toISOString()}:c; }));
+  setTimeout(()=>{ if(got.length) showToast("👤 עודכן בכרטיס הלקוח: "+[...new Set(got)].join(", ")); },300); }
 function ensureLogCustomer(newLog,customers,setCustomers){
+  if(newLog.customerId&&setCustomers){ custFillBlanks(newLog.customerId,newLog,setCustomers); return; }
   if(newLog.customerId||!setCustomers||!String(newLog.clientName||"").trim()) return;
   const ph=String(newLog.phone||"").replace(/\D/g,"").slice(-9);
   const nm=String(newLog.clientName||"").trim();
   const ex=(ph.length>=9?(customers||[]).find(c=>!c.deleted&&String(c.phone||"").replace(/\D/g,"").slice(-9)===ph):null)||(customers||[]).find(c=>!c.deleted&&(String(c.name||"").trim()===nm||String(c.bizName||"").trim()===nm));
-  if(ex){ newLog.customerId=ex.id; return; }
+  if(ex){ newLog.customerId=ex.id; custFillBlanks(ex.id,newLog,setCustomers); return; }
   const _place=String(newLog.placeName||"").trim(); const _doc=newLog.clientName.trim();
   const nc={id:nextId(customers),name:_place||_doc,bizName:_place&&_doc!==_place?_doc:"",placeName:_place,taxId:newLog.taxId||"",contactName:newLog.contactName||"",phone:newLog.phone||"",address:[newLog.address,newLog.unit].filter(Boolean).join(", ")||"—",propertyType:newLog.structureType||"",status:"פעיל",source:"יומן ביצוע בשטח",extraContacts:newLog.placePhone?[{role:"טלפון המקום",name:"",phone:newLog.placePhone}]:[],pestType:(newLog.pest||[]).join(", "),pests:newLog.pest||[],lastTreatment:newLog.date||todayStr(),totalPaid:0,notes:"",createdAt:new Date().toISOString()};
   setCustomers(cs=>[...cs,nc]); newLog.customerId=nc.id; setTimeout(()=>showToast("👤 "+nc.name+" נשמר גם בלקוחות"),300);
@@ -4278,11 +4289,12 @@ function DetSec({icon,title,sub,open,onToggle,children,accent="#0f172a",right}){
     {open&&<div style={{padding:"4px 14px 14px",borderTop:"1px solid #f1f5f9"}}>{children}</div>}
   </div>;
 }
+function apptTimes(a){ if(isAllDay(a)) return {from:"__all",to:""}; const m=String(a.timeWindow||"").match(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/); return {from:m?m[1].padStart(5,"0"):(a.time||"08:00"),to:m?m[2].padStart(5,"0"):""}; }
 function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,onClose,onFillLog,onInvoice,onMarkPaid,hasInvoice,hasLog,onReminder,onDuplicate,onSaveEdit,onMarkEnRoute,onViewCustomer,onConvertFree,onEditFull}){
   const [showWA,setShowWA]=useState(false);
   const [editMode,setEditMode]=useState(false);
   const [editData,setEditData]=useState({
-    date:appt.date, time:appt.time, timeWindow:appt.timeWindow||"",
+    date:appt.date, time:appt.time, timeWindow:appt.timeWindow||"", ...apptTimes(appt),
     workerId:appt.workerId, price:appt.price, pestType:appt.pestType,
     address:appt.address, notes:appt.notes||"", reason:""
   });
@@ -4294,7 +4306,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   const [noteTxt,setNoteTxt]=useState("");
   const saveEdit=(extra={})=>{
     const w=workers.find(x=>String(x.id)===String(editData.workerId));
-    const next={...appt,date:editData.date,time:editData.time,timeWindow:editData.timeWindow,
+    const allD=editData.from==="__all"; const fr=allD?"07:00":(editData.from||editData.time||"08:00");
+    const next={...appt,date:editData.date,time:fr,timeWindow:allD?ALL_DAY_TW:fr+(editData.to?"–"+editData.to:""),
       workerId:w?w.id:appt.workerId,workerName:w?w.name:appt.workerName,
       price:parseInt(editData.price)||0,pestType:editData.pestType,address:editData.address,notes:editData.notes,...extra};
     const timeChanged=next.date!==appt.date||next.time!==appt.time||next.timeWindow!==(appt.timeWindow||"");
@@ -4348,8 +4361,14 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>✏️ עריכת תור</div>
       <G2 gap={8}>
         <Inp label="תאריך" type="date" value={editData.date} onChange={v=>setE("date",v)}/>
-        <Sel label="שעה" value={editData.time} onChange={v=>setE("time",v)} options={(!editData.time||HOURS.includes(editData.time))?HOURS:[editData.time,...HOURS]}/>
-        <Inp label="חלון הגעה (לא חובה)" value={editData.timeWindow} onChange={v=>setE("timeWindow",v)} placeholder="למשל 10:00–12:00"/>
+        <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>משעה</label>
+          <select value={editData.from||""} onChange={e=>setE("from",e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit"}}>
+            <option value="__all">☀️ במהלך היום</option>{(HOURS.includes(editData.from)||editData.from==="__all"||!editData.from?HOURS:[editData.from,...HOURS]).map(h=><option key={h} value={h}>{h}</option>)}
+          </select></div>
+        {editData.from!=="__all"?<div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>עד שעה (לא חובה)</label>
+          <select value={editData.to||""} onChange={e=>setE("to",e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit"}}>
+            <option value="">—</option>{HOURS.filter(h=>!editData.from||h>editData.from).map(h=><option key={h} value={h}>{h}</option>)}
+          </select></div>:<div/>}
         {isStaff
           ? <div><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4}}>מדביר</label>
               <select value={editData.workerId||""} onChange={e=>setE("workerId",e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14}}>
@@ -4457,7 +4476,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     const lineRow=(icon,label,on,right)=><button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 4px",border:"none",borderBottom:"1px solid #f1f5f9",background:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"#0f172a",textAlign:"right"}}><span style={{fontSize:17}}>{icon}</span><span style={{flex:1,fontWeight:600}}>{label}</span>{right}<span style={{color:"#cbd5e1"}}>‹</span></button>;
     const canQuick=!!onSaveEdit;
     const segBar=<div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3,marginBottom:10}}>{[["log","אחרי ביצוע"],["orig","כפי שנרשם בהזמנה"]].map(([k,l])=><button key={k} type="button" onClick={()=>setDetView(k)} style={{flex:1,border:"none",borderRadius:8,padding:"7px 6px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:(detView==="orig")===(k==="orig")?"#fff":"transparent",color:(detView==="orig")===(k==="orig")?"#0f172a":"#64748b",boxShadow:(detView==="orig")===(k==="orig")?"0 1px 2px rgba(0,0,0,.08)":"none"}}>{l}</button>)}</div>;
-    const openQuick=()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);};
+    const openQuick=()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",...apptTimes(appt),workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);};
     return <Modal title="פרטי תור" onClose={onClose} width={520}>
       <div style={{marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
@@ -4591,7 +4610,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {appt.rawMsg&&appt.kind!=="free"&&<details open style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"9px 12px",marginTop:8}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#166534"}}>📝 הפרטים כפי שנרשמו</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:6}}>{appt.rawMsg}</div></details>}
       {cust.notes&&<div style={{background:"#fef9c3",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>⚠️ <b>הערות לקוח:</b> {cust.notes}</div>}
       {appt.propertyNotes&&<div style={{background:"#f8fafc",borderRadius:10,padding:"9px 12px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>🏠 <b>הערות על הנכס:</b> {appt.propertyNotes}</div>}
-      {onSaveEdit&&!editMode&&<div style={{marginTop:10}}><Btn v="secondary" full onClick={()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);}}>🕐 שינוי מהיר (תאריך / שעה / מדביר)</Btn>{onEditFull&&<Btn full style={{marginTop:6}} onClick={()=>onEditFull(appt)}>✏️ עריכה מלאה של התור</Btn>}</div>}
+      {onSaveEdit&&!editMode&&<div style={{marginTop:10}}><Btn v="secondary" full onClick={()=>{setEditData({date:appt.date,time:appt.time,timeWindow:appt.timeWindow||"",...apptTimes(appt),workerId:appt.workerId,price:appt.price,pestType:appt.pestType,address:appt.address,notes:appt.notes||"",reason:""});setEditMode(true);}}>🕐 שינוי מהיר (תאריך / שעה / מדביר)</Btn>{onEditFull&&<Btn full style={{marginTop:6}} onClick={()=>onEditFull(appt)}>✏️ עריכה מלאה של התור</Btn>}</div>}
     </DetSec>
     {editBlk}
     {/* ── יומן ביצוע ── */}
@@ -5130,7 +5149,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [draggedId,setDraggedId]=useState(null);
   const [dropTarget,setDropTarget]=useState(null);
   const [reminderAppt,setReminderAppt]=useState(null);
-  const [dupAppt,setDupAppt]=useState(null);
+  const [dupAppt,setDupAppt]=useState(null); const [repeatFrom,setRepeatFrom]=useState(null);
   const [viewCustId,setViewCustId]=useState(null);
   // פתיחה ישירה של תור מ"המשימות שלי" — וחזרה לשם בסגירה
   React.useEffect(()=>{
@@ -5145,7 +5164,16 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   React.useEffect(()=>{ const id=window.__h360CalOpen; if(id==null) return; window.__h360CalOpen=null; const a=appointments.find(x=>String(x.id)===String(id)); if(!a) return;
     if(a.date){ setCalMode("day"); setDayDate(new Date(a.date+"T12:00:00")); } if(isPersonal(a)) setEditTask(a); else setDetailAppt(a); },[]);
   const handleDuplicate=appt=>{
-    const base={...appt,id:null,date:"",time:"09:00",timeWindow:"",status:"ממתין",executionLog:null};
+    const lg=(execLogs||[]).filter(l=>!l.deleted&&!l.draft&&(l.apptId===appt.id||(appt.customerId!=null&&String(l.customerId)===String(appt.customerId)))).sort((a,b)=>(a.apptId===appt.id?-1:0)-(b.apptId===appt.id?-1:0)||String(b.date||"").localeCompare(String(a.date||"")))[0]||null;
+    const c=(customers||[]).find(x=>appt.customerId!=null&&String(x.id)===String(appt.customerId)&&!x.deleted)||{};
+    const ps=lg&&(lg.pest||[]).length?lg.pest:(Array.isArray(appt.pests)&&appt.pests.length?appt.pests:null);
+    const base={...appt,id:null,date:"",status:"ממתין",executionLog:null,history:undefined,followups:undefined,payReqs:undefined,kind:undefined,
+      customerId:appt.customerId||(lg&&lg.customerId)||null,
+      address:String(appt.address||"").trim()||(lg&&[lg.address,lg.unit].filter(Boolean).join(", "))||c.address||"",
+      phone:appt.phone||(lg&&lg.phone)||c.phone||"",contactName:appt.contactName||(lg&&lg.contactName)||c.contactName||"",
+      ...(ps?{pests:ps,pestType:ps.join(", ")}:{}),price:appt.price||(lg&&parseFloat(lg.agreedPrice))||0,
+      notes:appt.notes||"",rawMsg:appt.rawMsg||""};
+    setRepeatFrom({base,orig:appt}); setDetailAppt(null); return;
     setDupAppt(base);
     setDetailAppt(null);
   };
@@ -5184,7 +5212,8 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls]);
-    if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog,customerId:a.customerId||newLog.customerId||null}:a));
+    if(logAppt) setAppointments(as=>as.map(a=>a.id===logAppt.id?{...a,status:"בוצע",executionLog:newLog,customerId:a.customerId||newLog.customerId||null,
+      address:String(a.address||"").trim()?a.address:(newLog.address||a.address),phone:a.phone||newLog.phone||a.phone,contactName:a.contactName||newLog.contactName||a.contactName}:a));
     return newLog;
   };
   const saveInvoiceFromLog=inv=>{
@@ -5397,6 +5426,16 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
     {invAppt&&(()=>{ const _lg=invAppt.id==null?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=_lg&&_lg.paymentDone; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_lg.paymentMethod]?[{method:LOG_PAY_TO_DOC[_lg.paymentMethod],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{setInvAppt(null);backIfReq();}} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {repeatFrom&&<Modal title={"🔁 ביקור חוזר — "+(repeatFrom.orig.customerName||"")} onClose={()=>setRepeatFrom(null)} width={860}>
+      <div style={{fontSize:13,color:"#166534",marginBottom:12,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}>🔁 כל הפרטים מולאו מהביקור הקודם (הזמנה, יומן ביצוע וכרטיס הלקוח). בחר <b>תאריך ושעה</b> — ואפשר לשנות כל דבר אחר.</div>
+      <OrderForm workers={workers} customers={customers} showGuidance={false}
+        initialCustomer={customers.find(c=>c.id===repeatFrom.base.customerId&&!c.deleted)||null} initialAppt={repeatFrom.base}
+        initialDate="" initialTime={isAllDay(repeatFrom.orig)?"":repeatFrom.orig.time} initialWorker={repeatFrom.orig.workerId}
+        onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
+        onSchedule={ap=>{ const o=repeatFrom.orig; setAppointments(as=>[...as,{...ap,id:nextId(as),customerId:ap.customerId||repeatFrom.base.customerId||null,repeatOf:o.id,status:"ממתין",createdAt:new Date().toISOString()}]); }}
+        onDone={()=>{ setRepeatFrom(null); showToast("✅ הביקור החוזר נקבע"); }}
+        onCancel={()=>setRepeatFrom(null)}/>
+    </Modal>}
     {fullEdit&&<Modal title={"✏️ עריכת תור — "+fullEdit.customerName} onClose={()=>setFullEdit(null)} width={860}>
       <div style={{fontSize:12,color:CLR.muted,marginBottom:12,background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px"}}>✏️ עורכים את התור הקיים — כל הפרטים פתוחים לעריכה (לקוח, כתובת, מזיקים, מחיר, תאריך, שעה / כל היום, מדביר, הערות). השמירה מעדכנת את אותו תור.</div>
       <OrderForm workers={workers} customers={customers} showGuidance={false}
@@ -6249,7 +6288,7 @@ function parseMaint(raw,{workers=[],cityNames=[]}={}){
   // מדביר קבוע + שעה
   const wk=spWorker(text,workers); if(wk){ out.workerId=String(wk.id); out.autoSchedule=true; out.found.push("מדביר"); }
   else if(/שבץ|שיבוץ|ביומן/.test(text)) out.autoSchedule=true;
-  if(w.timeFrom){ const [h,m]=w.timeFrom.split(":").map(Number); out.visitTime=String(h).padStart(2,"0")+":"+(m>=30?"30":"00"); out.found.push("שעה"); }
+  if(w.timeFrom){ const [h,m]=w.timeFrom.split(":").map(Number); out.visitTime=String(h).padStart(2,"0")+":"+(m>=30?"30":"00"); if(w.timeTo){ const [h2,m2]=w.timeTo.split(":").map(Number); out.visitTimeTo=String(h2).padStart(2,"0")+":"+(m2>=30?"30":"00"); } out.found.push("שעה"); }
   const notes=extractNotes(text); if(notes.length){ out.notes=notes; out.found.push("הערות"); }
   return out;
 }
@@ -9954,7 +9993,7 @@ function maintSchedule(maintenance, appointments, workers, horizonDays=62){
       const flex=from!==wTo;
       const exists=(appointments||[]).some(a=>String(a.maintenanceId)===String(m.id)&&(a.date===date||(flex&&(a.flexFrom===from||(a.date>=from&&a.date<=wTo)))))||add.some(a=>a.maintenanceId===m.id&&a.date===date);
       if(exists) return;
-      const t=m.visitTime||"08:00"; const hh=parseInt(t); const tw=t+"–"+String(Math.min(hh+2,22)).padStart(2,"0")+":"+t.split(":")[1];
+      const t=m.visitTime||"08:00"; const tw=t+(m.visitTimeTo&&m.visitTimeTo>t?"–"+m.visitTimeTo:"");
       const fq=m.frequency==="אחר"?(m.frequencyOther||"אחר"):m.frequency;
       add.push({customerId:null,customerName:m.customerName,workerId:w.id,workerName:w.name,date,time:flex?"07:00":t,timeWindow:flex?ALL_DAY_TW:tw,
         pestType:"אחזקה"+(flex?" · גמיש עד "+fmtDate(wTo).slice(0,5):"")+(maintList(m.pests).length?" · "+maintList(m.pests).slice(0,3).join(", "):""),pests:maintList(m.pests),
@@ -10047,7 +10086,7 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
   };
   const chip=on=>({padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?CLR.primary:CLR.border}`,background:on?CLR.primary:"#fff",color:on?"#fff":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"});
   const applyMaint=r=>{ setF(x=>{ const nx={...x};
-      ["customerName","address","type","frequency","price","extraVisitPrice","startDate","endDate","visitTime","workerId"].forEach(k=>{ if(r[k]) nx[k]=r[k]; });
+      ["customerName","address","type","frequency","price","extraVisitPrice","startDate","endDate","visitTime","visitTimeTo","workerId"].forEach(k=>{ if(r[k]) nx[k]=r[k]; });
       if(r.autoSchedule) nx.autoSchedule=true;
       if(r.address) Object.assign(nx,splitAddr(r.address));
       if(r.contact){ const cs=x.contacts.filter(c=>c.name||c.phone); const nz=Object.fromEntries(Object.entries(r.contact).filter(([,v])=>v)); const i=cs.findIndex(c=>(nz.phone&&c.phone===nz.phone)||(nz.name&&c.name===nz.name)); nx.contacts=i>=0?cs.map((c,j)=>j===i?{...c,...nz}:c):[...cs,{name:"",phone:"",role:"",...nz}]; }
@@ -10141,7 +10180,7 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
             <option value="">-- בחר --</option>
             {workers.filter(w=>isTech(w)).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
           </select></div>
-        {(f.visitWindow||"day")==="day"?<Sel label="שעת ביקור" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/>:<div style={{fontSize:12,color:"#475569",alignSelf:"center"}}>הביקור ייכנס ליומן "במהלך היום" בתחילת החלון, עם תווית "גמיש עד…". מזיזים אותו ליום שתואם.</div>}
+        {(f.visitWindow||"day")==="day"?<div style={{display:"flex",gap:8}}><div style={{flex:1}}><Sel label="משעה" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/></div><div style={{flex:1}}><Sel label="עד שעה (לא חובה)" value={f.visitTimeTo||""} onChange={v=>set("visitTimeTo",v)} options={["",...TIME_SLOTS.filter(t=>t>(f.visitTime||"08:00"))]}/></div></div>:<div style={{fontSize:12,color:"#475569",alignSelf:"center"}}>הביקור ייכנס ליומן "במהלך היום" בתחילת החלון, עם תווית "גמיש עד…". מזיזים אותו ליום שתואם.</div>}
       </G2>}
       {f.autoSchedule&&<div style={{fontSize:12,color:CLR.muted}}>הביקורים ישובצו חודשיים קדימה. ביקור שיוצא בשבת עובר ליום ראשון.</div>}
     </FieldCard>
@@ -10285,7 +10324,10 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
         </div>;})}
     </div>}
     {showNew&&<MaintenanceModal workers={workers} knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m=>{setMaintenance(ms=>[...ms,m]); if(m.autoSchedule) setTimeout(()=>runSchedule([m]),0);}} customers={customers}/>}
-    {editM&&<MaintenanceModal workers={workers} knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>{setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x)); if(m.autoSchedule) setTimeout(()=>runSchedule([{...editM,...m,id:editM.id}]),0);}} customers={customers}/>}
+    {editM&&<MaintenanceModal workers={workers} knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>{setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x));
+      if(setAppointments&&((m.visitTime||"08:00")!==(editM.visitTime||"08:00")||(m.visitTimeTo||"")!==(editM.visitTimeTo||""))){ const t=m.visitTime||"08:00"; const tw=t+(m.visitTimeTo&&m.visitTimeTo>t?"–"+m.visitTimeTo:""); const td=todayStr(); let n=0;
+        setAppointments(as=>as.map(a=>String(a.maintenanceId)===String(editM.id)&&!a.deleted&&a.date>=td&&a.status==="ממתין"&&!isAllDay(a)?(n++,{...a,time:t,timeWindow:tw,updatedAt:new Date().toISOString()}):a)); setTimeout(()=>n&&showToast("🕐 עודכנו "+n+" ביקורים עתידיים לשעות "+tw),200); }
+      if(m.autoSchedule) setTimeout(()=>runSchedule([{...editM,...m,id:editM.id}]),0);}} customers={customers}/>}
     {histFor&&(()=>{const logs=maintLogs(histFor,execLogs);const visits=appointments.filter(a=>String(a.maintenanceId)===String(histFor.id)).sort((a,b)=>b.date.localeCompare(a.date));
       return <Modal title={"🕓 היסטוריה — "+histFor.customerName} onClose={()=>setHistFor(null)} width={560}>
         <div style={{fontWeight:700,marginBottom:6}}>יומני ביצוע ({logs.length})</div>
@@ -12998,7 +13040,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="183";
+const APP_BUILD="184";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
