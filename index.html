@@ -4501,7 +4501,7 @@ function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConve
   const [txt,setTxt]=useState("");
   const [date,setDate]=useState(prefill.date||todayStr());
   const [from,setFrom]=useState(prefill.time||"08:00");
-  const [to,setTo]=useState(addHour(prefill.time||"08:00"));
+  const [to,setTo]=useState("");
   const [allDay,setAllDay]=useState(!prefill.time);
   const [kind,setKind]=useState("job");
   const [wid,setWid]=useState(String(prefill.workerId??(me?me.id:(techs[0]||{}).id??"")));
@@ -4515,7 +4515,7 @@ function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConve
     if(!allDay&&to<=from) return alert("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
     const w=techs.find(x=>String(x.id)===String(wid));
     const first=text.split("\n")[0].replace(/\s+/g," ").trim(); const title=first.length>42?first.slice(0,40).replace(/\s+\S*$/,"")+"…":first;
-    const base={date,time:allDay?"07:00":from,timeWindow:allDay?ALL_DAY_TW:from+"–"+to,allDay,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
+    const base={date,time:allDay?"07:00":from,timeWindow:allDay?ALL_DAY_TW:from+(to?"–"+to:""),allDay,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
     if(kind==="personal"){ onSave({...base,kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,blockDay:false,notes:text}); return; }
     const p=r||{}; const street=[p.street,p.buildingNum].filter(Boolean).join(" "); const addr=[street,p.city].filter(Boolean).join(", ");
     const PK=(p.pests||[]).filter(x=>PEST_TYPES_CRM.includes(x));
@@ -4536,8 +4536,8 @@ function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConve
     </div>
     <div style={{display:"grid",gridTemplateColumns:allDay?"1fr":"1fr 1fr",gap:8,marginBottom:6}}>
       <div style={{gridColumn:"1 / -1"}}><label style={lbl}>תאריך</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} style={fld}/></div>
-      {!allDay&&<div><label style={lbl}>משעה</label><input type="time" value={from} onChange={e=>{const v=e.target.value;setFrom(v);if(to<=v)setTo(addHour(v));}} style={fld}/></div>}
-      {!allDay&&<div><label style={lbl}>עד</label><input type="time" value={to} onChange={e=>setTo(e.target.value)} style={fld}/></div>}
+      {!allDay&&<div><label style={lbl}>משעה</label><input type="time" value={from} onChange={e=>{const v=e.target.value;setFrom(v);if(to&&to<=v)setTo("");}} style={fld}/></div>}
+      {!allDay&&<div><label style={lbl}>עד <span style={{fontWeight:400,color:"#94a3b8"}}>(לא חובה)</span></label><input type="time" value={to} onChange={e=>setTo(e.target.value)} style={fld}/></div>}
     </div>
     <label style={{display:"flex",alignItems:"center",gap:8,fontSize:14,marginBottom:10,cursor:"pointer"}}><input type="checkbox" checked={allDay} onChange={e=>setAllDay(e.target.checked)} style={{width:18,height:18}}/> ☀️ במהלך היום (בלי שעה קבועה)</label>
     {techs.length>1&&<div style={{marginBottom:12}}><label style={lbl}>ביומן של</label><select value={wid} onChange={e=>setWid(e.target.value)} style={fld}>{techs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></div>}
@@ -4628,7 +4628,8 @@ function useTouchDrag(onDrop){
   const cleanup=()=>{ const s0=st.current; if(!s0) return; clearTimeout(s0.timer); cancelAnimationFrame(s0.raf||0);
     document.removeEventListener("touchmove",s0.mv,{passive:false}); document.removeEventListener("touchend",s0.en); document.removeEventListener("touchcancel",s0.en);
     document.body.style.overflow=s0.bodyOv||""; st.current=s0.active?{suppress:Date.now()}:null; setDrag(null); };
-  const targetAt=(x,y)=>{ const el=document.elementFromPoint(x,y); const t=el&&el.closest&&el.closest("[data-drop-date]"); return t?{date:t.getAttribute("data-drop-date"),time:t.getAttribute("data-drop-time")||"",key:t.getAttribute("data-drop-date")+"|"+(t.getAttribute("data-drop-time")||"")}:null; };
+  const targetAt=(x,y)=>{ const els=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)]; let t=null;
+    for(const el of els){ const c=el&&el.closest&&el.closest("[data-drop-date]"); if(!c) continue; if(c.getAttribute("data-drop-time")){ t=c; break; } if(!t) t=c; } return t?{date:t.getAttribute("data-drop-date"),time:t.getAttribute("data-drop-time")||"",key:t.getAttribute("data-drop-date")+"|"+(t.getAttribute("data-drop-time")||"")}:null; };
   const start=(e,a,label)=>{
     if(!e.touches||e.touches.length!==1) return;
     const t=e.touches[0];
@@ -4823,12 +4824,12 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
   const date=(r&&r.prefDate)||today; const hasTime=!!(r&&r.timeFrom);
   const isRange=!!(r&&/(?:בין|משעה|מ-?)\s*\d{1,2}(?::\d{2})?\s*(?:ל-?|עד|-|–)\s*\d{1,2}|\d{1,2}(?::\d{2})?\s*[-–]\s*\d{1,2}/.test(clean));
   const toT=hasTime?(k==="personal"&&!isRange?String(Math.min(23,parseInt(r.timeFrom)+1)).padStart(2,"0")+r.timeFrom.slice(2):r.timeTo):"";
-  const when=fmtDate(date)+" · "+(hasTime?"\u2066"+r.timeFrom+"–"+toT+"\u2069":"במהלך היום (בלי שעה קבועה)");
+  const when=fmtDate(date)+" · "+(hasTime?"\u2066"+r.timeFrom+(toT?"–"+toT:"")+"\u2069":"במהלך היום (בלי שעה קבועה)");
   const insert=()=>{
     if(!r||!clean) return;
     if(k==="personal"){
       const title=qaTitle(clean);
-      const t={kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+toT:ALL_DAY_TW,allDay:!hasTime,blockDay:false,notes:[...extractNotes(clean),r.phone?"📞 "+r.phone:""].filter(Boolean).join("\n"),workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
+      const t={kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+(toT?"–"+toT:""):ALL_DAY_TW,allDay:!hasTime,blockDay:false,notes:[...extractNotes(clean),r.phone?"📞 "+r.phone:""].filter(Boolean).join("\n"),workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
       const saved=onSaveTask(t); setDone({kind:"personal",label:"📌 "+title,date,ref:saved});
     } else {
       const PK=r.pests||[]; const known=PK.filter(p=>PEST_TYPES_CRM.includes(p));
@@ -4837,7 +4838,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       const shared=r.propertyType==="בניין משותף"; const cust={name:shared?("ועד הבית"+(street?" "+street:"")+(r.city&&!street?" "+r.city:"")):(r.name||"לא צוין"),contactName:shared?(r.name||""):"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
         propertyType:pt,rooms:pt==="בניין משותף"?"":(r.rooms||""),levels:"1",floors:"",sewers:"",floor:r.floor||"",hasYard:!!r.hasYard,buildingAreas:[],underground:"0",propertyNotes:"",
         status:"פעיל",notes:[r.boxesNote,r.sewerNote,...(r.notes||[])].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
-      const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+"–"+r.timeTo:ALL_DAY_TW,
+      const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+(r.timeTo?"–"+r.timeTo:""):ALL_DAY_TW,
         pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
         buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||"",rawMsg:clean,extraContacts:(r.contacts||[]).filter((c,i)=>i>0||c.role).map(c=>({role:c.role||"",name:c.name||"",phone:c.phone}))};
       const saved=onSaveJob(cust,appt); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
@@ -4947,9 +4948,9 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       let time=a.time, tw=a.timeWindow||"", extra={};
       if(newTime){
         const tws=String(a.timeWindow||"").split(/[–-]/).map(x=>x.trim()); const st=toM(tws[0]), en=toM(tws[1]);
-        const dur=(st!=null&&en!=null&&en>st)?en-st:(isPersonal(a)?60:120);
+        const hasEnd=st!=null&&en!=null&&en>st; const dur=hasEnd?en-st:0;
         const ns=toM(newTime); time=newTime;
-        tw=isAllDay(a)&&!isPersonal(a)?fmM(ns)+"–"+fmM(ns+120):fmM(ns)+"–"+fmM(ns+dur);
+        tw=hasEnd?fmM(ns)+"–"+fmM(ns+dur):fmM(ns);
         if(isPersonal(a)) extra={allDay:false,blockDay:false};
       }
       const nx={...a,date:newDate,time,timeWindow:tw,...extra,...(w?{workerId:w.id,workerName:w.name}:{})};
@@ -5814,13 +5815,13 @@ function waParse(raw, cityNames){
   if(tw&&+tw[3]<+tw[1]&&+tw[3]<=8&&+tw[1]>=9){ tw=[...tw]; tw[3]=String(+tw[3]+12); }
   if(tw&&+tw[1]>=1&&+tw[1]<=5&&+tw[3]>=1&&+tw[3]<=8&&!tw[2]&&!tw[4]){ tw=[...tw]; tw[1]=String(+tw[1]+12); tw[3]=String(+tw[3]+12); }
   if(tw&&+tw[1]<=21&&+tw[3]<=22&&(+tw[3]*60+(+tw[4]||0))>(+tw[1]*60+(+tw[2]||0))&&!(out.phone&&String(out.phone).includes(tw[0]))){ out.timeFrom=String(tw[1]).padStart(2,"0")+":"+(tw[2]||"00"); out.timeTo=String(tw[3]).padStart(2,"0")+":"+(tw[4]||"00"); out.found.push("שעה"); }
-  else { const NOT=/(?!\d)(?!\s*(?:חדרים|₪|ש"ח|קומ))/.source; const at=text.match(new RegExp("(?<![א-ת])(?:ב|ל)?שעה\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT))||text.match(new RegExp("(?<![א-ת])ב-?\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT)); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=hh(+at[1]+2); out.found.push("שעה"); }
+  else { const NOT=/(?!\d)(?!\s*(?:חדרים|₪|ש"ח|קומ))/.source; const at=text.match(new RegExp("(?<![א-ת])(?:ב|ל)?שעה\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT))||text.match(new RegExp("(?<![א-ת])ב-?\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT)); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=""; out.found.push("שעה"); }
     else if((()=>{ const HW={"שבע":7,"שמונה":8,"תשע":9,"עשר":10,"אחת עשרה":11,"אחת-עשרה":11,"שתים עשרה":12,"שתיים עשרה":12,"אחת":13,"שתיים":14,"שלוש":15,"ארבע":16,"חמש":17,"שש":18};
       const W="(אחת[ -]עשרה|שתי?ים עשרה|שבע|שמונה|תשע|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש)(?![א-ת])";
       const rg=text.match(new RegExp("בין\\s*(?:ה)?"+W+"\\s*(?:ל|עד\\s*)(?:ה)?"+W)); if(rg){ out.timeFrom=String(HW[rg[1].replace("-"," ")]).padStart(2,"0")+":00"; out.timeTo=String(HW[rg[2].replace("-"," ")]).padStart(2,"0")+":00"; out.found.push("שעה"); return true; }
-      const one=text.match(new RegExp("(?:בשעה\\s*|(?<![א-ת])ב)"+W)); if(one){ const h=HW[one[1].replace("-"," ")]; out.timeFrom=String(h).padStart(2,"0")+":00"; out.timeTo=String(Math.min(21,h+2)).padStart(2,"0")+":00"; out.found.push("שעה"); return true; }
+      const one=text.match(new RegExp("(?:בשעה\\s*|(?<![א-ת])ב)"+W)); if(one){ const h=HW[one[1].replace("-"," ")]; out.timeFrom=String(h).padStart(2,"0")+":00"; out.timeTo=""; out.found.push("שעה"); return true; }
       return false; })()){}
-    else if((()=>{ const hm=text.match(/(?<![\d:])([6-9]|1\d|2[01]):([0-5]\d)(?![\d:])/); if(!hm) return false; out.timeFrom=String(hm[1]).padStart(2,"0")+":"+hm[2]; out.timeTo=String(Math.min(21,+hm[1]+1)).padStart(2,"0")+":"+hm[2]; out.found.push("שעה"); return true; })()){}
+    else if((()=>{ const hm=text.match(/(?<![\d:])([6-9]|1\d|2[01]):([0-5]\d)(?![\d:])/); if(!hm) return false; out.timeFrom=String(hm[1]).padStart(2,"0")+":"+hm[2]; out.timeTo=""; out.found.push("שעה"); return true; })()){}
     else if(/בבוקר/.test(text)){ out.timeFrom="08:00"; out.timeTo="12:00"; out.found.push("שעה"); }
     else if(/צהריים|צהרים/.test(text)){ out.timeFrom="12:00"; out.timeTo="15:00"; out.found.push("שעה"); }
     else if(/אחה["״]?צ|אחר הצהריים|בערב/.test(text)){ out.timeFrom="15:00"; out.timeTo="19:00"; out.found.push("שעה"); } }
@@ -6307,7 +6308,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     status:"פעיל",notes:"",
     pests:[],customPest:"",price:"",source:"",
     buildingAreas:[],
-    prefDate:initialDate,timeFrom:initialTime||"08:00",timeTo:(()=>{ const h=parseInt(String(initialTime||"08:00").split(":")[0])||8; return String(Math.min(h+2,21)).padStart(2,"0")+":"+(String(initialTime||"08:00").split(":")[1]||"00"); })(),
+    prefDate:initialDate,timeFrom:initialTime||"08:00",timeTo:"",
     extraContacts:[],rawMsg:"",
   });
   const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
@@ -6405,7 +6406,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     let schedInfo=null;
     if(!custOnly&&doSchedule&&saved){
       const w=workers.find(x=>x.id===parseInt(schedWorker));
-      const timeWindow=f.allDay?ALL_DAY_TW:`${f.timeFrom}–${f.timeTo}`;
+      const timeWindow=f.allDay?ALL_DAY_TW:`${f.timeFrom}${f.timeTo?"–"+f.timeTo:""}`;
       onSchedule({
         customerId:saved.id,customerName:saved.name,contactName:contactForDocs(),propertyNotes:f.propertyNotes||"",underground:isShared?f.underground:"0",
         workerId:parseInt(schedWorker),workerName:w?.name||"",
@@ -6426,7 +6427,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     const known=r.pests?r.pests.filter(p=>PEST_TYPES_CRM.includes(p)):[]; const other=r.pests?r.pests.filter(p=>!PEST_TYPES_CRM.includes(p)):[];
     const techs=workers.filter(w=>isTech(w)&&w.status!=="לא פעיל");
     setF(x=>{ const nx={...x};
-      ["phone","city","aptNum","entrance","rooms","floor","price","prefDate","timeFrom","timeTo"].forEach(k=>{ if(r[k]!==undefined&&r[k]!=="") nx[k]=r[k]; });
+      ["phone","city","aptNum","entrance","rooms","floor","price","prefDate","timeFrom","timeTo"].forEach(k=>{ if(r[k]!==undefined&&r[k]!=="") nx[k]=r[k]; }); if(r.timeFrom&&!r.timeTo) nx.timeTo="";
       if(r.street){ nx.street=[r.street,r.buildingNum].filter(Boolean).join(" "); nx.buildingNum=""; }
       if(r.propertyType){ nx.propertyType=r.propertyType; nx.propOther=false; }
       if(r.bizName){ nx.clientKind="biz"; if(!x.placeName) nx.placeName=r.bizName; }
@@ -6634,7 +6635,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,alignItems:"end"}}>
         <div style={{gridColumn:"1 / -1"}}><Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/></div>
         {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>}
-        {!f.allDay&&<Sel label="עד שעה" value={f.timeTo} onChange={v=>set("timeTo",v)} options={TIME_SLOTS}/>}
+        {!f.allDay&&<Sel label="עד שעה (לא חובה)" value={f.timeTo||""} onChange={v=>set("timeTo",v)} options={["",...TIME_SLOTS]}/>}
         <label style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",background:f.allDay?"#f0f9ff":"transparent",border:`1px solid ${f.allDay?"#bae6fd":"transparent"}`,borderRadius:8,padding:"4px 8px",marginTop:-6,width:"fit-content"}}>
           <input type="checkbox" checked={!!f.allDay} onChange={e=>set("allDay",e.target.checked)} style={{width:16,height:16}}/>
           <span>☀️ במהלך היום <span style={{color:CLR.muted,fontSize:12}}>(בלי שעה קבועה)</span></span>
@@ -12779,7 +12780,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="168";
+const APP_BUILD="169";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
