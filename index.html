@@ -1630,7 +1630,7 @@ async function uploadPayReq(P){
   return {url:"https://hadbara360.co.il/p/#"+b64url(body),ref};
 }
 function PayRequestModal({amount,desc,cust:cust0={},customers=null,onClose,onCreated}){
-  const [cust,setCust]=useState(cust0); const [pq,setPq]=useState("");
+  const [cust,setCust]=useState(cust0); const [pq,setPq]=useState(""); const [toPh,setToPh]=useState(cust0.phone||"");
   const [cfg,setCfg]=useState(payCfg); const [amt,setAmt]=useState(String(amount||"")); const [d,setD]=useState(desc||""); const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false); const [res,setRes]=useState(null); const [setOpen,setSetOpen]=useState(()=>!payCfg().bit);
   const saveCfg=n=>{ setCfg(n); try{ localStorage.setItem("h360_paycfg",JSON.stringify(n)); }catch(e){} };
@@ -1638,11 +1638,11 @@ function PayRequestModal({amount,desc,cust:cust0={},customers=null,onClose,onCre
   const any=!!(cfg.bit||cfg.paybox||(cfg.bank&&B)||cfg.cash);
   const create=async()=>{ const a=parseFloat(amt)>0?parseFloat(amt):0; if(!any) return alert("בחר לפחות דרך תשלום אחת"); setBusy(true);
     const P={v:1,amount:a,desc:d.trim(),note:note.trim(),date:fmtDate(todayStr()),biz:{name:COMPANY.name,wa:"972"+String(COMPANY.phone||"").replace(/\D/g,"").replace(/^0/,"")},
-      cust:{name:cust.name||"",taxId:cust.taxId||"",phone:cust.phone||"",email:cust.email||"",address:cust.address||""},
+      cust:{name:cust.name||"",taxId:cust.taxId||"",phone:cust.phone||(cust.name?toPh:"")||"",email:cust.email||"",address:cust.address||""},
       bit:cfg.bit?{phone:cfg.bit,name:cfg.bitName||""}:null, paybox:cfg.paybox?{phone:cfg.paybox}:null, bank:cfg.bank&&B?B:null, cash:!!cfg.cash, gw:null};
     try{ const r=await uploadPayReq(P); setRes(r); onCreated&&onCreated({...r,amount:a,desc:P.desc,at:new Date().toISOString()}); }catch(e){ alert("יצירת הקישור נכשלה: "+(e.message||e)); } setBusy(false); };
   const msg=res?["שלום "+(name||"")+" 👋","","מצורף קישור לתשלום"+(parseFloat(amt)>0?" על סך "+money(parseFloat(amt)):"")+(d.trim()?" עבור "+d.trim():"")+" — "+COMPANY.name+".",parseFloat(amt)>0?"בקישור בוחרים איך לשלם, ואפשר לעדכן את הפרטים לחשבונית (למשל שם העסק):":"בקישור ממלאים סכום ופרטים לחשבונית, ובוחרים איך לשלם:","",res.url,"","תודה רבה! 🙏"].join("\n"):"";
-  const [toPh,setToPh]=useState(cust0.phone||""); const intl=sendIntl(toPh||""); const okPh=intl.length>=11;
+  const intl=sendIntl(toPh||""); const okPh=intl.length>=11;
   const L=res?(okPh?sendLinks(toPh,"",{text:msg,subject:""}):{wa:waRegHref("",msg),wab:"https://wa.me/?text="+encodeURIComponent(msg),sms:"sms:?body="+encodeURIComponent(msg)}):null;
   const chip=(on,l,fn)=><button type="button" onClick={fn} style={{border:"1.5px solid "+(on?"#16a34a":"#cbd5e1"),background:on?"#dcfce7":"#fff",borderRadius:20,padding:"6px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:on?700:400}}>{on?"✓ ":""}{l}</button>;
   const a={display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 10px",borderRadius:12,fontWeight:700,fontSize:15,textDecoration:"none",border:"none",cursor:"pointer",fontFamily:"inherit"};
@@ -1652,9 +1652,9 @@ function PayRequestModal({amount,desc,cust:cust0={},customers=null,onClose,onCre
       {customers&&<div style={{marginBottom:8}}>
         <Inp label="לקוח" value={pq} onChange={v=>{ setPq(v); setCust(c=>({...c,name:v,customerId:null})); }} placeholder="חפש לקוח או כתוב שם חדש"/>
         {pq.trim().length>=1&&!cust.customerId&&(()=>{ const q=pq.trim().toLowerCase(); const L=customers.filter(c=>!c.deleted&&[c.name,c.bizName,c.contactName,c.phone].some(x=>String(x||"").toLowerCase().includes(q))).slice(0,6);
-          return L.length?<div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden",marginTop:-6}}>{L.map(c=><button key={c.id} type="button" onClick={()=>{ setCust({customerId:c.id,name:custDocName(c),contactName:c.contactName||"",phone:c.phone||"",email:c.email||"",taxId:c.taxId||"",address:c.address||""}); setPq(custDocName(c)); }} style={{display:"block",width:"100%",textAlign:"right",padding:"9px 10px",border:"none",borderBottom:"1px solid #f1f5f9",background:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:14}}><b>{custDocName(c)}</b>{c.phone?<span style={{color:"#64748b"}}> · {c.phone}</span>:null}</button>)}</div>:null; })()}
-        {!cust.customerId&&pq.trim()&&<Inp label="טלפון" value={cust.phone||""} onChange={v=>setCust(c=>({...c,phone:v}))} placeholder="05X-XXXXXXX"/>}
+          return L.length?<div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden",marginTop:-6}}>{L.map(c=><button key={c.id} type="button" onClick={()=>{ setCust({customerId:c.id,name:custDocName(c),contactName:c.contactName||"",phone:c.phone||"",email:c.email||"",taxId:c.taxId||"",address:c.address||""}); setPq(custDocName(c)); setToPh(c.phone||""); }} style={{display:"block",width:"100%",textAlign:"right",padding:"9px 10px",border:"none",borderBottom:"1px solid #f1f5f9",background:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:14}}><b>{custDocName(c)}</b>{c.phone?<span style={{color:"#64748b"}}> · {c.phone}</span>:null}</button>)}</div>:null; })()}
       </div>}
+      <Inp label="📱 לשלוח למספר (לא חובה)" type="tel" value={toPh} onChange={setToPh} placeholder="05X-XXXXXXX"/>
       <G2 gap={8}><Inp label="סכום (₪) — לא חובה" type="number" value={amt} onChange={setAmt} placeholder="ריק = הלקוח ימלא"/><Inp label="עבור" value={d} onChange={setD} placeholder="למשל: הדברת תיקנים"/></G2>
       <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",fontSize:13,margin:"4px 0 10px"}}>🧾 {cust.name?"פרטים שימולאו מראש:":"בלי לקוח — הלקוח ימלא שם ופרטים בעצמו"} <b>{cust.name||""}</b>{cust.phone?" · "+cust.phone:""}{cust.taxId?" · ח.פ. "+cust.taxId:""} <span style={{color:"#64748b"}}>(הלקוח יכול לשנות)</span></div>
       <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>דרכי תשלום בדף:</div>
@@ -12932,7 +12932,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="178";
+const APP_BUILD="179";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}

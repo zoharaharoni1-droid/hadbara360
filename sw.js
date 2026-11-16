@@ -1,7 +1,7 @@
 // הדברה 360 — Service Worker v2
 // תכונות: cache-first, offline queue, auto-update
 
-const VERSION = 'hadbara360-v178';
+const VERSION = 'hadbara360-v179';
 const ASSETS = [
   '/hadbara360/',
   '/hadbara360/index.html',
