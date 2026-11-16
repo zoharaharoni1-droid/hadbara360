@@ -708,7 +708,7 @@ const TERMS_DEFAULT=[
     "הריסוס אינו מחסום פיזי: חרק מעופף שנכנס מחלון או ממרפסת פתוחים ימות רק אחרי שינחת על משטח מטופל.",
     "הטיפול מתבצע באזורים הרגילים. מקומות נסתרים — פתחי מיזוג, תקרות גבס עם מערכות חשמל, שקעים וצנרת פנימית — שלא צוינו מראש דורשים גישה וחומרים מיוחדים. טיפול בהם בתקופת האחריות יינתן בעלות מוזלת (הגעה וחומרים בלבד), ואחרי תום תקופת האחריות — כהזמנת שירות חדשה."]},
   {id:"g_safety",title:"הנחיות כניסה ושטיפה",when:"spray",lines:[
-    "יש לשהות מחוץ למקום עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן ב\"זמן מחוץ למקום\" (בדרך כלל כשעה).",
+    "יש לשהות מחוץ למקום עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן הביצוע ב\"זמן מחוץ למקום\" (בדרך כלל כשעה).",
     "מומלץ לא לשטוף את הרצפה 24 שעות, כדי שהחומר ייקבע היטב על המשטחים.",
     "בבית עם תינוקות זוחלים או בעלי חיים: יש לשטוף את מרכז הרצפה במים וסבון מיד בתום זמן האוורור, לפני שהם חוזרים לרצפה. זה לא פוגע ביעילות הטיפול — החומר הפעיל נשאר לאורך הפאנלים ובחריצים שבהם נעים החרקים, ומרכז החדר נשאר נקי ובטוח למגע.",
     "גם בשטיפות הבאות — לא לשפשף את הפאנלים ישירות."]},
@@ -851,7 +851,7 @@ function TermsPicker({f,setF,pests,hasSpray}){
   const toggle=t=>setF(x=>{ const cs=x.terms||[]; return {...x,terms:cs.some(c=>c.id===t.id)?cs.filter(c=>c.id!==t.id):[...cs,{id:t.id,title:t.title,text:t.text}]}; });
   const edit=(id,text)=>setF(x=>({...x,terms:(x.terms||[]).map(c=>c.id===id?{...c,text}:c)}));
   return <div>
-    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. שום דבר לא נכנס לבד — מסמנים V על מה שרוצים, ואפשר לשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן ששולחים.</div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. שום דבר לא נכנס לבד — מסמנים V על מה שרוצים, ואפשר לשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן הביצוע ששולחים.</div>
     <WarrantyPicker f={f} setF={setF} pests={pests}/>
     {!list.length&&<div style={{fontSize:13,color:"#94a3b8",marginBottom:6}}>אין נוסח מוכן למזיקים שנבחרו{hasSpray?"":" (הנוסחים הכלליים מופיעים כשיש ריסוס)"}.</div>}
     {list.map(t=>{ const on=isOn(t.id); const c=chosen.find(x=>x.id===t.id);
@@ -869,7 +869,7 @@ function TermsTplEditor(){
   const tpl=useTermsTpl(); const [list,setList]=useState(null); const [open,setOpen]=useState(null); const [busy,setBusy]=useState(false);
   const L=list||tpl; const upd=(i,p)=>setList(L.map((t,j)=>j===i?{...t,...p}:t));
   return <div>
-    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>הנוסחים האלה לא נכנסים לבד ליומן. ביומן הביצוע, בפרק "📜 מהות הטיפול ואחריות", מסמנים V על מה שרוצים — ואפשר לשנות את הטקסט לכל לקוח.</div>
+    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>הנוסחים האלה לא נכנסים לבד ליומן הביצוע. ביומן הביצוע, בפרק "📜 מהות הטיפול ואחריות", מסמנים V על מה שרוצים — ואפשר לשנות את הטקסט לכל לקוח.</div>
     {L.map((t,i)=><div key={t.id} style={{border:"1px solid "+CLR.border,borderRadius:10,marginBottom:6,background:"#fff"}}>
       <button type="button" onClick={()=>setOpen(open===t.id?null:t.id)} style={{width:"100%",display:"flex",gap:8,alignItems:"center",border:"none",background:"none",padding:"9px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
         <b style={{flex:1,fontSize:14}}>{t.title}</b><span style={{fontSize:11,color:"#64748b"}}>{t.when==="spray"?"כשיש ריסוס":(t.m||[]).slice(0,2).join(", ")}</span><span>{open===t.id?"▲":"▼"}</span></button>
@@ -877,7 +877,7 @@ function TermsTplEditor(){
         <input value={t.title} onChange={e=>upd(i,{title:e.target.value})} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",fontWeight:700,marginBottom:6}}/>
         <textarea value={t.text} onChange={e=>upd(i,{text:e.target.value})} rows={8} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",lineHeight:1.6}}/>
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",margin:"6px 0",fontSize:12}}>
-          <span style={{color:"#475569"}}>מוצע ביומן כש:</span>
+          <span style={{color:"#475569"}}>מוצע ביומן הביצוע כש:</span>
           <select value={t.when==="spray"?"spray":"pests"} onChange={e=>upd(i,e.target.value==="spray"?{when:"spray"}:{when:undefined})} style={{padding:"4px 6px",borderRadius:6,border:"1px solid "+CLR.border,fontFamily:"inherit",fontSize:12}}><option value="pests">נבחר מזיק</option><option value="spray">יש ריסוס</option></select>
           {t.when!=="spray"&&<input value={(t.m||[]).join(", ")} onChange={e=>upd(i,{m:e.target.value.split(/\s*,\s*/).filter(Boolean)})} placeholder="מזיקים, מופרדים בפסיק (למשל: תיקן, ג'וק)" style={{flex:1,minWidth:160,padding:"5px 8px",borderRadius:6,border:"1px solid "+CLR.border,fontFamily:"inherit",fontSize:12}}/>}
         </div>
@@ -1461,7 +1461,7 @@ function execLogWAText(log){
     (log.instructions||[]).length?"\n📋 *הנחיות:*\n"+log.instructions.map(x=>"  • "+x).join("\n"):"",
     log.extermination_notes?"\n📝 הנחיות: "+log.extermination_notes:"",
     log.notes?"\n📝 "+log.notes:"",
-    log.docNum?"\nמס׳ יומן: "+log.docNum:"",
+    log.docNum?"\nמס׳ יומן ביצוע: "+log.docNum:"",
     "","תודה שבחרתם בנו 🦟"].filter(x=>x!=="").join("\n");
 }
 // ── בקשת ביקורת בגוגל ──
@@ -1563,7 +1563,7 @@ async function sendExecLogWA0(log,phone){
   try{ if(w) w.document.write('<html dir="rtl"><body style="font-family:Arial;padding:40px;font-size:20px;text-align:center">⏳ מכין את יומן הביצוע כ-PDF...</body></html>'); }catch(e){}
   try{
     const {url}=await uploadExecLogPdf(log);
-    const text=["שלום "+(log.contactName||log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
+    const text=["שלום "+(log.contactName||log.clientName||"")+" 👋","","מצורף יומן הביצוע של הטיפול שבוצע אצלכם — "+COMPANY.name,"מס׳ יומן ביצוע: "+(log.docNum||"")+" · "+fmtDate(log.date),"","📄 לצפייה והורדה:",url,"","תודה שבחרתם בנו!"].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
     try{ window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
@@ -1885,7 +1885,7 @@ function jobProgress(appt, execLogs, finance){
     {name:"חשבונית/קבלה",done:invoiced},
     {name:"שולם",done:paid},
   ];
-  const next = !workDone?null:!log?"מילוי יומן ביצוע":!invoiced?"הפקת חשבונית":!paid?"קבלת תשלום":!sent?"שליחת יומן ללקוח":null;
+  const next = !workDone?null:!log?"מילוי יומן ביצוע":!invoiced?"הפקת חשבונית":!paid?"קבלת תשלום":!sent?"שליחת יומן ביצוע ללקוח":null;
 
   if(cancelled) return {stage:"בוטל",label:"בוטל",color:"#9ca3af",steps,next:null};
   if(workDone&&log&&invoiced&&paid) return {stage:"הושלם",label:"✓ נסגר",color:"#16a34a",steps,next:null,closed:true};
@@ -2307,7 +2307,7 @@ function ChemPicker({selected,onChange,treatMethod={},memory={},mine=[],pests=[]
               <div style={{fontSize:13,fontWeight:800,color:"#1e3a8a",marginBottom:2}}>🪤 איפה הנחתי את הרעל? (אפשר כמה ביחד)</div>
               {RODENT_SPOTS.map(([k,l])=>cnt(k,l,hints[k]))}
               {(parseInt(m.otherQty)||0)>0&&<input value={m.otherPlace||""} onChange={e=>onChange(selected.map(x=>x.name===m.name?{...x,otherPlace:e.target.value}:x))} placeholder="איפה? למשל: חללי קירות, גג, מרזבים" style={{width:"100%",marginTop:4,padding:"8px 10px",borderRadius:8,border:"1px solid #bfdbfe",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"}}/>}
-              {legacyOnly&&<div style={{fontSize:12,color:"#64748b"}}>ביומן הישן נרשמו {m.stations} תחנות</div>}
+              {legacyOnly&&<div style={{fontSize:12,color:"#64748b"}}>ביומן הביצוע הקודם נרשמו {m.stations} תחנות</div>}
             </div>; })()}
           <div style={{fontSize:13,color:CLR.muted,marginBottom:6,fontWeight:600}}>אזורי יישום</div>
           <GridChoice items={[...areas,...extra]} isOn={a=>(m.areas||[]).includes(a)} onToggle={a=>toggleArea(m,a)} onOther={a=>{ if(!(m.areas||[]).includes(a)) toggleArea(m,a); }} otherLabel="אזור אחר" min={118} small limit={6}/>
@@ -2640,8 +2640,8 @@ function ExecSmartFill({onApply,chemNames,memory,value,onChange}){
     {r&&<div style={{marginTop:8}}>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}
         {!chips.length&&<span style={{fontSize:13,color:"#6d28d9"}}>עדיין לא זיהיתי פרטים — המשך לספר…</span>}</div>
-      <button type="button" onClick={()=>onApply(r)} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✨ מלא את היומן מהטקסט</button>
-      <div style={{fontSize:11,color:"#6d28d9",marginTop:4,textAlign:"center"}}>הטקסט נשאר שמור ביומן כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
+      <button type="button" onClick={()=>onApply(r)} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✨ מלא את יומן הביצוע מהטקסט</button>
+      <div style={{fontSize:11,color:"#6d28d9",marginTop:4,textAlign:"center"}}>הטקסט נשאר שמור ביומן הביצוע כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
     </div>}
   </div>;
 }
@@ -2844,7 +2844,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
     <ExecSmartFill onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
-      {[["steps","🪜 יומן לפי שלבים"],["flat","📄 יומן רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
+      {[["steps","🪜 יומן ביצוע לפי שלבים"],["flat","📄 יומן ביצוע רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
     </div>
     {sec("client","👤","לקוח",[f.clientName,f.address].filter(Boolean).join(" · "),f.clientName&&f.address?"ok":"req",<>
     {/* בחירת לקוח קיים — ממלא שם, כתובת, טלפון וסוג מבנה */}
@@ -3188,7 +3188,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
         {saved&&onBack&&<button type="button" onClick={onBack} style={{...ib,color:"#1d4ed8",borderColor:"#93c5fd"}}>✏️ ערוך</button>}
         <button type="button" onClick={()=>setMoreOpen(true)} style={ib}>⋯ עוד</button>
         {onApprove&&<button type="button" onClick={onApprove} style={{...ib,marginRight:"auto",background:CLR.primary,color:"#fff",border:"none"}}>{saved?"✓ סיום":(approveLabel||"✓ סיום")}</button>}
-        {moreOpen&&<ActionSheet title="עוד פעולות ליומן" items={more} onClose={()=>setMoreOpen(false)}/>}
+        {moreOpen&&<ActionSheet title="עוד פעולות ליומן הביצוע" items={more} onClose={()=>setMoreOpen(false)}/>}
       </div>; })()}
     {payReq&&<PayRequestModal amount={linkedDoc&&linkedDoc.status!=="שולם"?(linkedDoc.total||linkedDoc.amount):(log.paymentDebt||log.agreedPrice||"")} desc={(log.pest||[]).length?"הדברת "+log.pest.join(", "):"טיפול הדברה"}
       cust={{name:log.clientName||"",contactName:log.contactName||"",phone:phone||log.phone||"",taxId:log.taxId||"",address:log.address||""}} onClose={()=>setPayReq(false)}/>}
@@ -3305,7 +3305,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
   const finish=()=>{ setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
 
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setSavedLog(null);setFormKey(k=>k+1);setMode("new");};
-  const openEdit=l=>{ if(!l.draft){ showToast("🔒 יומן סגור — אפשר לשכפל ליומן חדש"); return; } setViewLog(null); setPrefillAppt(l.apptId?appointments.find(a=>a.id===l.apptId)||null:null); setSavedLog(l); setExtracted({...l,safety:l.safetyText}); setFormKey(k=>k+1); setMode("new"); };
+  const openEdit=l=>{ if(!l.draft){ showToast("🔒 יומן ביצוע סגור — אפשר לשכפל ליומן ביצוע חדש"); return; } setViewLog(null); setPrefillAppt(l.apptId?appointments.find(a=>a.id===l.apptId)||null:null); setSavedLog(l); setExtracted({...l,safety:l.safetyText}); setFormKey(k=>k+1); setMode("new"); };
   const openDup=l=>{ setViewLog(null); setPrefillAppt(null); setSavedLog(null);
     const {id,docNum,apptId,invoiceNum,sentAt,reviewRequestedAt,createdAt,draft,...rest}=l;
     setExtracted({...rest,safety:l.safetyText,date:todayStr(),paymentDone:false,paymentAmount:"",paymentMethod:"",paymentStatus:"",paymentNote:"",paymentDebt:"",
@@ -3330,7 +3330,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
       </div>
       {viewLog.freeText&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:"#5b21b6",marginBottom:4}}>📝 מה המדביר כתב / אמר</div><div style={{whiteSpace:"pre-wrap",fontSize:14}}>{viewLog.freeText}</div></div>}
       <div style={{display:"none"}}>
-        <Btn sm v="secondary" onClick={()=>openDup(viewLog)}>⧉ שכפל ליומן חדש</Btn>
+        <Btn sm v="secondary" onClick={()=>openDup(viewLog)}>⧉ שכפל ליומן ביצוע חדש</Btn>
       </div>
       <ExecLogPreview data={{...viewLog,worker:{name:viewLog.workerName,license:viewLog.workerLicense},materials:viewLog.materials||[]}} saved={viewLog} phone={viewLog.phone||(customers.find(c=>String(c.id)===String(viewLog.customerId))||customers.find(c=>c.name===viewLog.clientName)||{}).phone} onBack={()=>setViewLog(null)} finance={finance} customers={customers} appointments={appointments} onSaveDoc={saveDocTab}/>
     </div>
@@ -3387,8 +3387,8 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
         {!l.draft&&<button onClick={()=>printExecLog(l)} style={ib}>📄 PDF</button>}
         {!l.draft&&<button onClick={()=>{ sendExecLogWA(l,ph);}} style={{...ib,color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח יומן ביצוע</button>}
         {!l.draft&&<button onClick={()=>{ if(!ph) return alert("אין טלפון ללקוח הזה"); sendReviewRequest(l.clientName,ph); setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,reviewRequestedAt:todayStr()}:x)); }} title="בקשת ביקורת בגוגל" style={ib}>⭐ ביקורת</button>}
-        <button onClick={()=>openDup(l)} title="שכפל ליומן חדש עם תאריך היום" style={ib}>⧉</button>
-        {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nהיומן יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקה (לסל המחזור)" style={{...ib,color:"#dc2626",borderColor:"#fecaca",marginRight:"auto"}}>🗑️ מחק</button>}
+        <button onClick={()=>openDup(l)} title="שכפל ליומן ביצוע חדש עם תאריך היום" style={ib}>⧉</button>
+        {currentUser&&currentUser.role==="מנהל"&&<button onClick={()=>{ if(window.confirm("למחוק את יומן הביצוע של "+(l.clientName||"ללא שם")+" מ-"+fmtDate(l.date)+"?\nיומן הביצוע יעבור לסל המחזור ואפשר יהיה לשחזר אותו.")) softDelete(setExecLogs,l.id); }} title="מחיקה (לסל המחזור)" style={{...ib,color:"#dc2626",borderColor:"#fecaca",marginRight:"auto"}}>🗑️ מחק</button>}
       </div>
     </div>; };
   const apptCard=a=><div key={"a"+a.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid #94a3b8",borderRadius:12,padding:"10px 12px",display:"flex",alignItems:"center",gap:10}}>
@@ -3396,7 +3396,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
         <div style={{fontWeight:800,fontSize:15,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.customerName||"ללא שם"}</div>
         <div style={{fontSize:12,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fmtDate(a.date)}{a.time?" "+a.time:""}{a.pestType?" · "+a.pestType:""}{a.address?" · "+a.address:""}</div>
       </div>
-      <button onClick={()=>startNew(a)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✍️ מלא יומן</button>
+      <button onClick={()=>startNew(a)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✍️ מלא יומן ביצוע</button>
     </div>;
   const cur=curSeg==="wait"?waitList:curSeg==="draft"?draftList:doneList;
   return(
@@ -3411,11 +3411,11 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
       </div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
         <div className="h360-seg">{segs.map(([k,lb,n])=><button key={k} type="button" className={curSeg===k?"on":""} onClick={()=>setElSeg(k)}>{lb} <span style={{fontWeight:800}}>({n})</span></button>)}</div>
-        <input value={elQ} onChange={e=>setElQ(e.target.value)} placeholder="🔍 חיפוש: לקוח, כתובת, טלפון, מספר יומן…" style={{flex:"1 1 220px",minWidth:0,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14,background:"#fff",fontFamily:"inherit"}}/>
+        <input value={elQ} onChange={e=>setElQ(e.target.value)} placeholder="🔍 חיפוש: לקוח, כתובת, טלפון, מספר יומן ביצוע…" style={{flex:"1 1 220px",minWidth:0,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14,background:"#fff",fontFamily:"inherit"}}/>
       </div>
       {cur.length===0
         ? <div style={{textAlign:"center",color:CLR.muted,padding:40,fontSize:14,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12}}>
-            {nq?"לא נמצאו תוצאות לחיפוש":curSeg==="wait"?"אין תורים שממתינים ליומן 👍":curSeg==="draft"?"אין טיוטות פתוחות":"אין יומני ביצוע עדיין"}
+            {nq?"לא נמצאו תוצאות לחיפוש":curSeg==="wait"?"אין תורים שממתינים ליומן ביצוע 👍":curSeg==="draft"?"אין טיוטות פתוחות":"אין יומני ביצוע עדיין"}
           </div>
         : <div className="h360-grid">{curSeg==="wait"?cur.map(apptCard):cur.map(logCard)}</div>}
      </div>
@@ -4318,7 +4318,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {kv("תשלום בשטח",lg.paymentDone?[lg.paymentMethod,lg.paymentAmount?"₪"+lg.paymentAmount:""].filter(Boolean).join(" · "):"לא שולם")}
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginTop:10}}>
           <button type="button" onClick={()=>printExecLog(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>👁 צפה</button>
-          <button type="button" onClick={()=>onFillLog(appt,{edit:true})} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך יומן</button>
+          <button type="button" onClick={()=>onFillLog(appt,{edit:true})} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך יומן ביצוע</button>
           <button type="button" onClick={()=>{ sendExecLogWA(lg,phone); }} style={pill("#25D366","#fff")}>📤 שלח יומן ביצוע ללקוח</button>
           <button type="button" onClick={()=>shareExecLogPdf(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>📄 PDF</button>
         </div>
@@ -4417,7 +4417,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {freeBlk}
       {appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
         {lg?tile("📋","יומן ביצוע ✓",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח":"לא נשלח"),()=>onFillLog(appt),"ok"):tile("✍️","מלא יומן ביצוע","אחרי הטיפול",()=>onFillLog(appt),"go")}
-        {isStaff&&(docs.length?tile("🧾",(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")+" ✓",docs[0].invoiceNum||"",()=>tog("doc"),"ok"):tile("🧾","חשבונית / קבלה","אפשר גם לפני היומן",()=>onInvoice(appt),"inv"))}
+        {isStaff&&(docs.length?tile("🧾",(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")+" ✓",docs[0].invoiceNum||"",()=>tog("doc"),"ok"):tile("🧾","חשבונית / קבלה","אפשר גם לפני יומן הביצוע",()=>onInvoice(appt),"inv"))}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
         {isStaff&&tile("💳","קישור לתשלום","ביט · העברה · פרטים לחשבונית",()=>setPayReq(true))}
         {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
@@ -4459,7 +4459,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {(()=>{ const miss=logChecks.filter(x=>!x[1]&&x[0]!=="נשלח ללקוח"&&x[0]!=="תשלום"); return miss.length?<div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>
           <span style={{fontSize:12,color:"#64748b"}}>לא מולא:</span>{miss.map(([n])=><button key={n} type="button" onClick={()=>onFillLog(appt,{edit:true})} style={{fontSize:12,padding:"2px 9px",borderRadius:20,border:"1px solid #fed7aa",background:"#fff7ed",color:"#9a3412",cursor:"pointer",fontFamily:"inherit"}}>{n}</button>)}</div>:null; })()}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}>
-          <button type="button" onClick={()=>onFillLog(appt,{edit:true})} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך יומן</button>
+          <button type="button" onClick={()=>onFillLog(appt,{edit:true})} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך יומן ביצוע</button>
           <button type="button" onClick={()=>printExecLog(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>👁 צפה במסמך</button>
           <button type="button" onClick={()=>sendExecLogWA(lg,phone)} style={{...pill("#25D366","#fff"),gridColumn:"1 / -1"}}>📤 שלח יומן ביצוע ללקוח</button>
         </div>
@@ -4497,7 +4497,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       <div style={{...row,cursor:"default",marginBottom:0}}><span style={{fontSize:18}}>🕐</span><span style={{flex:1,fontWeight:700}}>{fmtDate(appt.date)} · {isAllDay(appt)?ALL_DAY_TW:<span dir="ltr" style={{whiteSpace:"nowrap",display:"inline-block"}}>{appt.timeWindow||appt.time||""}</span>}</span><ProgressBadge prog={prog}/></div>
     </div>
     {appt.kind!=="free"&&!editMode&&appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:isStaff?"1fr 1fr":"1fr",gap:8,marginBottom:10}}>
-      {lg?<button type="button" onClick={()=>onFillLog(appt)} style={{...pill("#f0fdf4","#166534","#86efac"),padding:"12px 8px",fontSize:15}}>📋 יומן {lg.docNum||""} ✓</button>
+      {lg?<button type="button" onClick={()=>onFillLog(appt)} style={{...pill("#f0fdf4","#166534","#86efac"),padding:"12px 8px",fontSize:15}}>📋 יומן ביצוע {lg.docNum||""} ✓</button>
         :<button type="button" onClick={()=>onFillLog(appt)} style={{...pill(CLR.primary,"#fff"),padding:"12px 8px",fontSize:15}}>✍️ מלא יומן ביצוע</button>}
       {isStaff&&(docs.length?<button type="button" onClick={()=>tog("doc")} style={{...pill("#eff6ff","#1d4ed8","#93c5fd"),padding:"12px 8px",fontSize:15}}>🧾 {(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")} ✓</button>
         :<button type="button" onClick={()=>onInvoice(appt)} style={{...pill("#0f766e","#fff"),padding:"12px 8px",fontSize:15}}>🧾 חשבונית / קבלה</button>)}
@@ -7418,7 +7418,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const goNewLog=c=>{ window.__h360PendingExec=c; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); };
   const goEditLog=l=>{ window.__h360ExecAction={type:"edit",id:l.id}; setSel(null); window.__h360Nav&&window.__h360Nav("execlog"); };
   const ab={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:9,padding:"7px 10px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4};
-  const needBtn=(c,st)=>st.need==="log"?<button onClick={e=>{e.stopPropagation();goEditLog(st.log);}} style={{...ab,justifyContent:"center",background:"#0284c7",color:"#fff",border:"none"}}>✏️ השלם יומן</button>
+  const needBtn=(c,st)=>st.need==="log"?<button onClick={e=>{e.stopPropagation();goEditLog(st.log);}} style={{...ab,justifyContent:"center",background:"#0284c7",color:"#fff",border:"none"}}>✏️ השלם יומן ביצוע</button>
     :st.need==="inv"&&currentUser.role!=="מדביר"?<button onClick={e=>{e.stopPropagation();setInvLog(st.log);}} style={{...ab,justifyContent:"center",background:"#0284c7",color:"#fff",border:"none"}}>🧾 הפק חשבונית</button>:null;
   const [filterStatus,setFilterStatus]=useState("הכל");
   const [filterType,setFilterType]=useState("הכל");
@@ -7501,7 +7501,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           {needBtn(c,st)}
           {c.phone&&<a href={tel(c.phone)} style={ab}>📞 חייג</a>}
           {c.phone&&<a href={waL(c.phone)} target="_blank" rel="noreferrer" style={{...ab,color:"#15803d",borderColor:"#bbf7d0"}}>💬</a>}
-          <button onClick={()=>goNewLog(c)} style={ab}>📋 יומן{st.log?" נוסף":""}</button>
+          <button onClick={()=>goNewLog(c)} style={ab}>📋 יומן ביצוע{st.log?" נוסף":""}</button>
           <button onClick={()=>setSel(c)} style={{...ab,marginRight:"auto",color:"#0369a1"}}>פרטים ‹</button>
         </div>
       </div>; })}
@@ -7517,7 +7517,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           <div style={{fontWeight:800,fontSize:17}}>{sel.name}</div>
           <div style={{fontSize:13,color:"#64748b",margin:"2px 0 8px"}}>{[sel.address,sel.phone].filter(Boolean).join(" · ")||"—"}</div>
           {l?<>
-            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>הטיפול האחרון · {fmtDate(l.date)}{l.docNum?" · יומן "+l.docNum:""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,3).join(", "):""}</div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>הטיפול האחרון · {fmtDate(l.date)}{l.docNum?" · יומן ביצוע "+l.docNum:""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,3).join(", "):""}</div>
             <JobSteps steps={st.steps}/>
             {st.need&&<div style={{marginTop:8,fontSize:13,fontWeight:700,color:"#0369a1"}}>{NEED_TXT[st.need]}{st.need==="pay"&&st.debt?" — ₪"+st.debt:""}</div>}
           </>:<div style={{fontSize:13,color:"#94a3b8"}}>{st.nextAppt?"📅 תור קרוב: "+fmtDate(st.nextAppt.date)+(st.nextAppt.time?" "+st.nextAppt.time:""):st.lastDate?"טופל ב-"+fmtDate(st.lastDate)+" (אין יומן ביצוע במערכת)":"עוד לא בוצע טיפול"}</div>}
@@ -8811,7 +8811,7 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
       <div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3}}>{[["open","פתוחים"],["paid","שולמו"]].map(([v,l])=><button key={v} type="button" onClick={()=>setView(v)} style={{border:"none",borderRadius:8,padding:"7px 16px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",background:view===v?"#fff":"transparent",color:view===v?(v==="open"?"#b91c1c":"#166534"):"#64748b",boxShadow:view===v?"0 1px 3px rgba(0,0,0,.1)":"none"}}>{l}</button>)}</div>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לקוח" style={{flex:1,minWidth:160,padding:"9px 12px",borderRadius:10,border:"1px solid #d1d5db",fontSize:14}}/>
       <Btn sm v="secondary" onClick={()=>setAdd({name:"",phone:"",amount:"",desc:"",date:todayStr(),source:"חוב"})}>+ חוב ידני</Btn>
-      {view==="open"&&openAll.some(d=>d.kind==="log")&&<Btn sm v="ghost" onClick={()=>{ const v=prompt("סגירת יומני ביצוע ישנים (שכבר טופלו ב'יש חשבונית')\nלסמן כשולמו את כל היומנים שלא שולמו עד תאריך (dd/mm/yyyy):",""); if(!v) return; const m=v.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/); if(!m) return alert("תאריך לא תקין"); const iso=(m[3].length===2?"20"+m[3]:m[3])+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0"); const L=openAll.filter(d=>d.kind==="log"&&String(d.date||"")<=iso); if(!L.length) return alert("אין יומנים עד התאריך הזה"); if(!confirm("לסמן "+L.length+" יומני ביצוע (סה״כ "+money(L.reduce((t,d)=>t+d.amount,0))+") כשולמו?")) return; const ids=new Set(L.map(d=>String(d.rec.id))); const at=new Date().toISOString(); setExecLogs(ls=>ls.map(x=>ids.has(String(x.id))?{...x,debtClosed:{at,ref:"טופל לפני המעבר"}}:x)); }}>✓ סגירת יומנים ישנים</Btn>}
+      {view==="open"&&openAll.some(d=>d.kind==="log")&&<Btn sm v="ghost" onClick={()=>{ const v=prompt("סגירת יומני ביצוע ישנים (שכבר טופלו ב'יש חשבונית')\nלסמן כשולמו את כל יומני הביצוע שלא שולמו עד תאריך (dd/mm/yyyy):",""); if(!v) return; const m=v.match(/(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/); if(!m) return alert("תאריך לא תקין"); const iso=(m[3].length===2?"20"+m[3]:m[3])+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0"); const L=openAll.filter(d=>d.kind==="log"&&String(d.date||"")<=iso); if(!L.length) return alert("אין יומני ביצוע עד התאריך הזה"); if(!confirm("לסמן "+L.length+" יומני ביצוע (סה״כ "+money(L.reduce((t,d)=>t+d.amount,0))+") כשולמו?")) return; const ids=new Set(L.map(d=>String(d.rec.id))); const at=new Date().toISOString(); setExecLogs(ls=>ls.map(x=>ids.has(String(x.id))?{...x,debtClosed:{at,ref:"טופל לפני המעבר"}}:x)); }}>✓ סגירת יומני ביצוע ישנים</Btn>}
     </div>
     <div className="h360-seg" style={{marginBottom:12,display:"inline-flex"}}>{[["all","הכל"],["log","📋 מיומני ביצוע"],["doc","🧾 חשבוניות פתוחות"],["manual","✍️ חובות ידניים"]].map(([k,l])=><button key={k} type="button" className={kindF===k?"on":""} onClick={()=>setKindF(k)}>{l} ({kindCnt(k)})</button>)}</div>
     {ageF>=0&&view==="open"&&<div style={{fontSize:13,color:"#0369a1",marginBottom:8}}>מסונן לפי גיל החוב: {buckets[ageF][0]} · <a href="#" onClick={e=>{e.preventDefault();setAgeF(-1);}}>הצג הכל</a></div>}
@@ -8980,7 +8980,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     if(!logs.length) return alert("סמן לפחות ביקור אחד");
     setConsol(null);
     setDocReq({type:"חשבונית מס",prefill:{custId:g.cust?g.cust.id:null,custName:g.name,taxId:(g.cust&&g.cust.taxId)||"",execLogIds:logs.map(l=>l.id),refText:"חשבונית מרכזת — "+logs.length+" ביקורים",inclVat:true,
-      lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
+      lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן ביצוע "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
   const tb={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"};
   return <div style={{maxWidth:1150,margin:"0 auto"}}>
@@ -9016,7 +9016,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       <div className="h360-grid">
       {pendingInv.map(l=><div key={l.id} style={{background:"#fff",border:"1px solid #e0f2fe",borderRadius:10,padding:"9px 12px"}}>
         <div style={{display:"flex",justifyContent:"space-between",gap:8}}><b style={{fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.clientName}</b><span style={{fontSize:12,color:CLR.muted,whiteSpace:"nowrap"}}>{fmtDate(l.date)}</span></div>
-        <div style={{fontSize:12,color:"#475569"}}>{l.paymentMethod||"—"}{l.paymentAmount?" · ₪"+l.paymentAmount:""}{l.docNum?" · יומן "+l.docNum:""}</div>
+        <div style={{fontSize:12,color:"#475569"}}>{l.paymentMethod||"—"}{l.paymentAmount?" · ₪"+l.paymentAmount:""}{l.docNum?" · יומן ביצוע "+l.docNum:""}</div>
         <div style={{display:"flex",gap:6,marginTop:7,flexWrap:"wrap"}}>
           <button type="button" onClick={()=>openInvFor(l)} style={{border:"none",background:"#0284c7",color:"#fff",borderRadius:9,padding:"6px 11px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🧾 הפק חשבונית</button>
           {setExecLogs&&<button type="button" onClick={()=>{if(confirm("להוריד את "+(l.clientName||"")+" מהרשימה?\n(למשל: החשבונית הופקה ב'יש חשבונית', או שזה היה ניסיון)")) setExecLogs(ls=>ls.map(x=>x.id===l.id?{...x,invoiceNum:"הופקה ידנית"}:x));}} style={{border:"1px solid #e2e8f0",background:"#fff",color:"#475569",borderRadius:9,padding:"6px 11px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>✕ הסר מהרשימה</button>}
@@ -9113,7 +9113,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       {consol.custKey&&openLogsByCust[consol.custKey]&&<div style={{border:"1px solid #e2e8f0",borderRadius:10,marginBottom:12}}>
         {openLogsByCust[consol.custKey].logs.sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(l=>{const on=consol.picked.has(String(l.id));return <label key={l.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid #f1f5f9",cursor:"pointer"}}>
           <input type="checkbox" checked={on} onChange={()=>{const n=new Set(consol.picked); on?n.delete(String(l.id)):n.add(String(l.id)); setConsol({...consol,picked:n});}}/>
-          <span style={{flex:1,fontSize:14}}>{fmtDate(l.date)} · יומן {l.docNum} · {(l.pest||[]).join(", ")||serviceLabel(l)}</span>
+          <span style={{flex:1,fontSize:14}}>{fmtDate(l.date)} · יומן ביצוע {l.docNum} · {(l.pest||[]).join(", ")||serviceLabel(l)}</span>
           <b>{l.agreedPrice?"₪"+l.agreedPrice:"—"}</b>
         </label>;})}
       </div>}
@@ -9697,7 +9697,7 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
      ${aid.map(t=>`<li>${esc(t)}</li>`).join("")}
    </ul>
    ${H(7,"יומן ביקורים — לפי תאריך")}
-   ${logs.length?`<table style="font-size:12px"><tr><th style="${th}">תאריך</th><th style="${th}">מדביר</th><th style="${th}">מזיקים</th><th style="${th}">חומרים</th><th style="${th}">תחנות</th><th style="${th}">ממצאים והמלצות</th><th style="${th}">מס׳ יומן</th></tr>${logRows}</table><div style="font-size:11px;color:#555;margin-top:4px">יומן ביצוע מלא לכל ביקור נשלח למקום בסיום הטיפול.</div>`:"<div>טרם בוצעו ביקורים</div>"}
+   ${logs.length?`<table style="font-size:12px"><tr><th style="${th}">תאריך</th><th style="${th}">מדביר</th><th style="${th}">מזיקים</th><th style="${th}">חומרים</th><th style="${th}">תחנות</th><th style="${th}">ממצאים והמלצות</th><th style="${th}">מס׳ יומן ביצוע</th></tr>${logRows}</table><div style="font-size:11px;color:#555;margin-top:4px">יומן ביצוע מלא לכל ביקור נשלח למקום בסיום הטיפול.</div>`:"<div>טרם בוצעו ביקורים</div>"}
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:36px"><div><div style="color:#555;margin-bottom:28px">חתימת חברת ההדברה:</div><div style="border-bottom:1px solid #999"></div></div><div><div style="color:#555;margin-bottom:28px">חתימת נציג המקום:</div><div style="border-bottom:1px solid #999"></div></div></div>
   </div>`;
 }
@@ -9758,14 +9758,14 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
     {myLogs.length>0&&<div style={{...sec,padding:"8px 12px"}}>
       <div style={{fontWeight:800,fontSize:14,marginBottom:4}}>📋 ימי ביצוע שכבר נעשו ({myLogs.length})</div>
       {(allLogs?myLogs:myLogs.slice(0,4)).map(l=>{ const sent=!!(l.sentAt||(l.date&&l.date<"2026-11-01")); return <div key={l.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderTop:"1px dashed #e2e8f0",fontSize:13,flexWrap:"wrap"}}>
-        <b style={{minWidth:78}}>{fmtDate(l.date)}</b><span style={{flex:1,minWidth:90,color:"#475569"}}>יומן {l.docNum||""} · {l.workerDocName||l.workerName||""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,2).join(", "):""}</span>
+        <b style={{minWidth:78}}>{fmtDate(l.date)}</b><span style={{flex:1,minWidth:90,color:"#475569"}}>יומן ביצוע {l.docNum||""} · {l.workerDocName||l.workerName||""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,2).join(", "):""}</span>
         <span style={{fontSize:11,padding:"2px 6px",borderRadius:10,background:sent?"#dcfce7":"#fef3c7",color:sent?"#166534":"#92400e"}}>{sent?"נשלח":"לא נשלח"}</span>
         <button type="button" onClick={()=>printExecLog(l)} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>👁 צפה</button>
         <button type="button" onClick={()=>shareExecLogPdf(l)} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>📤 PDF</button>
       </div>; })}
       {myLogs.length>4&&<button type="button" onClick={()=>setAllLogs(v=>!v)} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:12,marginTop:2}}>{allLogs?"הצג פחות":"הצג את כל "+myLogs.length}</button>}
     </div>}
-    {onNewExec&&<button type="button" onClick={()=>{ persist(); onNewExec(m); }} style={{width:"100%",marginBottom:10,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה <span style={{fontWeight:400,fontSize:12}}>({maintLogs(m,execLogs).length} יומנים בתיק)</span></button>}
+    {onNewExec&&<button type="button" onClick={()=>{ persist(); onNewExec(m); }} style={{width:"100%",marginBottom:10,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה <span style={{fontWeight:400,fontSize:12}}>({maintLogs(m,execLogs).length} יומני ביצוע בתיק)</span></button>}
     {missing.length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>⚠️ חסר בתיק: {missing.join(" · ")}</div>}
     <div style={{border:"1px solid #e2e8f0",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
       <button type="button" onClick={()=>setShowPrev(v=>!v)} style={{width:"100%",textAlign:"right",border:"none",background:"#f0f9f4",padding:"10px 12px",fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",color:"#1a5c3a"}}>👁️ התיק המלא {showPrev?"▲":"▼"}</button>
@@ -9794,7 +9794,7 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
           <label style={{fontSize:12,border:"1.5px dashed #16a34a",color:"#166534",borderRadius:8,padding:"4px 8px",cursor:"pointer"}}><input type="file" multiple accept=".pdf,image/*" onChange={e=>{ const fl=[...(e.target.files||[])]; e.target.value=""; dropFiles(fl,x.name); }} style={{display:"none"}}/>📂 כמה קבצים ביחד</label>
           <a href={"https://www.google.com/search?q="+encodeURIComponent(x.name+" גיליון בטיחות SDS "+(x.holder||""))} target="_blank" rel="noopener" style={{fontSize:12,padding:"4px 8px",color:"#1d4ed8"}}>🔎 חפש SDS ברשת</a>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}><span style={{fontSize:12,color:"#475569"}}>מספר אצווה:</span><input value={x.batch||""} onChange={e=>{ const v=e.target.value; setMats(ms=>ms.map((y,j)=>j===i?{...y,batch:v}:y)); saveMatLibBatch(x.name,v); chemMemSave(x.name,{batch:v}); }} placeholder="נשמר לכל היומנים והתיקים הבאים" style={{...fld,padding:"5px 8px",fontSize:13,flex:1,maxWidth:240}}/></div>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}><span style={{fontSize:12,color:"#475569"}}>מספר אצווה:</span><input value={x.batch||""} onChange={e=>{ const v=e.target.value; setMats(ms=>ms.map((y,j)=>j===i?{...y,batch:v}:y)); saveMatLibBatch(x.name,v); chemMemSave(x.name,{batch:v}); }} placeholder="נשמר לכל יומני הביצוע והתיקים הבאים" style={{...fld,padding:"5px 8px",fontSize:13,flex:1,maxWidth:240}}/></div>
       </div>)}
       {sugg.length>0&&<div style={{margin:"6px 0"}}><div style={{fontSize:12,color:"#64748b",marginBottom:4}}>מהביקורים במקום ומ"החומרים שלי":</div><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{sugg.map(n=><button key={n} type="button" onClick={()=>add(n)} style={{padding:"5px 10px",borderRadius:20,border:"1.5px dashed "+CLR.primary,background:"#fff",color:CLR.primary,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ {n}</button>)}</div></div>}
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔎 חיפוש תכשיר במאגר הרשמי (שם או חומר פעיל)…" style={{...fld,width:"100%",marginTop:6}}/>
@@ -9819,7 +9819,7 @@ function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,o
         {myLogs.length>0&&<div style={{borderTop:"1px solid #e2e8f0",marginTop:4,paddingTop:4}}><div style={{fontSize:12,fontWeight:700,color:"#475569"}}>📋 לצרף יומני ביצוע:</div>
           {myLogs.slice(0,8).map(l=>{ const on=(book.logs||[]).map(String).includes(String(l.id)); return <label key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:14,cursor:"pointer"}}>
             <input type="checkbox" checked={on} onChange={()=>setBook(b=>({...b,logs:on?(b.logs||[]).filter(x=>String(x)!==String(l.id)):[...(b.logs||[]),l.id]}))} style={{width:18,height:18}}/>
-            <span style={{flex:1}}>יומן {l.docNum||""} · {fmtDate(l.date)}</span><span style={{fontSize:12,color:"#64748b"}}>{l.workerDocName||l.workerName||""}</span></label>; })}</div>}
+            <span style={{flex:1}}>יומן ביצוע {l.docNum||""} · {fmtDate(l.date)}</span><span style={{fontSize:12,color:"#64748b"}}>{l.workerDocName||l.workerName||""}</span></label>; })}</div>}
         {docs.some(d=>d&&d.path)&&<label style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:14,cursor:"pointer",borderTop:"1px solid #e2e8f0",marginTop:4}}><input type="checkbox" checked={book.company} onChange={()=>setBook(b=>({...b,company:!b.company}))} style={{width:18,height:18}}/><span style={{flex:1}}>מסמכי החברה (ביטוח וכו׳)</span><span style={{fontSize:12,color:"#64748b"}}>{docs.filter(d=>d&&d.path).length}</span></label>}
         <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
           <button type="button" onClick={()=>setBook(b=>({...b,pick:mats.map(x=>x.name)}))} style={{border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>סמן הכל</button>
@@ -10202,7 +10202,7 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
             <button type="button" onClick={()=>setFileFor(m)} style={{flex:1,border:"none",background:"#1a5c3a",color:"#fff",borderRadius:8,padding:"6px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📁 תיק הדברה</button>
           </div>
           <button type="button" onClick={()=>execForMaint(m)} style={{width:"100%",marginBottom:8,border:"1.5px solid #1a5c3a",background:"#f0fdf4",color:"#1a5c3a",borderRadius:8,padding:"7px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>📋 יומן ביצוע חדש למקום הזה</button>
-          {(()=>{ const ls=maintLogs(m,execLogs).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))); return ls.length?<div style={{fontSize:12,color:"#475569",marginBottom:8,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}><b>📋 ימי ביצוע:</b>{ls.slice(0,5).map(l=><button key={l.id} type="button" onClick={()=>printExecLog(l)} title={"יומן "+(l.docNum||"")} style={{border:"1px solid #bbf7d0",background:"#f0fdf4",color:"#166534",borderRadius:12,padding:"1px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>{fmtDate(l.date)}</button>)}{ls.length>5&&<span>+{ls.length-5}</span>}</div>:null; })()}
+          {(()=>{ const ls=maintLogs(m,execLogs).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))); return ls.length?<div style={{fontSize:12,color:"#475569",marginBottom:8,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}><b>📋 ימי ביצוע:</b>{ls.slice(0,5).map(l=><button key={l.id} type="button" onClick={()=>printExecLog(l)} title={"יומן ביצוע "+(l.docNum||"")} style={{border:"1px solid #bbf7d0",background:"#f0fdf4",color:"#166534",borderRadius:12,padding:"1px 8px",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>{fmtDate(l.date)}</button>)}{ls.length>5&&<span>+{ls.length-5}</span>}</div>:null; })()}
           {(m.contractFiles||[]).length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
             {m.contractFiles.map((c,i)=><button key={i} type="button" onClick={()=>openDataFile(c)} style={{border:`1px solid ${CLR.border}`,background:"#fff",borderRadius:8,padding:"4px 10px",fontSize:12,cursor:"pointer"}}>📎 {c.name.length>22?c.name.slice(0,20)+"…":c.name}</button>)}
           </div>}
@@ -11198,7 +11198,7 @@ function WorkerProfile({w,appointments=[],execLogs=[],finance=[],onClose,onEdit}
         {card("₪"+Math.round(monthRev).toLocaleString(),"הכנסה מתורים החודש")}
         {card("₪"+Math.round(docsSum).toLocaleString(),"חשבוניות החודש","#0f766e")}
         {card(logs.length,"יומני ביצוע")}
-        {card(noLog.length,"בוצעו בלי יומן",noLog.length?"#dc2626":"#16a34a")}
+        {card(noLog.length,"בוצעו בלי יומן ביצוע",noLog.length?"#dc2626":"#16a34a")}
       </div>
       <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>הבאים בתור</div>
       {upcoming.slice(0,5).map(apRow)}{!upcoming.length&&empty("אין תורים קרובים")}
@@ -12932,7 +12932,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="179";
+const APP_BUILD="180";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
