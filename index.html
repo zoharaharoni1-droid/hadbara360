@@ -5162,7 +5162,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       <OrderForm workers={workers} showGuidance={false} initialParsed={fullText}
         initialDate={prefill.date} initialTime={prefill.time} initialWorker={prefill.workerId}
         onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
-        onSchedule={appt=>setAppointments(as=>{ const keep=convertId!=null?as.filter(x=>x.id!==convertId):as; return [...keep,{...appt,id:nextId(as)}]; })}
+        onSchedule={appt=>setAppointments(as=>{ if(convertId!=null&&as.some(x=>x.id===convertId)){ const old=as.find(x=>x.id===convertId); return as.map(x=>x.id===convertId?{...appt,id:convertId,convertedFromFree:true,freeText:old.freeText||old.rawMsg||"",kind:undefined,updatedAt:new Date().toISOString()}:x); } return [...as,{...appt,id:nextId(as)}]; })}
         onDone={(saved,schedInfo)=>{
           setConvertId(null);
           if(schedInfo) alert(`✅ הזמנה נשמרה וקבוצה ל-${schedInfo.workerName} ב-${fmtDate(schedInfo.date)}`);
@@ -5814,7 +5814,7 @@ function waParse(raw, cityNames){
   if(tw&&+tw[3]<+tw[1]&&+tw[3]<=8&&+tw[1]>=9){ tw=[...tw]; tw[3]=String(+tw[3]+12); }
   if(tw&&+tw[1]>=1&&+tw[1]<=5&&+tw[3]>=1&&+tw[3]<=8&&!tw[2]&&!tw[4]){ tw=[...tw]; tw[1]=String(+tw[1]+12); tw[3]=String(+tw[3]+12); }
   if(tw&&+tw[1]<=21&&+tw[3]<=22&&(+tw[3]*60+(+tw[4]||0))>(+tw[1]*60+(+tw[2]||0))&&!(out.phone&&String(out.phone).includes(tw[0]))){ out.timeFrom=String(tw[1]).padStart(2,"0")+":"+(tw[2]||"00"); out.timeTo=String(tw[3]).padStart(2,"0")+":"+(tw[4]||"00"); out.found.push("שעה"); }
-  else { const at=text.match(/(?:בשעה|שעה|ב-|ב)\s*(\d{1,2})(?::(\d{2}))?(?!\s*(?:חדרים|₪|ש"ח|קומ))/); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=hh(+at[1]+2); out.found.push("שעה"); }
+  else { const NOT=/(?!\d)(?!\s*(?:חדרים|₪|ש"ח|קומ))/.source; const at=text.match(new RegExp("(?<![א-ת])(?:ב|ל)?שעה\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT))||text.match(new RegExp("(?<![א-ת])ב-?\\s*(\\d{1,2})(?::(\\d{2}))?"+NOT)); if(at&&+at[1]>=6&&+at[1]<=21){ out.timeFrom=String(at[1]).padStart(2,"0")+":"+(at[2]||"00"); out.timeTo=hh(+at[1]+2); out.found.push("שעה"); }
     else if((()=>{ const HW={"שבע":7,"שמונה":8,"תשע":9,"עשר":10,"אחת עשרה":11,"אחת-עשרה":11,"שתים עשרה":12,"שתיים עשרה":12,"אחת":13,"שתיים":14,"שלוש":15,"ארבע":16,"חמש":17,"שש":18};
       const W="(אחת[ -]עשרה|שתי?ים עשרה|שבע|שמונה|תשע|עשר|אחת|שתיים|שלוש|ארבע|חמש|שש)(?![א-ת])";
       const rg=text.match(new RegExp("בין\\s*(?:ה)?"+W+"\\s*(?:ל|עד\\s*)(?:ה)?"+W)); if(rg){ out.timeFrom=String(HW[rg[1].replace("-"," ")]).padStart(2,"0")+":00"; out.timeTo=String(HW[rg[2].replace("-"," ")]).padStart(2,"0")+":00"; out.found.push("שעה"); return true; }
@@ -5953,7 +5953,9 @@ function waParse(raw, cityNames){
   if(out.street){ const toks=[...(out.name?out.name.split(/\s+/):[]),...(out.bizName?out.bizName.split(/\s+/):[])].filter(Boolean); let st=out.street;
     for(let i=0;i<4;i++){ const w=st.split(/\s+/); if(w.length>1&&(toks.includes(w[0])||toks.some(t=>w[0]==="מ"+t||w[0]==="מה"+t)||/^(?:ה)?(?:טלפון|כתובת|רחוב|ברחוב|נייד|מספר|בכתובת)$/.test(w[0]))) st=w.slice(1).join(" "); else break; }
     if(/^בה[א-ת]{3,}$/.test(st)) st=st.slice(1);
-    out.street=st; }
+    // "מחר בשעה 11" זו לא כתובת
+    if(/^(?:(?:מחר|היום|מחרתיים|ביום\s+\S+)\s*)?(?:ב|ל)?(?:שעה|בוקר|ערב|צהריים)$/.test(st.trim())){ delete out.street; delete out.buildingNum; st=""; }
+    if(st) out.street=st; }
   if(out.contacts) out.contacts=out.contacts.map(c=>{ const m=String(c.role||"").match(/^(?:שם\s*)?(?:ה)?לקוח(?:ה)?\s+(.+)$/); return m?{...c,role:"",name:c.name||m[1]}:c; });
   const nts=extractNotes(text); if(nts.length){ out.notes=nts; out.found.push("הערות"); }
   return out;
@@ -11570,6 +11572,7 @@ function pendPush(key,tbl){
   if(dels.length){ jobs.push(sb.from(tbl).delete().in('id',dels).then(({error})=>{ if(error){ pendWarn(error); return; } dels.forEach(id=>delete p.dels[id]); pendSave(key); })); }
   return Promise.all(jobs).catch(e=>pendWarn(e));
 }
+const SOFT_TABLES=new Set(["appointments","exec_logs","finance","customers","maintenance","projects"]);
 function useLS(key, init){
   const tbl = SB_TABLES[key];
   const initVal = typeof init === 'function' ? init() : init;
@@ -11655,7 +11658,17 @@ function useLS(key, init){
         // מחק רק שורות שהמשתמש מחק במפורש (היו ב-prev, אינן ב-next)
         const prevIds = new Set(prevRows.map(r => String(r.id)));
         const nextIds = new Set(nextRows.map(r => String(r.id)));
-        const deletedIds = [...prevIds].filter(id => !nextIds.has(id));
+        let deletedIds = [...prevIds].filter(id => !nextIds.has(id));
+        const softIds = SOFT_TABLES.has(tbl) ? deletedIds.filter(id=>{ const r=prevRows.find(x=>String(x.id)===id); return r&&!r.deleted; }) : [];
+        if(softIds.length){ deletedIds=deletedIds.filter(id=>!softIds.includes(id)); }
+        if(softIds.length > 0){
+          // 🛡️ בטבלאות החשובות לא מוחקים מהשרת — מסמנים "נמחק" (אפשר לשחזר מסל המחזור)
+          const now=new Date().toISOString();
+          const rows=softIds.map(id=>prevRows.find(r=>String(r.id)===id)).filter(Boolean).map(r=>({...r,deleted:true,deletedAt:now,hardDeletedAt:now}));
+          rows.slice(0,5).forEach(it=>logActivity("מחיקה "+(LOG_LABELS[tbl]||tbl),itemLabel(it)));
+          const P3=pendOf(key); const at3=Date.now()+Math.random(); rows.forEach(r=>{ P3.rows[String(r.id)]={row:r,at:at3}; }); pendSave(key);
+          sb.from(tbl).upsert(rows.map(r=>({id:String(r.id),data:r,updated_at:now})),{onConflict:'id'}).then(({error})=>{ if(error){ pendWarn(error); return; } rows.forEach(r=>{ const c=P3.rows[String(r.id)]; if(c&&c.at===at3) delete P3.rows[String(r.id)]; }); pendSave(key); }, e=>pendWarn(e));
+        }
         if(deletedIds.length > 0){
           console.log('[SB] deleting', tbl, deletedIds);
           deletedIds.slice(0,5).forEach(id=>{ const it=prevRows.find(r=>String(r.id)===id); logActivity("מחיקה "+(LOG_LABELS[tbl]||tbl), itemLabel(it)); });
@@ -12766,7 +12779,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="166";
+const APP_BUILD="167";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
