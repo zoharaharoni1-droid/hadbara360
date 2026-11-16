@@ -4501,7 +4501,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {appt.notes&&<div style={{fontSize:14,whiteSpace:"pre-wrap",marginTop:6}}>📝 {appt.notes}</div>}
         {cust.notes&&<div style={{background:"#fff7ed",borderRadius:10,padding:"8px 10px",marginTop:8,fontSize:13,whiteSpace:"pre-wrap"}}>⚠️ {cust.notes}</div>}
         {appt.propertyNotes&&<div style={{fontSize:13,color:"#475569",marginTop:6,whiteSpace:"pre-wrap"}}>🏠 {appt.propertyNotes}</div>}
-        {appt.rawMsg&&<details style={{marginTop:8}}><summary style={{cursor:"pointer",fontSize:13,color:"#166534",fontWeight:700}}>הפרטים כפי שנרשמו</summary><div style={{whiteSpace:"pre-wrap",fontSize:13,marginTop:4}}>{appt.rawMsg}</div></details>}
+        {appt.rawMsg&&<div style={{marginTop:8,background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px"}}><div style={{fontSize:12,color:"#166534",fontWeight:700,marginBottom:2}}>הפרטים כפי שנרשמו</div><div style={{whiteSpace:"pre-wrap",fontSize:13}}>{appt.rawMsg}</div></div>}
         {(()=>{ const ec=[...(appt.extraContacts||[]),...((cust.extraContacts||[]).filter(c=>!(appt.extraContacts||[]).some(x=>x.phone===c.phone)))]; return ec.length?<div style={{marginTop:8}}>{ec.map((c,i)=><button key={i} type="button" onClick={()=>c.phone&&setSheet("ph:"+c.phone)} style={{display:"flex",width:"100%",gap:8,padding:"7px 0",border:"none",borderTop:"1px dashed #eef2f7",background:"none",cursor:"pointer",fontFamily:"inherit",fontSize:13,textAlign:"right"}}><span style={{flex:1}}>👥 {[c.role,c.name].filter(Boolean).join(" · ")||"איש קשר"}</span><span dir="ltr" style={{color:"#16a34a",fontWeight:700}}>{c.phone}</span></button>)}</div>:null; })()}
       </div>}
       {lg&&detView!=="orig"&&<div style={{border:"1px solid #bbf7d0",borderRadius:14,padding:"12px 14px",marginBottom:12,background:"#fff"}}>
@@ -6500,8 +6500,7 @@ function ClientIdentity({v,onChange,sharedHint=""}){
     <G2><Inp label={biz?"שם איש הקשר *":"שם הלקוח *"} value={v.name||""} onChange={x=>set("name",x)} placeholder={biz?"למשל: יוסי":""}/><Inp label={biz?"טלפון איש הקשר *":"טלפון *"} value={v.phone||""} onChange={x=>set("phone",x)} placeholder="050-000-0000"/></G2>
     {biz&&<>
       <Inp label="🏪 שם המקום (איך שכולם מכירים)" value={v.place||""} onChange={x=>set("place",x)} placeholder={sharedHint||"למשל: שווארמה שמש, גן השקמה"}/>
-      {!docOpen?<button type="button" onClick={()=>setDocOpen(true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit",fontWeight:700}}>+ שם אחר על המסמכים (חשבונית) / ח.פ</button>
-      :<G2><Inp label="🧾 שם על המסמכים" value={v.doc||""} onChange={x=>set("doc",x)} placeholder="למשל: נ.ש. עסקים בע״מ"/><Inp label="ח.פ / ע.מ (לא חובה)" value={v.taxId||""} onChange={x=>set("taxId",x)}/></G2>}
+      {<G2><Inp label="🧾 שם על המסמכים" value={v.doc||""} onChange={x=>set("doc",x)} placeholder="למשל: נ.ש. עסקים בע״מ"/><Inp label="ח.פ / ע.מ (לא חובה)" value={v.taxId||""} onChange={x=>set("taxId",x)}/></G2>}
       <div style={{fontSize:12,color:"#1e40af",background:"#eff6ff",borderRadius:8,padding:"6px 10px",marginTop:-4,marginBottom:12}}>🧾 במסמכים: <b>{docShown||"—"}</b>{v.place&&v.doc&&v.doc!==v.place?<> · 🏪 מקום: <b>{v.place}</b></>:null} · 👤 איש קשר: <b>{v.name||"—"}</b></div>
     </>}
   </div>;
@@ -12999,7 +12998,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="182";
+const APP_BUILD="183";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
