@@ -12779,7 +12779,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="167";
+const APP_BUILD="168";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13004,7 +13004,9 @@ function App(){
     if(!customers||!customers.length) return live;
     const all=new Map(customers.map(c=>[String(c.id),c]));
     // תורים של לקוח שנמחק (או הועבר לסל) לא מוצגים; שחזור הלקוח מחזיר אותם
-    return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); return !!c&&!c.deleted; });
+    // לקוח שלא נמצא — התור עדיין מוצג (לא מסתירים עבודה). לקוח שנמחק — מסתירים רק תורים שנקבעו לפני המחיקה
+    return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); if(!c) return true; if(!c.deleted) return true;
+      const del=String(c.deletedAt||"").slice(0,10); return !!del&&String(a.date||"")>del&&String(a.updatedAt||a.date||"")>=del; });
   },[appointments,customers]);
   const jobAppointments = React.useMemo(()=>activeAppointments.filter(a=>!isPersonal(a)),[activeAppointments]);
   // 🧪 תזכורת ב-1 לכל חודש: בדיקת / סנכרון אצוות חומרים (לא נשמרת כתור — מוצגת ביומן)
