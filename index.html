@@ -4124,9 +4124,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       price:parseInt(editData.price)||0,pestType:editData.pestType,address:editData.address,notes:editData.notes,...extra};
     const timeChanged=next.date!==appt.date||next.time!==appt.time||next.timeWindow!==(appt.timeWindow||"");
     const reason=String(editData.reason||"").trim();
-    if((timeChanged||extra.status==="בוטל")&&!reason) return alert("נא לכתוב סיבה (למשל: הלקוח ביקש שעה אחרת)");
     if(JSON.stringify(apptSnap(next))===JSON.stringify(apptSnap(appt))) { setEditMode(false); return; }
-    onSaveEdit(apptWithHistory(appt,next,currentUser,reason||"עריכת פרטים"));
+    onSaveEdit(apptWithHistory(appt,next,currentUser,reason||(extra.status==="בוטל"?"ביטול":timeChanged?"שינוי מועד":"עריכת פרטים")));
     setEditMode(false); setE("reason","");
   };
   const restoreVersion=h=>{
@@ -4186,7 +4185,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </G2>
       <Inp label="כתובת" value={editData.address} onChange={v=>setE("address",v)}/>
       <Txt label="הערות לתור" value={editData.notes} onChange={v=>setE("notes",v)} rows={2}/>
-      <Inp label="סיבת השינוי (חובה בשינוי שעה/תאריך)" value={editData.reason} onChange={v=>setE("reason",v)} placeholder="למשל: התקשרתי ללקוח, מעדיף אחה״צ"/>
+      <Inp label="סיבת השינוי (לא חובה)" value={editData.reason} onChange={v=>setE("reason",v)} placeholder="למשל: התקשרתי ללקוח, מעדיף אחה״צ"/>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
         <Btn full onClick={()=>saveEdit()}>💾 שמור שינויים</Btn>
         {appt.status!=="בוטל"&&<Btn v="ghost" onClick={()=>{ if(window.confirm("לבטל את התור? (אפשר להחזיר אחר כך)")) saveEdit({status:"בוטל"}); }} style={{color:CLR.danger}}>❌ בטל תור</Btn>}
@@ -12780,7 +12779,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="170";
+const APP_BUILD="171";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
