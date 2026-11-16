@@ -1686,6 +1686,66 @@ function PayRequestModal({amount,desc,cust:cust0={},customers=null,onClose,onCre
     </>}
   </Modal></div>,document.body);
 }
+// ── 💳 דיווחי תשלום מהלקוחות (מדף התשלום) — טבלת pay_reports ──
+const PAYREP={rows:[],ok:null,subs:new Set(),seen:null};
+const PAYREP_M={ "ביט":"ביט","פייבוקס":"PayBox","העברה בנקאית":"העברה בנקאית","מזומן / צ׳ק":"מזומן","אשראי":"אשראי" };
+async function payRepLoad(notify){
+  if(!sb) return; try{
+    const {data,error}=await sb.from('pay_reports').select('*').order('created_at',{ascending:false}).limit(200);
+    if(error){ PAYREP.ok=false; } else {
+      PAYREP.ok=true; PAYREP.rows=data||[];
+      const nw=PAYREP.rows.filter(r=>r.status==="new");
+      if(PAYREP.seen&&notify){ const fresh=nw.filter(r=>!PAYREP.seen.has(r.id)); if(fresh.length) showToast("💳 דיווח תשלום: "+(fresh[0].name||"לקוח")+" — "+money(fresh[0].amount)+(fresh[0].method?" ב"+fresh[0].method:"")+(fresh.length>1?" (+"+(fresh.length-1)+")":"")); }
+      PAYREP.seen=new Set(nw.map(r=>r.id));
+    }
+  }catch(e){ PAYREP.ok=false; }
+  PAYREP.subs.forEach(f=>{ try{ f(); }catch(_){} });
+}
+async function payRepMark(id,patch){ if(!sb) return; const by=((typeof __h360User!=="undefined"&&__h360User)||{}).name||"";
+  const {error}=await sb.from('pay_reports').update({...patch,handled_at:new Date().toISOString(),handled_by:by}).eq('id',id);
+  if(error) alert("העדכון נכשל: "+error.message); await payRepLoad(false); }
+function usePayReports(){ const [,t]=useState(0); React.useEffect(()=>{ const f=()=>t(x=>x+1); PAYREP.subs.add(f); if(PAYREP.ok===null) payRepLoad(false); return ()=>{ PAYREP.subs.delete(f); }; },[]); return PAYREP; }
+function payRepAgo(iso){ const m=Math.round((Date.now()-new Date(iso).getTime())/60000); return m<1?"עכשיו":m<60?"לפני "+m+" דק׳":m<1440?"לפני "+Math.round(m/60)+" שע׳":fmtDate(String(iso).slice(0,10)); }
+function PayReportsPanel({customers=[],onIssue}){
+  const R=usePayReports(); const [hist,setHist]=useState(false);
+  if(R.ok===false) return <div style={{fontSize:12,color:"#64748b",background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:10,padding:"8px 10px",marginBottom:10}}>💳 דיווחי תשלום מהלקוחות עוד לא הופעלו (צריך להריץ פעם אחת את סקריפט ההפעלה).</div>;
+  const nw=R.rows.filter(r=>r.status==="new"); const old=R.rows.filter(r=>r.status!=="new").slice(0,20);
+  if(!nw.length&&!old.length) return null;
+  const btn=(bg,c,bd)=>({border:"1px solid "+(bd||bg),background:bg,color:c,borderRadius:9,padding:"7px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"});
+  const row=(r,act)=><div key={r.id} style={{background:"#fff",border:"1px solid "+(act?"#bbf7d0":"#e2e8f0"),borderRadius:12,padding:"10px 12px",marginBottom:8}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <b style={{fontSize:15,flex:1,minWidth:120}}>{r.name||"—"}</b>
+      <b style={{fontSize:17,color:"#166534"}}>{money(r.amount)}</b>
+      {r.method&&<span style={{fontSize:12,fontWeight:700,background:"#e0f2fe",color:"#0369a1",borderRadius:20,padding:"2px 9px"}}>{r.method}</span>}
+    </div>
+    <div style={{fontSize:12,color:"#64748b",marginTop:3}}>{payRepAgo(r.created_at)}{r.descr?" · "+r.descr:""}{r.phone?" · "+r.phone:""}{r.tax_id?" · ח.פ. "+r.tax_id:""}{r.ref?" · בקשה "+r.ref:""}</div>
+    {!act&&<div style={{fontSize:12,marginTop:3,color:r.status==="rejected"?"#b91c1c":"#166534"}}>{r.status==="rejected"?"❌ לא התקבל":"✅ טופל"}{r.doc_id?" · "+r.doc_id:""}{r.handled_by?" · "+r.handled_by:""}</div>}
+    {act&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+      <button type="button" onClick={()=>onIssue(r)} style={btn("#16a34a","#fff")}>✅ התקבל — הפק קבלה</button>
+      <button type="button" onClick={()=>{ if(confirm("לסמן שטופל בלי להפיק מסמך?")) payRepMark(r.id,{status:"done"}); }} style={btn("#fff","#334155","#cbd5e1")}>סמן שטופל</button>
+      <button type="button" onClick={()=>{ if(confirm("לסמן שהתשלום לא התקבל?")) payRepMark(r.id,{status:"rejected"}); }} style={btn("#fff","#b91c1c","#fecaca")}>❌ לא התקבל</button>
+    </div>}
+  </div>;
+  return <div style={{background:nw.length?"#f0fdf4":"#f8fafc",border:"1px solid "+(nw.length?"#86efac":"#e2e8f0"),borderRadius:14,padding:"10px 12px",marginBottom:12}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:nw.length?8:0}}>
+      <b style={{fontSize:15,flex:1}}>💳 לקוחות שדיווחו על תשלום {nw.length?<span style={{background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 9px",fontSize:13,marginRight:4}}>{nw.length}</span>:null}</b>
+      {old.length>0&&<button type="button" onClick={()=>setHist(v=>!v)} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:13}}>{hist?"הסתר":"טופלו"} ({old.length})</button>}
+    </div>
+    {nw.length?<div style={{fontSize:12,color:"#475569",marginBottom:8}}>בדוק בביט / בבנק שהכסף נכנס, ואז "התקבל — הפק קבלה".</div>:null}
+    {nw.map(r=>row(r,true))}
+    {hist&&old.map(r=>row(r,false))}
+  </div>;
+}
+function payRepDocReq(r,customers){
+  const dig=x=>String(x||"").replace(/\D/g,"").replace(/^972/,"0");
+  const nm=String(r.name||"").trim(); const same=c=>!nm||[c.name,c.bizName,custDocName(c)].some(x=>String(x||"").trim()===nm);
+  // לקוח קיים — רק אם השם שהלקוח רשם לחשבונית זהה (אחרת הוא ביקש שם אחר, למשל שם העסק)
+  const c=(customers||[]).find(c=>!c.deleted&&nm&&same(c))||(customers||[]).find(c=>!c.deleted&&r.phone&&dig(c.phone)===dig(r.phone)&&same(c));
+  const amt=String(r.amount||"");
+  return {type:"חשבונית מס/קבלה",payRepId:r.id,prefill:{lockType:false,custId:c?c.id:null,custName:r.name||"",taxId:r.tax_id||(c&&c.taxId)||"",
+    lines:[{desc:r.descr||"טיפול הדברה",qty:"1",unit:"יח׳",price:amt}],inclVat:true,
+    payments:[{method:PAYREP_M[r.method]||"ביט",amount:amt,date:todayStr(),details:{}}]}};
+}
 // וואטסאפ רגיל — תמיד האפליקציה הרגילה בטלפון שלך (לא ביזנס), מכל מספר/סים
 function waRegHref(intl,text){ const ua=navigator.userAgent||""; const t=text?encodeURIComponent(text):""; const web="https://wa.me/"+intl+(t?"?text="+t:"");
   const q=[intl?"phone="+intl:"",t?"text="+t:""].filter(Boolean).join("&");
@@ -4276,6 +4336,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   ]:[];
   const doneCount=logChecks.filter(x=>x[1]).length;
   const [detView,setDetView]=useState("log"); const [payReq,setPayReq]=useState(false);
+  const PR=usePayReports(); const myRefs=(appt.payReqs||[]).map(x=>x.ref).filter(Boolean); const myRep=PR.rows.filter(r=>r.ref&&myRefs.includes(r.ref));
   const [v2,setV2]=useState(()=>{ try{ return localStorage.getItem("h360_appt_ui")!=="old"; }catch(e){ return true; } });
   const freeBlk=<>{appt.kind==="free"&&<div style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 2px rgba(2,132,199,.06)"}}>
       <div style={{fontSize:13,fontWeight:800,color:"#0369a1",marginBottom:6}}>✍️ רישום מהיר</div>
@@ -4423,6 +4484,10 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
       </div>}
       {editBlk}
+      {myRep.map(r=><div key={r.id} style={{background:r.status==="new"?"#f0fdf4":"#f8fafc",border:"1px solid "+(r.status==="new"?"#86efac":"#e2e8f0"),borderRadius:12,padding:"9px 12px",marginBottom:10,fontSize:14}}>
+        💳 <b>הלקוח דיווח: שילם {money(r.amount)}{r.method?" ב"+r.method:""}</b> · {payRepAgo(r.created_at)}
+        <div style={{fontSize:12,color:r.status==="rejected"?"#b91c1c":r.status==="new"?"#166534":"#475569",marginTop:2}}>{r.status==="new"?"ממתין לאישור שלך — במסך החשבוניות: \"התקבל — הפק קבלה\"":r.status==="rejected"?"❌ סומן שלא התקבל":"✅ טופל"+(r.doc_id?" · "+r.doc_id:"")}{r.name&&r.name!==appt.customerName?" · שם לחשבונית: "+r.name:""}</div>
+      </div>)}
       {!prog.personal&&<div style={{background:"#f8fafc",borderRadius:12,padding:"8px 10px",marginBottom:12}}><ProgressTrack steps={prog.steps}/>{prog.next&&<div style={{fontSize:12,color:"#0369a1",fontWeight:700,marginTop:4}}>⬅ הבא: {prog.next}</div>}</div>}
       {appt.kind!=="free"&&(!lg||detView==="orig")&&<div style={{border:"1px solid #e2e8f0",borderRadius:14,padding:"12px 14px",marginBottom:12}}>
         {lg?segBar:<div style={{fontSize:13,fontWeight:800,color:"#64748b",marginBottom:8}}>פרטי העבודה</div>}
@@ -8998,6 +9063,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     {/* מסמך חדש */}
     <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:14}}>
       <div style={{fontWeight:800,fontSize:15,color:"#0f172a",marginBottom:10}}>מסמך חדש</div>
+      {!mineOnly&&<PayReportsPanel customers={customers} onIssue={r=>setDocReq(payRepDocReq(r,customers))}/>}
       <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false}})} style={{width:"100%",border:"none",borderRadius:12,background:"#1a5c3a",color:"#fff",padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
         <span style={{textAlign:"right"}}><span style={{display:"block",fontSize:17,fontWeight:800}}>+ חשבונית מס/קבלה</span><span style={{fontSize:12,opacity:.85}}>הלקוח שילם עכשיו — הכי נפוץ</span></span><span style={{fontSize:24}}>🧾</span>
       </button>
@@ -9106,7 +9172,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       return <PayRequestModal customers={f?null:customers} amount={f?totalOf(f):""} desc={f?(f.docType||"חשבונית")+" "+(f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")):""}
         cust={f?{customerId:f.customerId,name:f.customer||custDocName(c),contactName:(f.cust&&f.cust.contactName)||c.contactName||"",phone:docPhone(f)||c.phone||"",email:(f.cust&&f.cust.email)||c.email||"",taxId:(f.cust&&f.cust.taxId)||c.taxId||"",address:(f.cust&&f.cust.address)||c.address||""}:{}}
         onClose={()=>setPayDoc(null)}/>; })()}
-    {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
+    {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={rec=>{ const out=saveDoc(rec); if(docReq&&docReq.payRepId) payRepMark(docReq.payRepId,{status:"done",doc_id:(rec.docType||"")+" "+(rec.invoiceNum||"")}); return out; }}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
       <Sel label="לקוח" value={consol.custKey} onChange={v=>setConsol({custKey:v,picked:new Set((openLogsByCust[v]||{logs:[]}).logs.map(l=>String(l.id)))})} options={[{v:"",l:"— בחר לקוח —"},...Object.entries(openLogsByCust).map(([k,g])=>({v:k,l:g.name+" ("+g.logs.length+" ביקורים פתוחים)"}))]}/>
@@ -12932,7 +12998,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="180";
+const APP_BUILD="181";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13127,6 +13193,8 @@ function App(){
   // ── פריטים פעילים בלבד (מסנן deleted:true) ──
   const activeWorkers = React.useMemo(()=>activeOnly(workers),[workers]);
   window.__h360Maint=maintenance;
+  // 💳 דיווחי תשלום מלקוחות — בדיקה כל 45 שניות (לא למדבירים)
+  React.useEffect(()=>{ if(!authUser||authUser.role==="מדביר") return; payRepLoad(false); const t=setInterval(()=>payRepLoad(true),45000); return ()=>clearInterval(t); },[authUser&&authUser.id]);
   // 💾 גיבוי יומי אוטומטי (מנהל) + 📅 סנכרון מגוגל יומן כל 5 דקות
   const gcalRef=React.useRef({}); gcalRef.current={appointments,setAppointments,workers:activeWorkers};
   React.useEffect(()=>{
