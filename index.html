@@ -3078,7 +3078,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
         :<span style={{fontWeight:700,color:"#b45309",background:"#fff7ed",borderRadius:20,padding:"3px 10px"}}>⏳ עוד אין חשבונית</span>)}
     </div>}
     {(()=>{ const ib={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:10,padding:"8px 10px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:4};
-      const more=[onBack&&{icon:"✏️",label:saved?"תיקון":"עריכה",onClick:onBack},
+      const more=[onBack&&!saved&&{icon:"✏️",label:"עריכה",onClick:onBack},
         {icon:"📎",label:linkedDoc?"2 קבצי PDF":"קובץ PDF",onClick:()=>linkedDoc?shareLogAndDocPdf(logForSend,linkedDoc):shareExecLogPdf(logForSend)},
         {icon:"🖨️",label:"הדפסה",onClick:()=>printExecLog({...log,docNum})},
         saved&&{icon:"⭐",label:"בקשת ביקורת",onClick:()=>sendReviewRequest(log.clientName,phone)},
@@ -3086,6 +3086,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
       return <div style={{position:"sticky",top:-1,zIndex:15,background:"rgba(248,250,252,.97)",backdropFilter:"blur(6px)",padding:"6px 0",margin:"0 0 10px",display:"flex",gap:6,alignItems:"center",borderBottom:"1px solid #e2e8f0"}}>
         <button type="button" onClick={()=>{ if(linkedDoc) sendLogAndDocWA(logForSend,linkedDoc,phone); else sendExecLogWA(logForSend,phone); }} style={{...ib,background:"#25D366",color:"#fff",border:"none"}}>📤 שלח</button>
         {saved&&onSaveDoc&&!linkedDoc&&<button type="button" onClick={openInvoice} style={{...ib,background:"#0f766e",color:"#fff",border:"none"}}>🧾 חשבונית</button>}
+        {saved&&onBack&&<button type="button" onClick={onBack} style={{...ib,color:"#1d4ed8",borderColor:"#93c5fd"}}>✏️ ערוך</button>}
         <button type="button" onClick={()=>setMoreOpen(true)} style={ib}>⋯ עוד</button>
         {onApprove&&<button type="button" onClick={onApprove} style={{...ib,marginRight:"auto",background:CLR.primary,color:"#fff",border:"none"}}>{saved?"✓ סיום":(approveLabel||"✓ סיום")}</button>}
         {moreOpen&&<ActionSheet title="עוד פעולות ליומן" items={more} onClose={()=>setMoreOpen(false)}/>}
@@ -4009,11 +4010,11 @@ function InvoiceModal({appt,customers,onClose,onSave}){
 }
 
 // Execution-log modal launched from the calendar — dark themed, prefilled from the appointment
-function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,onOpenInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[],finance=[],appointments=[]}){
+function ExecLogModalInline({appt,worker,startEdit=false,onClose,onSave,onSaveInvoice,onOpenInvoice,currentUser,workers=[],customers=[],execLogs=[],maintenance=[],finance=[],appointments=[]}){
   const [autoInv,setAutoInv]=useState(false);
   const existingLog=React.useMemo(()=>(execLogs||[]).find(l=>appt&&l.apptId===appt.id&&!l.deleted)||null,[]);
   const lockedLog=!!(existingLog&&!existingLog.draft);
-  const [step,setStep]=useState(lockedLog?"preview":"form"); // form | preview | done
+  const [step,setStep]=useState(lockedLog&&!startEdit?"preview":"form"); // form | preview | done
   const [previewData,setPreviewData]=useState(lockedLog?{...existingLog,safety:existingLog.safetyText,worker:{name:existingLog.workerName,license:existingLog.workerLicense},materials:existingLog.materials||[]}:null);
   const [savedLog,setSavedLog]=useState(existingLog);
   // invoice options on the done screen
@@ -4048,7 +4049,7 @@ function ExecLogModalInline({appt,worker,onClose,onSave,onSaveInvoice,onOpenInvo
 
       {step==="form"&&<ExecLogForm worker={worker} prefillAppt={appt} initialData={previewData||(existingLog?{...existingLog,safety:existingLog.safetyText}:null)} onPreview={autoSave} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance}/>}
 
-      {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={lockedLog?undefined:()=>{setAutoInv(false);setStep("form");}} onApprove={onClose} approveLabel="✓ סיום — למשימה הבאה" finance={finance} customers={customers} appointments={appointments} onSaveDoc={rec=>onSaveInvoice(rec)} autoInvoice={autoInv}/>}
+      {step==="preview"&&<ExecLogPreview data={previewData} saved={savedLog} phone={previewData.phone||(customers.find(c=>String(c.id)===String(appt.customerId))||{}).phone} onBack={()=>{setAutoInv(false);setStep("form");}} onApprove={onClose} approveLabel="✓ סיום — למשימה הבאה" finance={finance} customers={customers} appointments={appointments} onSaveDoc={rec=>onSaveInvoice(rec)} autoInvoice={autoInv}/>}
 
       {step==="done"&&<div>
         <div style={{textAlign:"center",padding:"10px 0 20px"}}>
@@ -4215,7 +4216,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {kv("תשלום בשטח",lg.paymentDone?[lg.paymentMethod,lg.paymentAmount?"₪"+lg.paymentAmount:""].filter(Boolean).join(" · "):"לא שולם")}
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8,marginTop:10}}>
           <button type="button" onClick={()=>printExecLog(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>👁 צפה</button>
-          <button type="button" onClick={()=>onFillLog(appt)} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך</button>
+          <button type="button" onClick={()=>onFillLog(appt,{edit:true})} style={pill("#fff","#1d4ed8","#93c5fd")}>✏️ ערוך יומן</button>
           <button type="button" onClick={()=>{ sendExecLogWA(lg,phone); }} style={pill("#25D366","#fff")}>📤 שלח ללקוח</button>
           <button type="button" onClick={()=>shareExecLogPdf(lg)} style={pill("#f1f5f9","#0f172a","#e2e8f0")}>📄 PDF</button>
         </div>
@@ -4926,7 +4927,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [monthYear,setMonthYear]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [invAppt,setInvAppt]=useState(null);
   const [detailAppt,setDetailAppt]=useState(null);
-  const [logAppt,setLogAppt]=useState(null);
+  const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false);
   const [draggedId,setDraggedId]=useState(null);
   const [dropTarget,setDropTarget]=useState(null);
   const [reminderAppt,setReminderAppt]=useState(null);
@@ -5214,7 +5215,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       execLogs={execLogs} finance={finance}
       hasInvoice={hasInvoice(detailAppt.id)} hasLog={apptHasLog(detailAppt.id)}
       onClose={()=>{setDetailAppt(null);backIfReq();}}
-      onFillLog={a=>{setLogAppt(a);}}
+      onFillLog={(a,o)=>{setLogEdit(!!(o&&o.edit));setLogAppt(a);}}
       onInvoice={a=>{setDetailAppt(null);setInvAppt(a);}}
       onMarkPaid={inv=>{setFinance(fs=>fs.map(f=>f.id===inv.id?{...f,status:"שולם"}:f));setDetailAppt(null);}}
       onReminder={a=>{setReminderAppt(a);setDetailAppt(null);}}
@@ -5247,7 +5248,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {dupAppt&&<NewApptModal customers={customers} workers={workers} collabs={collabs} prefill={dupAppt}
       onClose={()=>setDupAppt(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
-    {logAppt&&<ExecLogModalInline appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
+    {logAppt&&<ExecLogModalInline key={logAppt.id+(logEdit?"e":"v")} startEdit={logEdit} appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
       currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance} finance={finance} appointments={appointments}
       onClose={()=>{setLogAppt(null);setDetailAppt(null);backIfReq();}} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog} onOpenInvoice={a=>{setLogAppt(null);setInvAppt(a);}}/>}
   </div>;
@@ -12792,7 +12793,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="172";
+const APP_BUILD="173";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
