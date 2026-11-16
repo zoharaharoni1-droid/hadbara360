@@ -1629,7 +1629,8 @@ async function uploadPayReq(P){
   if(sb){ for(const [ext,ct] of [[".json","application/json"],[".pdf","application/pdf"]]){ try{ const r=await sb.storage.from('docs').upload("p-"+rnd+ext,new Blob([body],{type:ct}),{contentType:ct,upsert:false}); if(!r.error) return {url:"https://hadbara360.co.il/p/?"+rnd,ref}; }catch(e){} } }
   return {url:"https://hadbara360.co.il/p/#"+b64url(body),ref};
 }
-function PayRequestModal({amount,desc,cust={},onClose,onCreated}){
+function PayRequestModal({amount,desc,cust:cust0={},customers=null,onClose,onCreated}){
+  const [cust,setCust]=useState(cust0); const [pq,setPq]=useState("");
   const [cfg,setCfg]=useState(payCfg); const [amt,setAmt]=useState(String(amount||"")); const [d,setD]=useState(desc||""); const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false); const [res,setRes]=useState(null); const [setOpen,setSetOpen]=useState(()=>!payCfg().bit);
   const saveCfg=n=>{ setCfg(n); try{ localStorage.setItem("h360_paycfg",JSON.stringify(n)); }catch(e){} };
@@ -1647,6 +1648,12 @@ function PayRequestModal({amount,desc,cust={},onClose,onCreated}){
   return ReactDOM.createPortal(<div style={{position:"relative",zIndex:7000}}><Modal title="💳 בקשת תשלום ללקוח" onClose={onClose} width={480}>
     {!res?<>
       <div style={{fontSize:13,color:"#475569",marginBottom:10}}>הלקוח מקבל קישור לדף תשלום של {COMPANY.name}: רואה את הסכום, בוחר איך לשלם, ויכול לתקן את הפרטים לחשבונית (למשל שם העסק). אחרי התשלום הוא שולח לך אישור בוואטסאפ.</div>
+      {customers&&<div style={{marginBottom:8}}>
+        <Inp label="לקוח" value={pq} onChange={v=>{ setPq(v); setCust(c=>({...c,name:v,customerId:null})); }} placeholder="חפש לקוח או כתוב שם חדש"/>
+        {pq.trim().length>=1&&!cust.customerId&&(()=>{ const q=pq.trim().toLowerCase(); const L=customers.filter(c=>!c.deleted&&[c.name,c.bizName,c.contactName,c.phone].some(x=>String(x||"").toLowerCase().includes(q))).slice(0,6);
+          return L.length?<div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden",marginTop:-6}}>{L.map(c=><button key={c.id} type="button" onClick={()=>{ setCust({customerId:c.id,name:custDocName(c),contactName:c.contactName||"",phone:c.phone||"",email:c.email||"",taxId:c.taxId||"",address:c.address||""}); setPq(custDocName(c)); }} style={{display:"block",width:"100%",textAlign:"right",padding:"9px 10px",border:"none",borderBottom:"1px solid #f1f5f9",background:"#fff",cursor:"pointer",fontFamily:"inherit",fontSize:14}}><b>{custDocName(c)}</b>{c.phone?<span style={{color:"#64748b"}}> · {c.phone}</span>:null}</button>)}</div>:null; })()}
+        {!cust.customerId&&pq.trim()&&<Inp label="טלפון" value={cust.phone||""} onChange={v=>setCust(c=>({...c,phone:v}))} placeholder="05X-XXXXXXX"/>}
+      </div>}
       <G2 gap={8}><Inp label="סכום (₪)" type="number" value={amt} onChange={setAmt}/><Inp label="עבור" value={d} onChange={setD} placeholder="למשל: הדברת תיקנים"/></G2>
       <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 10px",fontSize:13,margin:"4px 0 10px"}}>🧾 פרטים שימולאו מראש: <b>{cust.name||"—"}</b>{cust.phone?" · "+cust.phone:""}{cust.taxId?" · ח.פ. "+cust.taxId:""} <span style={{color:"#64748b"}}>(הלקוח יכול לשנות)</span></div>
       <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>דרכי תשלום בדף:</div>
@@ -4410,6 +4417,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {lg?tile("📋","יומן ביצוע ✓",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח":"לא נשלח"),()=>onFillLog(appt),"ok"):tile("✍️","מלא יומן ביצוע","אחרי הטיפול",()=>onFillLog(appt),"go")}
         {isStaff&&(docs.length?tile("🧾",(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")+" ✓",docs[0].invoiceNum||"",()=>tog("doc"),"ok"):tile("🧾","חשבונית / קבלה","אפשר גם לפני היומן",()=>onInvoice(appt),"inv"))}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
+        {isStaff&&tile("💳","קישור לתשלום","ביט · העברה · פרטים לחשבונית",()=>setPayReq(true))}
         {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
       </div>}
       {editBlk}
@@ -4456,7 +4464,6 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       </div>}
       {docs.length>0&&docSec}
       <div style={{marginBottom:10}}>
-        {isStaff&&lineRow("💳","בקשת תשלום ללקוח (קישור)",()=>setPayReq(true))}
         {lg&&lineRow("📄","PDF של יומן הביצוע",()=>shareExecLogPdf(lg))}
         {appt.kind!=="free"&&ps.length>0&&buildPrepOnlyText({name:"",pests:ps})&&lineRow("📋","שלח הנחיות לפני / בזמן / אחרי",()=>sendPrepWA(appt.contactName||appt.customerName,phone,ps))}
         {onDuplicate&&lineRow("🔁","קבע ביקור חוזר",()=>onDuplicate(appt))}
@@ -8894,7 +8901,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
-  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [setup,setSetup]=useState(false); const [credPick,setCredPick]=useState(null); const [sendDlg,setSendDlg]=useState(null); const [sendNow,setSendNow]=useState(null);
+  const dset=DOCSET_STORE.use()[0]||{official:false,start:{}}; const [guide,setGuide]=useState(false); const [goLive,setGoLive]=useState(false); const [signSet,setSignSet]=useState(false); const [numSet,setNumSet]=useState(false); const [setup,setSetup]=useState(false); const [credPick,setCredPick]=useState(null); const [payDoc,setPayDoc]=useState(null); const [sendDlg,setSendDlg]=useState(null); const [sendNow,setSendNow]=useState(null);
   const docPhone=d=>{ const c=(customers||[]).find(x=>String(x.id)===String(d.customerId)); return (d.cust&&d.cust.phone)||(c&&c.phone)||d.phone||""; }; const sigK=(SIGKEY_STORE.use()||[]).some(x=>x&&x.certPem&&!x.retired);
   const hasInvoice=l=>l.invoiceNum||finance.some(f=>isDocRec(f)&&DOC_TYPES[docTypeOf(f)]?.invoice&&((f.execLogId&&String(f.execLogId)===String(l.id))||(l.apptId&&f.apptId&&String(f.apptId)===String(l.apptId))));
   const pendingInv=(execLogs||[]).filter(l=>!l.deleted&&l.paymentDone&&!hasInvoice(l)).sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
@@ -8995,6 +9002,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
         {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
         <button type="button" onClick={()=>setCredPick("")} style={{border:"1px solid #dc262655",background:"#dc26260d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#dc2626"}}>+ חשבונית זיכוי</span><span style={{fontSize:11,color:"#64748b"}}>ביטול / הנחה על חשבונית שהופקה</span></button>
+        <button type="button" onClick={()=>setPayDoc({})} style={{border:"1px solid #16a34a55",background:"#16a34a0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#15803d"}}>💳 קישור לתשלום</span><span style={{fontSize:11,color:"#64748b"}}>הלקוח משלם ומעדכן פרטים לחשבונית</span></button>
         <button type="button" onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{border:"1px solid #7c3aed55",background:"#7c3aed0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#7c3aed"}}>+ חשבונית מרכזת</span><span style={{fontSize:11,color:"#64748b"}}>כמה ביקורים בחשבונית אחת</span></button>
       </div>
     </div>
@@ -9061,6 +9069,7 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid #f1f5f9"}}>
             {!legacy&&<button type="button" onClick={()=>setSendDlg(doc)} style={ab("#16a34a",true)}>💬 שליחה ללקוח</button>}
+            {!isCred&&!paid&&t!=="קבלה"&&<button type="button" onClick={()=>setPayDoc({f})} style={ab("#15803d")}>💳 קישור לתשלום</button>}
             {f.official&&T.accounting?(f.originalAt?<button onClick={()=>printDoc(doc,true)} title="המקור כבר הופק — מכאן רק העתק" style={ab("#1a5c3a")}>🖨 הדפסת העתק</button>:<button onClick={()=>printDoc(doc)} title="הפקת המקור (פעם אחת)" style={ab("#1a5c3a")}>🖨 הדפסת מקור</button>)
               :<button onClick={()=>printDoc(doc)} style={ab("#1a5c3a")}>👁 צפייה / הדפסה</button>}
             {f.signedPath&&<button onClick={()=>openSignedOriginal(f)} title="הקובץ החתום שנשלח ללקוח (נשמר לביקורת)" style={ab("#166534")}>🔏 הקובץ החתום</button>}
@@ -9091,6 +9100,10 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       </div>
     </Modal>}
     {sendDlg&&<SendDocModal doc={sendDlg} phone={docPhone(sendDlg)} customers={customers} onClose={()=>setSendDlg(null)}/>}
+    {payDoc&&(()=>{ const f=payDoc.f; const c=f?(customers||[]).find(x=>String(x.id)===String(f.customerId))||{}:null;
+      return <PayRequestModal customers={f?null:customers} amount={f?totalOf(f):""} desc={f?(f.docType||"חשבונית")+" "+(f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")):""}
+        cust={f?{customerId:f.customerId,name:f.customer||custDocName(c),contactName:(f.cust&&f.cust.contactName)||c.contactName||"",phone:docPhone(f)||c.phone||"",email:(f.cust&&f.cust.email)||c.email||"",taxId:(f.cust&&f.cust.taxId)||c.taxId||"",address:(f.cust&&f.cust.address)||c.address||""}:{}}
+        onClose={()=>setPayDoc(null)}/>; })()}
     {docReq&&<DocModal type={docReq.type} prefill={docReq.prefill} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} onClose={()=>setDocReq(null)} onSave={saveDoc}/>}
     {consol&&<Modal title="🧾 חשבונית מרכזת" onClose={()=>setConsol(null)} width={560}>
       <div style={{fontSize:13,color:CLR.muted,marginBottom:10}}>בחר לקוח וסמן את הביקורים שעוד לא חויבו — הם ייכנסו לחשבונית אחת, שורה לכל ביקור. מתאים ללקוחות אחזקה וועדי בית.</div>
@@ -12917,7 +12930,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="176";
+const APP_BUILD="177";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
