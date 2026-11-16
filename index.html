@@ -1595,7 +1595,7 @@ async function sendLogAndDocWA0(log,doc,phone){
     const text=["שלום "+name+" 👋","","מצורפים המסמכים של הטיפול שבוצע אצלכם — "+COMPANY.name,"",...parts.flatMap(x=>[x,""]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n");
     const wa="https://wa.me/"+ph+"?text="+encodeURIComponent(text);
     if(w&&!w.closed) w.location.href=wa; else window.open(wa,"_blank");
-    try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){}
+    try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); if(doc) window.__h360MarkDocSent&&window.__h360MarkDocSent(doc); }catch(_){}
   }catch(e){ try{ if(w) w.close(); }catch(_){} alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
 }
 async function shareLogAndDocPdf(log,doc){
@@ -1603,7 +1603,7 @@ async function shareLogAndDocPdf(log,doc){
     const files=[];
     if(log) files.push(new File([await execLogPdfBlob(log)],execLogNiceName(log),{type:'application/pdf'}));
     if(doc) files.push(new File([await docPdfBlob(doc)],docNiceName(doc),{type:'application/pdf'}));
-    if(navigator.canShare&&navigator.canShare({files})){ await navigator.share({files,title:COMPANY.name}); try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} return; }
+    if(navigator.canShare&&navigator.canShare({files})){ await navigator.share({files,title:COMPANY.name}); try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); if(doc) window.__h360MarkDocSent&&window.__h360MarkDocSent(doc); }catch(_){} return; }
     files.forEach((f,i)=>setTimeout(()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500); },i*600));
   }catch(e){ if(e&&e.name==="AbortError") return; alert("יצירת ה-PDF נכשלה: "+(e.message||e)); }
 }
@@ -1772,7 +1772,7 @@ function SendModal({log,doc,phone,customers=[],saved,onClose}){
   const what=log&&doc?"יומן ביצוע + "+doc.docType:log?"יומן ביצוע "+(log.docNum||""):doc.docType;
   const okPh=ph.replace(/\D/g,"").length>=9, okEm=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.trim());
   const L=ready?sendLinks(ph,em.trim(),ready):null;
-  const done=()=>{ try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); }catch(_){} setTimeout(onClose,300); };
+  const done=()=>{ try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); if(doc) window.__h360MarkDocSent&&window.__h360MarkDocSent(doc); }catch(_){} setTimeout(onClose,300); };
   const chBtn=(href,label,bg,fg,ok,need,extra={})=>ok&&L?<a href={href} target={/^https?:/.test(href)?"_blank":undefined} rel="noopener" onClick={done} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 10px",borderRadius:12,background:bg,color:fg,fontWeight:700,fontSize:15,textDecoration:"none",border:extra.border||"none"}}>{label}</a>
     :<button type="button" onClick={()=>alert(!L?"רגע — מכין את הקישור…":need)} style={{padding:"12px 10px",borderRadius:12,background:"#f1f5f9",color:"#94a3b8",fontWeight:700,fontSize:15,border:"none",fontFamily:"inherit",cursor:"pointer"}}>{label}</button>;
   const lab={fontSize:13,fontWeight:700,color:"#334155",display:"block",marginBottom:4};
@@ -4450,9 +4450,10 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     const qb=(icon,label,on,extra={})=>{ const st={flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"10px 4px",borderRadius:14,background:"#f8fafc",border:"1px solid #eef2f7",color:"#0f172a",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"none",opacity:extra.dis?.4:1};
       const inner=<><span style={{fontSize:22,lineHeight:1}}>{icon}</span>{label}</>;
       return extra.href?<a href={extra.href} target={/^https?:/.test(extra.href)?"_blank":undefined} rel="noreferrer" style={st}>{inner}</a>:<button type="button" disabled={extra.dis} onClick={on} style={st}>{inner}</button>; };
-    const tile=(icon,label,sub,on,tone)=>{ const T={go:["#16a34a","#fff","#16a34a"],ok:["#f0fdf4","#166534","#bbf7d0"],inv:["#0f766e","#fff","#0f766e"],plain:["#fff","#0f172a","#e2e8f0"]}[tone||"plain"];
-      return <button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:T[0],color:T[1],border:"1px solid "+T[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
-        <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span></button>; };
+    const tile=(icon,label,sub,on,tone,checks=0)=>{ const T={go:["#16a34a","#fff","#16a34a"],ok:["#dcfce7","#166534","#86efac"],sent:["#bbf7d0","#14532d","#4ade80"],inv:["#0f766e","#fff","#0f766e"],plain:["#fff","#0f172a","#e2e8f0"]}[tone||"plain"];
+      return <button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:T[0],color:T[1],border:"1px solid "+T[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0,position:"relative"}}>
+        <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span>
+        {checks>0&&<span title={checks>1?"מולא ונשלח":"מולא"} style={{flexShrink:0,background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:12,fontWeight:900,letterSpacing:-2}}>{checks>1?"✓✓":"✓"}</span>}</button>; };
     const lineRow=(icon,label,on,right)=><button type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"11px 4px",border:"none",borderBottom:"1px solid #f1f5f9",background:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,color:"#0f172a",textAlign:"right"}}><span style={{fontSize:17}}>{icon}</span><span style={{flex:1,fontWeight:600}}>{label}</span>{right}<span style={{color:"#cbd5e1"}}>‹</span></button>;
     const canQuick=!!onSaveEdit;
     const segBar=<div style={{display:"flex",background:"#f1f5f9",borderRadius:10,padding:3,marginBottom:10}}>{[["log","אחרי ביצוע"],["orig","כפי שנרשם בהזמנה"]].map(([k,l])=><button key={k} type="button" onClick={()=>setDetView(k)} style={{flex:1,border:"none",borderRadius:8,padding:"7px 6px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:(detView==="orig")===(k==="orig")?"#fff":"transparent",color:(detView==="orig")===(k==="orig")?"#0f172a":"#64748b",boxShadow:(detView==="orig")===(k==="orig")?"0 1px 2px rgba(0,0,0,.08)":"none"}}>{l}</button>)}</div>;
@@ -4477,8 +4478,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {appt.status==="בוטל"&&<div style={{background:"#fee2e2",color:"#991b1b",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600}}>❌ התור בוטל</div>}
       {freeBlk}
       {appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-        {lg?tile("📋","יומן ביצוע ✓",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח":"לא נשלח"),()=>onFillLog(appt),"ok"):tile("✍️","מלא יומן ביצוע","אחרי הטיפול",()=>onFillLog(appt),"go")}
-        {isStaff&&(docs.length?tile("🧾",(docs[0].docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית")+" ✓",docs[0].invoiceNum||"",()=>tog("doc"),"ok"):tile("🧾","חשבונית / קבלה","אפשר גם לפני יומן הביצוע",()=>onInvoice(appt),"inv"))}
+        {lg?tile("📋","יומן ביצוע",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח ללקוח":"עוד לא נשלח"),()=>onFillLog(appt),sent?"sent":"ok",sent?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>onFillLog(appt))}
+        {isStaff&&(()=>{ const d0=docs[0]; const dSent=docs.some(d=>d.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||"")+" · "+(dSent?"נשלח ללקוח":"עוד לא נשלח"),()=>tog("doc"),dSent?"sent":"ok",dSent?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>onInvoice(appt)); })()}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
         {isStaff&&tile("💳","קישור לתשלום","ביט · העברה · פרטים לחשבונית",()=>setPayReq(true))}
         {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
@@ -12998,7 +12999,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="181";
+const APP_BUILD="182";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13288,6 +13289,7 @@ function App(){
   // סימון "יומן נשלח ללקוח" כששולחים בוואטסאפ / משתפים PDF
   const [sendReq,setSendReq]=useState(null);
   React.useEffect(()=>{ window.__h360Send=r=>setSendReq(r); return ()=>{ if(window.__h360Send) delete window.__h360Send; }; },[]);
+  React.useEffect(()=>{ window.__h360MarkDocSent=doc=>{ if(!doc) return; setFinance(fs=>fs.map(f=>((doc.id!=null&&String(f.id)===String(doc.id))||(doc.invoiceNum&&f.invoiceNum===doc.invoiceNum))&&!f.sentAt?{...f,sentAt:new Date().toISOString()}:f)); }; },[]);
   React.useEffect(()=>{ window.__h360MarkLogSent=log=>{ if(!log) return; setExecLogs(ls=>ls.map(l=>((log.id!=null&&String(l.id)===String(log.id))||(log.docNum&&String(l.docNum)===String(log.docNum)))&&!l.sentAt?{...l,sentAt:new Date().toISOString()}:l)); }; },[]);
   // One-time: give old logs (EL-xxxxxx) simple serial numbers starting at 1001, in creation order
   React.useEffect(()=>{
