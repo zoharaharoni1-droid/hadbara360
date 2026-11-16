@@ -1939,6 +1939,7 @@ function clientQuoteHtml({company,customerName,date,timeWindow,address,quote,pri
 function logSent(l){ return !!(l&&!l.draft&&(l.sentAt||(l.date&&l.date<"2026-11-01"))); }
 function jobProgress(appt, execLogs, finance){
   if(appt&&appt.kind==="personal"){ const d=appt.status==="בוצע"; return {stage:"אישי",label:d?"✓ בוצע":"📌 אישי",color:"#7c3aed",steps:[],next:null,closed:d,personal:true}; }
+  if(appt&&appt.noDocs&&appt.status==="בוצע") return {stage:"הושלם",label:"✓ בוצע · בלי מסמכים",color:"#16a34a",steps:[{name:"שובץ",done:true},{name:"בוצע — בלי מסמכים",done:true}],next:null,closed:true,noDocs:true};
   const log = execLogs?.find(l=>l.apptId===appt.id&&!l.deleted&&!l.replacedBy) || appt.executionLog || null;
   const workDone = !!log || appt.status==="בוצע";
   const docs = (finance||[]).filter(f=>!f.deleted&&f.category==="חשבונית"&&(String(f.apptId)===String(appt.id)||(log&&f.execLogId!=null&&String(f.execLogId)===String(log.id))||(log&&(f.execLogIds||[]).map(String).includes(String(log.id)))));
@@ -1948,18 +1949,19 @@ function jobProgress(appt, execLogs, finance){
   // יומן שנשלח ללקוח (יומנים מלפני שהתחלנו לעקוב נחשבים נשלחו)
   const sent = !!(log && (log.sentAt || (log.date && log.date < "2026-11-01")));
   const cancelled = appt.status==="בוטל";
+  const invSent = docs.some(f=>f.sentAt||(f.date&&f.date<"2026-11-01"));
 
   const steps=[
     {name:"שובץ",done:true},
     {name:"בוצע",done:workDone},
     {name:"יומן ביצוע",done:!!log,sent},
-    {name:"חשבונית/קבלה",done:invoiced,sent:docs.some(f=>f.sentAt)},
+    {name:"חשבונית/קבלה",done:invoiced,sent:invoiced?invSent:undefined},
     {name:"שולם",done:paid},
   ];
-  const next = !workDone?null:!log?"מילוי יומן ביצוע":!invoiced?"הפקת חשבונית":!paid?"קבלת תשלום":!sent?"שליחת יומן ביצוע ללקוח":null;
+  const next = !workDone?null:!log?"מילוי יומן ביצוע":!invoiced?"הפקת חשבונית":!paid?"קבלת תשלום":!sent?"שליחת יומן ביצוע ללקוח":(!invSent&&docs.length)?"שליחת חשבונית ללקוח":null;
 
   if(cancelled) return {stage:"בוטל",label:"בוטל",color:"#9ca3af",steps,next:null};
-  if(workDone&&log&&invoiced&&paid) return {stage:"הושלם",label:"✓ נסגר",color:"#16a34a",steps,next:null,closed:true};
+  if(workDone&&log&&invoiced&&paid&&sent&&(invSent||!docs.length)) return {stage:"הושלם",label:"✓ נסגר",color:"#16a34a",steps,next:null,closed:true};
   if(workDone) return {stage:"בוצע",label:"הבא: "+next,color:"#d97706",steps,next};
   if(appt.status==="בדרך") return {stage:"בדרך",label:"בדרך ללקוח",color:"#2563eb",steps,next:null};
   if(appt.status==="הגעתי") return {stage:"הגעתי",label:"בטיפול",color:"#ea580c",steps,next:null};
@@ -4515,6 +4517,15 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {qb("⚡","עוד",()=>setSheet("quick"))}
       </div>
       {appt.status==="בוטל"&&<div style={{background:"#fee2e2",color:"#991b1b",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,fontWeight:600}}>❌ התור בוטל</div>}
+      {appt.status!=="בוטל"&&(()=>{ const pers=prog.personal||appt.kind==="free"; const isDone=appt.status==="בוצע"; const can=!!onSaveEdit;
+        const setDone=(v,extra={})=>onSaveEdit({...appt,status:v?"בוצע":"ממתין",noDocs:v?(extra.noDocs||false):false,doneAt:v?new Date().toISOString():undefined,updatedAt:new Date().toISOString()});
+        const bar=(bg,bd,c,content)=><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:bg,border:"1px solid "+bd,color:c,borderRadius:12,padding:"9px 12px",marginBottom:12,fontSize:14}}>{content}</div>;
+        const undo=can&&(pers||appt.noDocs)?<button type="button" onClick={()=>setDone(false)} style={{marginRight:"auto",border:"1px solid #cbd5e1",background:"#fff",color:"#475569",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↺ החזר לפתוח</button>:null;
+        if(prog.closed||(pers&&isDone)) return bar("#f0fdf4","#86efac","#166534",<><b>✅ נסגר{appt.noDocs?" · בוצע בלי מסמכים":pers?" · בוצע":" · הכל הושלם"}</b>{undo}</>);
+        if(pers) return can?<button type="button" onClick={()=>setDone(true,{noDocs:appt.kind==="free"})} style={{width:"100%",padding:"12px",borderRadius:12,border:"none",background:"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>✓ סמן כבוצע</button>:null;
+        if((isDone||lg)&&prog.next) return bar("#fffbeb","#fcd34d","#92400e",<><b>! בוצע — עוד לא נסגר</b><span>· חסר: {prog.next}</span></>);
+        if(!lg&&!docs.length&&can) return <button type="button" onClick={()=>{ if(confirm("לסגור את התור כבוצע — בלי יומן ביצוע ובלי חשבונית?")) setDone(true,{noDocs:true}); }} style={{width:"100%",padding:"10px",borderRadius:12,border:"1.5px solid #86efac",background:"#fff",color:"#166534",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>✓ בוצע — בלי מסמכים (סגור את התור)</button>;
+        return null; })()}
       {freeBlk}
       {appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
         {lg?tile("📋","יומן ביצוע",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח ללקוח":"עוד לא נשלח"),()=>onFillLog(appt),sent?"sent":"ok",sent?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>onFillLog(appt))}
@@ -4979,7 +4990,7 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
     return <div key={a.id} {...cp} className={nudgeCls(cp,a)} draggable={!narrow} onDragStart={ev=>{setDraggedId&&setDraggedId(a.id);ev.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId&&setDraggedId(null);setDropKey(null);}}
       onClick={ev=>{ev.stopPropagation();onOpen(a);}} title={(a.timeWindow||a.time)+" · "+a.customerName+(a.pestType&&!pers?" · "+a.pestType:"")}
       style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:compact?"1px 2px":small?"1px 3px":"3px 5px",fontSize:compact?9:11,lineHeight:compact?1.15:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a"}}>
-      {done&&<span style={{position:"absolute",top:1,left:1,width:compact?11:14,height:compact?11:14,borderRadius:"50%",background:"#16a34a",color:"#fff",fontSize:compact?8:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✓</span>}
+      {done&&(()=>{ const full=pers||pr.closed; return <span title={full?"נסגר — הכל הושלם":"בוצע — חסר: "+(pr.next||"")} style={{position:"absolute",top:1,left:1,width:compact?11:14,height:compact?11:14,borderRadius:"50%",background:full?"#16a34a":"#f59e0b",color:"#fff",fontSize:compact?8:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{full?"✓":"!"}</span>; })()}
       {(()=>{ const cu=custById[String(a.customerId)]||{}; const who=pers?String(a.customerName||"").replace(/^📌\s*/,compact?"":"📌 "):(a.contactName||cu.contactName||a.customerName||"—"); const ph=pers?"":(cu.phone||a.phone||""); const L={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
         const pestT=Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType; const street=String(a.address||"").split(",")[0];
         if(compact) return <>
@@ -5016,7 +5027,7 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
     {hasAllDay&&<div style={{display:"flex",borderBottom:"2px solid #fcd34d",background:"#fffbeb",overflow:"hidden"}}>
       <div style={{width:gutter,flexShrink:0,fontSize:9,color:"#92400e",fontWeight:700,textAlign:"center",paddingTop:4,position:"relative",zIndex:6,background:"#fffbeb"}}>☀️</div>
       {allDayBy.map((l,i)=><div key={i} className="tg-day" style={{flex:1,minWidth:0,padding:2,borderRight:`1px solid ${CLR.border}`}}>
-        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} className={nudgeCls(cp,a)} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{calIsDone(a,jobProgress(a,execLogs,finance))&&a.status!=="בוטל"?<span style={{color:"#16a34a",fontWeight:900}}>✓ </span>:null}{String(a.customerName||"").replace(/^📌\s*/,"")}</div>;})}
+        {l.map(a=>{const pers=isPersonal(a);const cp=tdrag?tdrag.cardProps(a,a.customerName):{};return <div key={a.id} {...cp} className={nudgeCls(cp,a)} onClick={()=>onOpen(a)} title={a.customerName} style={{...(cp.style||{}),fontSize:narrow&&n>3?9:11,fontWeight:700,...calCardStyle(a,jobProgress(a,execLogs,finance),1.5,wColor),borderRadius:4,padding:"2px 4px",marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"pointer"}}>{(()=>{ const pr=jobProgress(a,execLogs,finance); if(!calIsDone(a,pr)||a.status==="בוטל") return null; const full=pers||pr.closed; return <span title={full?"נסגר":"בוצע — חסר: "+(pr.next||"")} style={{color:full?"#16a34a":"#d97706",fontWeight:900}}>{full?"✓ ":"! "}</span>; })()}{String(a.customerName||"").replace(/^📌\s*/,"")}</div>;})}
       </div>)}
       {satStrip("allday")}
     </div>}
@@ -13114,7 +13125,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="189";
+const APP_BUILD="190";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
