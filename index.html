@@ -1361,7 +1361,7 @@ function execLogHtml({company,docNum,log,chemicals}){
         <div style="font-size:13px;color:#555;">תאריך: ${fmtDate(log.date)}</div></div>
     </div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:8px;font-size:13px;">
-      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.placeName&&log.placeName!==log.clientName?` &nbsp;·&nbsp; <b>מקום:</b> ${log.placeName}`:""}${log.placePhone?` &nbsp;·&nbsp; <b>טלפון המקום:</b> ${log.placePhone}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${log.structureType?` &nbsp;·&nbsp; <b>מבנה:</b> ${log.structureType}`:""}</div>
+      <b style="color:#1a5c3a;">לקוח:</b> ${log.clientName}${log.contactName?` &nbsp;·&nbsp; <b>איש קשר:</b> ${log.contactName}`:""}${log.placeName&&log.placeName!==log.clientName?` &nbsp;·&nbsp; <b>מקום:</b> ${log.placeName}`:""}${log.placePhone?` &nbsp;·&nbsp; <b>טלפון המקום:</b> ${log.placePhone}`:""}${log.address?` &nbsp;·&nbsp; <b>כתובת:</b> ${log.address}${log.unit?" ("+log.unit+")":""}`:""}${((log.place&&log.place.type)||log.structureType)?` &nbsp;·&nbsp; <b>מבנה:</b> ${(log.place&&log.place.type)||log.structureType}`:""}</div>
     <div style="background:#f0f9f4;border-radius:8px;padding:9px 14px;margin-bottom:16px;font-size:13px;">
       <b style="color:#1a5c3a;">מדביר:</b> ${log.workerDocName||log.workerName}${log.workerLicense?` &nbsp;·&nbsp; <b>רישיון:</b> ${log.workerLicense}`:""}</div>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;">
@@ -2764,7 +2764,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       const doc=f.docDraft!=null?f.docDraft:(f.contactName&&f.placeName&&f.clientName!==f.placeName?f.clientName:"");
       const person=biz?(f.contactName||""):(f.clientName||"");
       return <ClientIdentity v={{kind:biz?"biz":"private",name:person,phone:f.phone,place,doc,taxId:f.taxId||""}} onChange={x=>setF(p=>{ const isB=x.kind==="biz"; const docs=isB?(String(x.doc||"").trim()||String(x.place||"").trim()||x.name):x.name;
-        return {...p,clientKind:x.kind,phone:x.phone,clientName:docs,contactName:isB?x.name:"",placeName:isB?(x.place||""):"",docDraft:isB?(x.doc||""):"",taxId:x.taxId||""}; })}/>; })()}
+        const pt=(p.place&&p.place.type)||""; const cur=p.clientKind||(p.contactName?"biz":"private"); const flip=x.kind!==cur&&(x.kind==="biz"?(!pt||pt==="דירה"||pt==="בית פרטי"):pt==="עסק");
+        const np=flip?{...(p.place||{}),type:x.kind==="biz"?"עסק":"דירה"}:p.place;
+        return {...p,place:np,structureType:flip?np.type:p.structureType,clientKind:x.kind,phone:x.phone,clientName:docs,contactName:isB?x.name:"",placeName:isB?(x.place||""):"",docDraft:isB?(x.doc||""):"",taxId:x.taxId||""}; })}/>; })()}
     {f.placePhone||f.showPlacePhone?<Inp label="☎️ טלפון נוסף של המקום (לא חובה)" value={f.placePhone||""} onChange={v=>set("placePhone",v)} placeholder="למשל טלפון המשרד / הגן"/>
       :<button type="button" onClick={()=>set("showPlacePhone",true)} style={{border:"none",background:"none",color:CLR.primary,fontSize:13,cursor:"pointer",padding:"0 0 10px",fontFamily:"inherit"}}>+ טלפון נוסף של המקום</button>}
     {(()=>{ const sp=(()=>{ const parts=String(f.address||"").split(",").map(x=>x.trim()).filter(Boolean); return f.addrCity!=null?{city:f.addrCity,street:f.addrStreet||""}:{city:parts.length>1?parts[parts.length-1]:"",street:parts.length>1?parts.slice(0,-1).join(", "):(parts[0]||"")}; })();
@@ -2968,7 +2970,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.97)",backdropFilter:"blur(6px)",padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
     {(()=>{
-      const buildData=()=>({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
+      const buildData=()=>({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),structureType:(f.place&&f.place.type)||f.structureType||"",pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
       const problems=send=>{ const P=[]; const add=(sec,label,block)=>P.push({sec,label,block:!!block});
         if(!f.clientName) add("client","שם לקוח",true); if(!f.address) add("client","כתובת",true);
         if(send&&!String(f.phone||"").trim()) add("client","טלפון לקוח (כדי לשלוח)",true);
@@ -2989,7 +2991,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         if(!f.workerName) add("worker","שם מדביר");
         return P; };
       const finish=(send,inv)=>{ setReview(null); onPreview(buildData(),{send,invoice:!!inv}); };
-      const go=(send,inv)=>{ const P=problems(send); if(P.length) return setReview({send,inv,P}); finish(send,inv); };
+      const go=(send,inv)=>{ setReview(null); setShowPrev({send:!!send,inv:!!inv}); };
       const jump=sec=>{ setReview(null); setShowPrev(false); if(logMode!=="flat") setOpenSec(sec); setTimeout(()=>{try{const el=document.getElementById("sec-"+sec); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},120); };
       const prevHtml=()=>{ const d=buildData(); return execLogHtml({company:COMPANY,docNum:"טיוטה",log:{...d,workerDocName:d.workerName},chemicals:CHEMICALS}); };
       const blocks=review?review.P.filter(x=>x.block):[];
@@ -3006,14 +3008,25 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           {!blocks.length&&<Btn style={{flex:"2 1 160px"}} onClick={()=>finish(review.send,review.inv)}>{review.inv?"🧾 המשך לחשבונית בכל זאת":review.send?"📤 שמור ושלח בכל זאת":"💾 שמור בכל זאת"}</Btn>}
         </div>
       </Modal></div>,document.body)}
-      {showPrev&&ReactDOM.createPortal(<div style={{position:"relative",zIndex:6000}}><Modal title="👁️ תצוגה מקדימה — יומן ביצוע (טיוטה)" onClose={()=>setShowPrev(false)} width={820}>
-        <div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"auto",maxHeight:"62vh",background:"#fff",padding:"14px 10px",direction:"rtl",fontFamily:"Arial,sans-serif",fontSize:13}} dangerouslySetInnerHTML={{__html:prevHtml()}}/>
+      {showPrev&&(()=>{ const act=typeof showPrev==="object"?showPrev:{send:false,inv:false}; const P=problems(act.send); const blk=P.filter(x=>x.block);
+        const doIt=(send,inv)=>{ const B=problems(send).filter(x=>x.block); if(B.length){ setShowPrev({send,inv}); return; } setShowPrev(false); finish(send,inv); };
+        const main=act.inv?["🧾 שמור והמשך לחשבונית",()=>doIt(false,true),"#0f766e"]:act.send?["📤 שמור ושלח",()=>doIt(true),"#16a34a"]:["💾 שמור",()=>doIt(false),CLR.primary];
+        return ReactDOM.createPortal(<div style={{position:"relative",zIndex:6000}}><Modal title="👁️ בדיקה ותצוגה מקדימה" onClose={()=>setShowPrev(false)} width={820}>
+        {P.length?<div style={{background:blk.length?"#fef2f2":"#f0f9ff",border:"1px solid "+(blk.length?"#fecaca":"#bae6fd"),borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+          <div style={{fontSize:13.5,fontWeight:700,color:blk.length?"#991b1b":"#0c4a6e",marginBottom:6}}>{blk.length?"⛔ חסרים פרטי חובה — לחץ כדי להשלים:":"כדאי לבדוק — לא מולא (אפשר להשלים או לשמור ככה):"}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{P.map((x,k)=><button key={k} type="button" onClick={()=>jump(x.sec)} style={{padding:"6px 10px",borderRadius:20,border:"1px solid "+(x.block?"#fca5a5":"#7dd3fc"),background:"#fff",color:"#0f172a",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{x.block?"⛔":"✏️"} {x.label}</button>)}</div>
+        </div>:<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"9px 12px",marginBottom:10,fontSize:13.5,fontWeight:700,color:"#166534"}}>✅ הכל מולא — עבור על המסמך ואשר</div>}
+        <div style={{border:"1px solid #e2e8f0",borderRadius:10,overflow:"auto",maxHeight:"56vh",background:"#fff",padding:"14px 10px",direction:"rtl",fontFamily:"Arial,sans-serif",fontSize:13}} dangerouslySetInnerHTML={{__html:prevHtml()}}/>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>
-          <Btn v="secondary" style={{flex:"1 1 120px"}} onClick={()=>setShowPrev(false)}>✏️ חזור לערוך</Btn>
-          <Btn style={{flex:"1 1 150px",background:"#25D366",border:"none"}} onClick={()=>{setShowPrev(false);go(true);}}>📤 שמור ושלח</Btn>
-          <Btn style={{flex:"2 1 180px",background:"#0f766e",border:"none"}} onClick={()=>{setShowPrev(false);go(false,true);}}>🧾 שמור והמשך לחשבונית</Btn>
+          <Btn v="secondary" style={{flex:"1 1 110px"}} onClick={()=>P.length?jump(P[0].sec):setShowPrev(false)}>✏️ חזור לערוך</Btn>
+          <Btn style={{flex:"2 1 180px",background:blk.length?"#94a3b8":main[2],border:"none"}} onClick={main[1]}>{main[0]}{P.length&&!blk.length?" בכל זאת":""}</Btn>
         </div>
-      </Modal></div>,document.body)}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
+          {!act.send&&!act.inv?null:<button type="button" onClick={()=>doIt(false)} style={{flex:"1 1 90px",padding:"8px",borderRadius:9,border:"1px solid #cbd5e1",background:"#fff",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>💾 שמור בלבד</button>}
+          {act.send?null:<button type="button" onClick={()=>doIt(true)} style={{flex:"1 1 90px",padding:"8px",borderRadius:9,border:"1px solid #bbf7d0",background:"#fff",color:"#166534",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>📤 שמור ושלח</button>}
+          {act.inv?null:<button type="button" onClick={()=>doIt(false,true)} style={{flex:"1 1 90px",padding:"8px",borderRadius:9,border:"1px solid #99f6e4",background:"#fff",color:"#0f766e",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>🧾 + חשבונית</button>}
+        </div>
+      </Modal></div>,document.body); })()}
       {(()=>{ const bb={border:"none",borderRadius:10,padding:"10px 6px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",color:"#fff",flex:"1 1 0",minWidth:0};
         return <div style={{display:"flex",gap:6}}>
           <button type="button" onClick={()=>go(false,true)} style={{...bb,background:"#0f766e",flex:"1.4 1 0"}}>🧾 שמור + חשבונית</button>
@@ -3086,7 +3099,7 @@ function ExecLogPreview({data:rawData,onBack,onApprove,saved,phone,approveLabel,
       {(()=>{const row={background:"#f0f9f4",borderRadius:8,padding:"8px 14px",marginBottom:8,display:"flex",flexWrap:"wrap",alignItems:"baseline",columnGap:16,rowGap:2,fontSize:13};
         const ttl={fontWeight:700,color:"#1a5c3a"};
         return <div style={{marginBottom:14}}>
-          <div style={row}><span style={ttl}>👤 לקוח:</span><span>{data.clientName}</span>{data.contactName&&<span>איש קשר: {data.contactName}</span>}{data.address&&<span>📍 {data.address}{data.unit?" ("+data.unit+")":""}</span>}{data.structureType&&<span>🏠 {data.structureType}</span>}</div>
+          <div style={row}><span style={ttl}>👤 לקוח:</span><span>{data.clientName}</span>{data.contactName&&<span>איש קשר: {data.contactName}</span>}{data.address&&<span>📍 {data.address}{data.unit?" ("+data.unit+")":""}</span>}{((data.place&&data.place.type)||data.structureType)&&<span>🏠 {(data.place&&data.place.type)||data.structureType}</span>}</div>
           <div style={row}><span style={ttl}>🧑‍🔧 מדביר:</span><span>{data.worker.name}</span>{data.worker.license&&<span>רישיון {data.worker.license}</span>}</div>
         </div>;})()}
       <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
@@ -12779,7 +12792,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="171";
+const APP_BUILD="172";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
