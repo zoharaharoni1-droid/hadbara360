@@ -1470,6 +1470,26 @@ function execLogWAText(log){
 // כשיהיה קישור ישיר לכתיבת ביקורת בפרופיל העסק בגוגל, להחליף אותו כאן
 const GOOGLE_REVIEW_URL_DEFAULT = "https://g.page/r/CYrRnrAGjX5-EBM/review";
 function googleReviewUrl(){ try{ return localStorage.getItem('h360_review_url')||GOOGLE_REVIEW_URL_DEFAULT; }catch(e){ return GOOGLE_REVIEW_URL_DEFAULT; } }
+function reviewText(name){ const first=String(name||"").trim().split(" ")[0];
+  return ["שלום"+(first?" "+first:"")+" 👋","","תודה שבחרתם ב"+COMPANY.name+" 🙏","אם הייתם מרוצים, נשמח מאוד אם תקדישו דקה לכתוב לנו ביקורת בגוגל. זה עוזר לנו מאוד:","",googleReviewUrl(),"","תודה רבה!"].join("\n"); }
+// חלון שליחה כללי להודעת טקסט — מספר לבחירה + וואטסאפ / ביזנס / SMS / העתקה
+function TextSendModal({title,text:text0,phone,onSent,onClose}){
+  const [ph,setPh]=useState(phone||""); const [text,setText]=useState(text0||""); const intl=sendIntl(ph||""); const ok=intl.length>=11;
+  const L=ok?sendLinks(ph,"",{text,subject:""}):{wa:waRegHref("",text),wab:"https://wa.me/?text="+encodeURIComponent(text),sms:"sms:?body="+encodeURIComponent(text)};
+  const a={display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 10px",borderRadius:12,fontWeight:700,fontSize:15,textDecoration:"none",border:"none",cursor:"pointer",fontFamily:"inherit"};
+  const sent=()=>{ try{ onSent&&onSent(); }catch(e){} setTimeout(onClose,400); };
+  return ReactDOM.createPortal(<div style={{position:"relative",zIndex:7000}}><Modal title={title} onClose={onClose} width={460}>
+    <Inp label="📱 לשלוח למספר" type="tel" value={ph} onChange={setPh} placeholder="05X-XXXXXXX"/>
+    <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"2px 0 4px"}}>ההודעה (אפשר לשנות)</label>
+    <textarea value={text} onChange={e=>setText(e.target.value)} rows={7} style={{width:"100%",boxSizing:"border-box",padding:10,borderRadius:10,border:"1px solid "+CLR.border,fontSize:14,fontFamily:"inherit",marginBottom:10,resize:"vertical"}}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+      <a href={L.wa} onClick={sent} style={{...a,background:"#25D366",color:"#fff"}}>💬 וואטסאפ</a>
+      <a href={L.wab} onClick={sent} target={/^https?:/.test(L.wab)?"_blank":undefined} rel="noopener" style={{...a,background:"#075E54",color:"#fff"}}>💼 וואטסאפ ביזנס</a>
+      <a href={L.sms} onClick={sent} style={{...a,background:"#e0f2fe",color:"#075985"}}>✉️ SMS</a>
+      <button type="button" onClick={async()=>{ try{ await navigator.clipboard.writeText(text); showToast("✅ ההודעה הועתקה"); sent(); }catch(e){ prompt("העתק:",text); } }} style={{...a,background:"#f1f5f9",color:"#0f172a"}}>📋 העתק</button>
+    </div>
+  </Modal></div>,document.body);
+}
 function sendReviewRequest(name,phone){
   const ph=String(phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972");
   if(!ph) return alert("אין טלפון ללקוח");
@@ -4370,7 +4390,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
     ["נשלח ללקוח",sent],
   ]:[];
   const doneCount=logChecks.filter(x=>x[1]).length;
-  const [detView,setDetView]=useState("log"); const [payReq,setPayReq]=useState(false);
+  const [detView,setDetView]=useState("log"); const [payReq,setPayReq]=useState(false); const [revReq,setRevReq]=useState(false);
   const PR=usePayReports(); const myRefs=(appt.payReqs||[]).map(x=>x.ref).filter(Boolean); const myRep=PR.rows.filter(r=>r.ref&&myRefs.includes(r.ref));
   const [v2,setV2]=useState(()=>{ try{ return localStorage.getItem("h360_appt_ui")!=="old"; }catch(e){ return true; } });
   const freeBlk=<>{appt.kind==="free"&&<div style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:14,padding:"12px 14px",marginBottom:12,boxShadow:"0 1px 2px rgba(2,132,199,.06)"}}>
@@ -4482,7 +4502,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       ...(appt.address?navItems(appt.address):[]),
       appt.status!=="בדרך"&&appt.status!=="בוצע"&&appt.status!=="בוטל"&&onMarkEnRoute&&{icon:"🚗",label:"אני בדרך",onClick:enRoute,bg:"#dbeafe",color:"#1e40af"},
       {icon:"⏰",label:"תזכורת",onClick:()=>onReminder?onReminder(appt):setShowWA(true),bg:"#dcfce7",color:"#166534"},
-      (appt.status==="בוצע"||lg)&&phone&&{icon:"⭐",label:"בקשת ביקורת",onClick:()=>sendReviewRequest(appt.customerName,phone),bg:"#fef9c3",color:"#854d0e"},
+      {icon:"⭐",label:"בקשת ביקורת בגוגל",onClick:()=>setRevReq(true),bg:"#fef9c3",color:"#854d0e"},
       onDuplicate&&{icon:"🔁",label:"שכפל / ביקור חוזר",onClick:()=>onDuplicate(appt),bg:"#f5f3ff",color:"#6d28d9"},
     ].filter(Boolean)}/>}
     {showWA&&<WAReminderModal appt={appt} customers={customers} onClose={()=>setShowWA(false)}/>}</>;
@@ -4532,6 +4552,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         {isStaff&&(()=>{ const d0=docs[0]; const dSent=docs.some(d=>d.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||"")+" · "+(dSent?"נשלח ללקוח":"עוד לא נשלח"),()=>tog("doc"),dSent?"sent":"ok",dSent?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>onInvoice(appt)); })()}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
         {isStaff&&tile("💳","קישור לתשלום","ביט · העברה · פרטים לחשבונית",()=>setPayReq(true))}
+        {tile("⭐","ביקורת בגוגל",appt.reviewRequestedAt?"נשלחה · "+fmtDate(String(appt.reviewRequestedAt).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>setRevReq(true),appt.reviewRequestedAt?"sent":undefined,appt.reviewRequestedAt?2:0)}
         {appt.kind==="free"?(onConvertFree&&tile("📝","השלם להזמנה","לא חובה — מילוי מסודר",()=>onConvertFree(appt))):(onEditFull&&canQuick&&tile("✏️","עריכה מלאה","לקוח · מזיקים · מחיר",()=>onEditFull(appt)))}
       </div>}
       {editBlk}
@@ -4590,6 +4611,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
       {histSec}
       <div style={{textAlign:"center",marginTop:12}}><button type="button" onClick={()=>{ try{localStorage.setItem("h360_appt_ui","old");}catch(e){} setV2(false); }} style={{border:"none",background:"none",color:"#94a3b8",fontSize:12,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>חזרה לעיצוב הקודם</button></div>
       {sheetsBlk}
+      {revReq&&<TextSendModal title="⭐ בקשת ביקורת בגוגל" text={reviewText(contact||(lg&&lg.contactName)||(/\d/.test(appt.customerName||"")||String(appt.customerName||"").trim().split(/\s+/).length>2?"":appt.customerName))} phone={phone} onClose={()=>setRevReq(false)}
+        onSent={()=>onSaveEdit&&onSaveEdit({...appt,reviewRequestedAt:new Date().toISOString()})}/>}
       {payReq&&(()=>{ const unpaid=docs.find(x=>x.status!=="שולם"); const amt=unpaid?(unpaid.total||unpaid.amount):(lg&&(lg.paymentDebt||lg.agreedPrice))||appt.price||"";
         return <PayRequestModal amount={amt} desc={unpaid?(unpaid.docType||"חשבונית")+" "+(unpaid.invoiceNum||""):(ps.length?"הדברת "+ps.join(", "):"טיפול הדברה")}
           cust={{name:(lg&&lg.clientName)||custDocName(cust)||appt.customerName,contactName:contact,phone,email:cust.email||"",taxId:(lg&&lg.taxId)||cust.taxId||"",address:(lg&&lg.address)||appt.address||""}}
@@ -13125,7 +13148,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="190";
+const APP_BUILD="191";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
