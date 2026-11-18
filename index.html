@@ -4455,7 +4455,7 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
   const lg=(execLogs||[]).find(l=>l.apptId===appt.id&&!l.deleted&&!l.replacedBy)||null; const lgLocked=logSent(lg);
   const docs=(finance||[]).filter(f=>!f.deleted&&f.category==="חשבונית"&&(String(f.apptId)===String(appt.id)||(lg&&f.execLogId!=null&&String(f.execLogId)===String(lg.id))||(lg&&(f.execLogIds||[]).map(String).includes(String(lg.id)))));
   const invoice=docs.find(f=>f.status!=="שולם")||docs[0]||null;
-  const phone=(lg&&lg.phone)||cust.phone||appt.phone||"";
+  const phone=(lg&&lg.phone)||cust.phone||appt.phone||(()=>{ try{ return (waParse(String(appt.rawMsg||appt.freeText||cust.intakeText||""),[])||{}).phone||""; }catch(_){ return ""; } })();
   const contact=appt.contactName||cust.contactName||"";
   const when=fmtDate(appt.date)+" · "+(isAllDay(appt)?ALL_DAY_TW:"\u2066"+(appt.timeWindow||appt.time||"")+"\u2069");
   const sent=!!(lg&&(lg.sentAt||(lg.date&&lg.date<"2026-11-01")));
@@ -6859,6 +6859,8 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   const save=()=>{
     const raw=String(f.rawMsg||"").trim();
     if(!raw&&(!f.name||!f.phone)) return alert("צריך שם וטלפון — או לכתוב את הפרטים בתיבת \"כתוב בחופשיות\" למעלה");
+    // טלפון שנכתב רק בתיבת הכתיבה החופשית — נכנס גם לכרטיס הלקוח ולתור
+    if(raw&&!String(f.phone||"").trim()){ try{ const pr0=waParse(raw,[])||{}; if(pr0.phone){ f.phone=pr0.phone; setF(x=>({...x,phone:pr0.phone})); } }catch(_){} }
     if(!f.name&&raw){ const pr=waParse(raw,[])||{}; const nm=pr.name||raw.split("\n")[0].replace(/[\d\-+]{7,}/g,"").replace(/\s+/g," ").trim().slice(0,40)||"ללא שם"; f.name=nm; if(!f.phone&&pr.phone) f.phone=pr.phone; }
     if(custOnly&&doSchedule) setDoSchedule(false);
     if(doSchedule&&(!schedWorker||(allPests().length===0&&!raw))) return alert("לשיגור ליומן צריך לבחור מדביר ולפחות מזיק אחד (או לכתוב את הפרטים בתיבה החופשית)");
@@ -6885,7 +6887,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       const w=workers.find(x=>x.id===parseInt(schedWorker));
       const timeWindow=f.allDay?ALL_DAY_TW:`${f.timeFrom}${f.timeTo?"–"+f.timeTo:""}`;
       onSchedule({
-        customerId:saved.id,customerName:saved.name,contactName:contactForDocs(),propertyNotes:f.propertyNotes||"",underground:isShared?f.underground:"0",
+        customerId:saved.id,customerName:saved.name,contactName:contactForDocs(),phone:f.phone||saved.phone||"",propertyNotes:f.propertyNotes||"",underground:isShared?f.underground:"0",
         workerId:parseInt(schedWorker),workerName:w?.name||"",
         date:f.prefDate,time:f.allDay?"07:00":f.timeFrom,timeWindow,
         pestType:pestLabel(),pests:allPests(),
@@ -13390,7 +13392,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="198";
+const APP_BUILD="199";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
