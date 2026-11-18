@@ -6760,6 +6760,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       ...(existingId!=null?{id:existingId}:{totalPaid:0,lastTreatment:""}),
     };
     if(custOnly){ delete customer.pestType; delete customer.pests; delete customer.lastPrice; }
+    else customer.openOrder=doSchedule?null:{at:new Date().toISOString(),pests:allPests(),pestType:pestLabel(),price:f.price||"",notes:f.notes||"",rawMsg:String(f.rawMsg||""),timeFrom:f.timeFrom||"",timeTo:f.timeTo||"",allDay:!!f.allDay,workerId:schedWorker||""};
     const saved=onSave(customer);
     let schedInfo=null;
     if(!custOnly&&doSchedule&&saved){
@@ -6773,7 +6774,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
         price:parseInt(f.price)||0,address:addr,notes:f.notes,aptNum:f.aptNum||"",entrance:f.entrance||"",unit:[unitLine({floor:isApt||isBiz?f.floor:"",aptNum:isApt?f.aptNum:"",entrance:isApt||isShared?f.entrance:""}),isBiz&&f.aptNum?"יחידה "+f.aptNum:"",String(f.addrMore||"").trim()].filter(Boolean).join(" · "),addrMore:String(f.addrMore||"").trim(),
         buildingAreas:f.buildingAreas,
         propertyType:f.propertyType,rooms:isUnit?f.rooms:"",levels:isShared?"":(f.levels||"1"),floor:isApt||isBiz?f.floor:"",floors:f.floors,hasYard:isShared?true:f.hasYard,sewers:f.sewers,
-        status:"ממתין",executionLog:null,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),rawMsg:f.rawMsg||"",
+        status:"ממתין",executionLog:null,extraContacts:(f.extraContacts||[]).filter(c=>c.phone||c.name),rawMsg:f.rawMsg||"",createdAt:new Date().toISOString(),
       });
       schedInfo={workerName:w?.name||"",date:f.prefDate,timeWindow};
     }
@@ -6805,7 +6806,14 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
   React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
     const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
     if(!initialCustomer){ try{ DK&&localStorage.removeItem(DK); }catch(e){} setRestored(false); }
-    setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:custOnly?(c.notes||""):"",custNotes:custOnly?"":(c.notes||""),rawMsg:custOnly?(c.intakeText||""):prev.rawMsg,status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); }); },[]);
+    setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:custOnly?(c.notes||""):"",custNotes:custOnly?"":(c.notes||""),rawMsg:custOnly?(c.intakeText||""):prev.rawMsg,status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); });
+    const oo=!custOnly&&!initialCustomer&&(c.openOrder||(c.__fromHistory&&{pests:c.pests,pestType:c.pestType,price:c.lastPrice}));
+    if(oo){ const ps=Array.isArray(oo.pests)&&oo.pests.length?oo.pests:String(oo.pestType||"").split(/\s*[,،+]\s*/).filter(Boolean);
+      setF(x=>({...x,pests:ps.filter(p=>PEST_TYPES_CRM.includes(p)),customPest:ps.filter(p=>!PEST_TYPES_CRM.includes(p)).join(", "),price:oo.price?String(oo.price):x.price,notes:oo.notes||x.notes,rawMsg:oo.rawMsg||x.rawMsg,
+        ...(oo.timeFrom?{timeFrom:oo.timeFrom,timeTo:oo.timeTo||"",allDay:!!oo.allDay}:{})}));
+      if(oo.workerId) setSchedWorker(String(oo.workerId)); setDoSchedule(true);
+      setTimeout(()=>showToast("📝 ההזמנה נפתחה — בחר תאריך ושמור"),60); }
+  },[]);
   // ✏️ עריכה מלאה של תור קיים מהיומן — ממלאים את כל הטופס מהתור
   React.useEffect(()=>{ const a=initialAppt; if(!a) return;
     const tw=String(a.timeWindow||"").match(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/); const allDay=isAllDay(a);
@@ -7360,6 +7368,45 @@ function AvailabilityPanel({appointments,workers,date,setDate,sel,onPick,compact
   </div>;
 }
 
+// 🕘 היסטוריית הזמנות — האחרונה למעלה, כולל הזמנות שנשמרו בלי תאריך
+function OrderHistoryModal({customers,appointments,onClose,onOpenOrder}){
+  const [n,setN]=useState(30); const [q,setQ]=useState("");
+  const now=Date.now();
+  const lastAppt={}; (appointments||[]).forEach(a=>{ if(isPersonal(a)||a.customerId==null) return; const t=a.createdAt||((a.date||"")+"T23:59"); const k=String(a.customerId); if(!lastAppt[k]||t>lastAppt[k]) lastAppt[k]=t; });
+  const items=[];
+  (customers||[]).forEach(c=>{ if(c.deleted) return;
+    const oo=c.openOrder; const t=oo&&oo.at||"";
+    const legacy=!oo&&c.pestType&&c.updatedAt&&!(lastAppt[String(c.id)]&&lastAppt[String(c.id)]>=c.updatedAt)&&(now-Date.parse(c.updatedAt))<60*864e5;
+    if(oo||legacy) items.push({k:"c"+c.id,kind:"open",t:t||c.updatedAt||"",c,name:c.name,phone:c.phone,pest:(oo&&oo.pestType)||c.pestType||"",price:(oo&&oo.price)||c.lastPrice||"",addr:c.address||c.city||""}); });
+  (appointments||[]).forEach(a=>{ if(isPersonal(a)) return; items.push({k:"a"+a.id,kind:"appt",t:a.createdAt||"",id:a.id,a,name:a.customerName,pest:a.pestType||"",price:a.price||"",addr:a.address||""}); });
+  items.sort((x,y)=>(y.t||"").localeCompare(x.t||"")||(x.kind==="appt"&&y.kind==="appt"?y.id-x.id:0));
+  const qq=q.trim(); const list=qq?items.filter(i=>[i.name,i.phone,i.pest,i.addr].join(" ").includes(qq)):items;
+  const when=t=>{ if(!t) return ""; const d=new Date(t); const hm=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); const p2=x=>String(x).padStart(2,"0"); const ld=d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); const t0=new Date(); const td=t0.getFullYear()+"-"+p2(t0.getMonth()+1)+"-"+p2(t0.getDate()); const ds=ld===td?"היום":fmtDate(ld); return "נשמר "+ds+" "+hm; };
+  const openCount=items.filter(i=>i.kind==="open").length;
+  return <Modal title="🕘 היסטוריית הזמנות" onClose={onClose} width={560}>
+    <div style={{fontSize:13,color:CLR.muted,marginBottom:8}}>ההזמנה האחרונה למעלה, ואחריה הקודמות.{openCount?<> <b style={{color:"#b45309"}}>{openCount} בלי תאריך</b> — עדיין לא ביומן.</>:null}</div>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לפי שם, טלפון, מזיק או כתובת" style={{width:"100%",boxSizing:"border-box",padding:"9px 12px",border:`1px solid ${CLR.border}`,borderRadius:10,fontSize:14,fontFamily:"inherit",marginBottom:10}}/>
+    <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:"60vh",overflowY:"auto"}}>
+      {list.length===0&&<div style={{fontSize:13,color:CLR.muted,padding:10}}>לא נמצאו הזמנות</div>}
+      {list.slice(0,n).map(i=>{ const open=i.kind==="open";
+        return <button key={i.k} type="button" onClick={()=>open?onOpenOrder(i.c):(window.__h360CalOpen=i.id,onClose(),window.__h360Nav&&window.__h360Nav("calendar"))}
+          style={{textAlign:"right",fontFamily:"inherit",cursor:"pointer",background:open?"#fffbeb":"#fff",border:`1px solid ${open?"#fcd34d":CLR.border}`,borderRight:`4px solid ${open?"#f59e0b":CLR.primary}`,borderRadius:10,padding:"9px 12px",fontSize:13,color:"#0f172a"}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+            <b style={{fontSize:14}}>{i.name||"ללא שם"}</b>
+            {open?<span style={{fontSize:12,fontWeight:700,color:"#b45309",whiteSpace:"nowrap"}}>⚠️ בלי תאריך</span>
+                 :<span style={{fontSize:12,fontWeight:700,color:CLR.primary,whiteSpace:"nowrap"}}>📅 {fmtDate(i.a.date)}{i.a.timeWindow?<> · <bdi dir="ltr">{i.a.timeWindow}</bdi></>:""}</span>}
+          </div>
+          <div style={{color:CLR.muted,marginTop:3}}>{[i.pest,i.addr,i.price?"₪"+i.price:"",!open&&i.a.workerName].filter(Boolean).join(" · ")}</div>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:11.5,color:"#94a3b8"}}>
+            <span>{when(i.t)}</span>
+            <span style={{fontWeight:700,color:open?"#b45309":CLR.primary}}>{open?"📝 פתח והשלם תאריך ←":"פתח ביומן ←"}</span>
+          </div>
+        </button>; })}
+      {list.length>n&&<Btn sm v="secondary" onClick={()=>setN(n+30)}>הצג עוד</Btn>}
+    </div>
+  </Modal>;
+}
+
 function NewOrderPage({customers,setCustomers,appointments,setAppointments,workers,goToCustomers}){
   const [hints,setHints]=useHints();
   // 📲 הודעה ששותפה מוואטסאפ ("שיתוף" → הדברה 360) — ממלאת את ההזמנה אוטומטית
@@ -7371,6 +7418,8 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
   const [viewDate,setViewDate]=useState(todayStr());
   const [pick,setPick]=useState(null);
   const [showCal,setShowCal]=useState(false);
+  const [showHist,setShowHist]=useState(false); const [formKey,setFormKey]=useState(0);
+  const openOrder=c=>{ window.__h360PendingOrder={...c,__fromHistory:true}; setShowHist(false); setFormKey(k=>k+1); try{ window.scrollTo(0,0); }catch(_){} };
   React.useEffect(()=>{ if(slot.date) setViewDate(slot.date); },[slot.date]);
   const doPick=p=>{ setPick({...p,n:Date.now()}); setShowCal(false); };
   const panel=compact=><AvailabilityPanel appointments={appointments} workers={workers} date={viewDate} setDate={setViewDate} sel={slot} onPick={doPick} compact={compact}/>;
@@ -7380,13 +7429,15 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",margin:"0 0 6px"}}>
             <h2 style={{color:CLR.primary,fontSize:18,margin:0}}>📝 הזמנת עבודה חדשה</h2>
             <button type="button" onClick={()=>setHints(!hints)} style={{border:"1px solid "+(hints?"#0284c7":"#cbd5e1"),background:hints?"#f0f9ff":"#fff",color:hints?"#0369a1":"#64748b",borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>💡 {hints?"הסתר הסברים":"הסברים"}</button>
+            <button type="button" onClick={()=>setShowHist(true)} style={{border:"1px solid #cbd5e1",background:"#fff",color:"#0f172a",borderRadius:20,padding:"3px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🕘 היסטוריה</button>
           </div>
+          {showHist&&<OrderHistoryModal customers={customers} appointments={appointments} onClose={()=>setShowHist(false)} onOpenOrder={openOrder}/>}
           <p className="h360-hint" style={{color:CLR.muted,fontSize:13,margin:"0 0 16px"}}>קליטת לקוח, פרטי ההדברה, זמן מועדף ומחיר — עם אפשרות לשגר ישירות ליומן של מדביר.</p>
         </div>
         {!wide&&<Btn sm onClick={()=>setShowCal(true)}>📅 יומני המדבירים</Btn>}
       </div>
       {shared&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:13,color:"#166534"}}>📲 ההודעה מהוואטסאפ נקלטה ומולאה בטופס — בדוק, השלם ושמור.</div>}
-      <OrderForm draftKey="neworder" initialParsed={shared} onShowCal={wide?null:()=>setShowCal(true)} workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
+      <OrderForm key={formKey} draftKey="neworder" initialParsed={shared} onShowCal={wide?null:()=>setShowCal(true)} workers={workers} customers={customers} showGuidance={true} recentOrders={recent} onSlotChange={setSlot} pick={pick}
         onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
@@ -13148,7 +13199,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="191";
+const APP_BUILD="192";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
