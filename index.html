@@ -6120,6 +6120,23 @@ function ensureCustomerFor(customers,setCustomers,{customerId,name,phone,base}){
   const id=Date.now()+Math.floor(Math.random()*997), now=new Date().toISOString();
   setCustomers(cs=>[...cs,{status:"פעיל",...base,id,name:nm,phone:phone||base.phone||"",createdAt:now,updatedAt:now}]);
   return id; }
+// איחוד שני כרטיסים של אותו לקוח: הפרטים שעודכנו אחרונים גוברים, כל פרט חסר נלקח מהשני — שום פרט לא נמחק
+function custMergeData(keep,other){ const empty=v=>v==null||v===""||v==="—"||(Array.isArray(v)&&!v.length);
+  const tOf=c=>String(c.updatedAt||c.createdAt||""); const [nw,od]=tOf(other)>tOf(keep)?[other,keep]:[keep,other];
+  const out={...keep}; new Set([...Object.keys(keep),...Object.keys(other)]).forEach(k=>{ if(["id","createdAt","deleted","history","mergedInto","__histNote"].includes(k)) return; out[k]=!empty(nw[k])?nw[k]:!empty(od[k])?od[k]:(keep[k]!==undefined?keep[k]:other[k]); });
+  // כתובת: אם בחדש אין רחוב/עיר — לוקחים את כל הכתובת מהכרטיס שיש בו
+  if(empty(nw.street)&&empty(nw.city)&&(!empty(od.street)||!empty(od.city))){ ["address","city","street","buildingNum","aptNum","floor","entrance","addrMore"].forEach(k=>{ if(!empty(od[k])) out[k]=od[k]; }); }
+  const ex=[...(keep.extraContacts||[])]; (other.extraContacts||[]).forEach(e=>{ if(!ex.some(x=>custNormPh(x.phone)===custNormPh(e.phone)&&x.name===e.name)) ex.push(e); });
+  if(other.phone&&custNormPh(other.phone)!==custNormPh(out.phone)&&!ex.some(x=>custNormPh(x.phone)===custNormPh(other.phone))) ex.push({role:"טלפון נוסף",name:other.contactName||"",phone:other.phone});
+  out.extraContacts=ex;
+  out.history=[...(other.history||[]).map(h=>({...h,note:(h.note?h.note+" · ":"")+"מהכרטיס הכפול"})),...(keep.history||[])].sort((a,b)=>String(a.at).localeCompare(String(b.at))).slice(-70);
+  out.__histNote=`אוחד עם כרטיס כפול (${other.name||""}${other.contactName?" · "+other.contactName:""}${other.address&&other.address!=="—"?" · "+other.address:""})`;
+  out.updatedAt=new Date().toISOString(); return out; }
+// זוגות שבטוח שהם אותו לקוח: אותו טלפון + אותו שם/שם מקום
+function custSureDups(customers){ const nN=x=>String(x||"").replace(/\s+/g," ").trim(); const by={}; const pairs=[];
+  (customers||[]).forEach(c=>{ if(!c||c.deleted) return; const ph=custNormPh(c.phone); if(ph.length<9) return; const names=[c.name,c.placeName].map(nN).filter(Boolean);
+    (by[ph]=by[ph]||[]).forEach(o=>{ const on=[o.name,o.placeName].map(nN).filter(Boolean); if(names.some(n=>on.includes(n))) pairs.push([o,c]); }); by[ph].push(c); });
+  return pairs; }
 function CustSuggest({customers,q,onPick,off=false,title="לקוחות קיימים שלך"}){
   const [closed,setClosed]=useState(null);
   const qq=String(q||"").trim(); if(off||!qq||closed===qq) return null;
@@ -7971,15 +7988,8 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         const dups=customers.filter(c=>!c.deleted&&String(c.id)!==String(sel.id)&&((ph.length>=9&&nP(c.phone)===ph)||[c.name,c.placeName,c.bizName].map(nN).some(n=>n&&names.includes(n))));
         if(!dups.length) return null;
         const merge=o=>{ if(!confirm(`לאחד את הכרטיס "${o.name}"${o.phone?" ("+o.phone+")":""} לתוך הכרטיס הזה?\n\n• פרטים שחסרים כאן יושלמו ממנו\n• התורים, יומני הביצוע והמסמכים שלו יעברו לכאן\n• הכרטיס הכפול יוסר מהרשימה`)) return;
-          const empty=v=>v==null||v===""||v==="—"||(Array.isArray(v)&&!v.length);
-          // הפרטים שעודכנו אחרונים גוברים; כל פרט שחסר בהם נלקח מהכרטיס השני — שום פרט לא נמחק
-          const tOf=c=>String(c.updatedAt||c.createdAt||"");
-          const [nw,od]=tOf(o)>tOf(sel)?[o,sel]:[sel,o];
-          const kept={...sel}; new Set([...Object.keys(sel),...Object.keys(o)]).forEach(k=>{ if(["id","createdAt","deleted","history","mergedInto"].includes(k)) return; kept[k]=!empty(nw[k])?nw[k]:!empty(od[k])?od[k]:(sel[k]!==undefined?sel[k]:o[k]); });
-          kept.history=[...(o.history||[]).map(h=>({...h,note:(h.note?h.note+" · ":"")+"מהכרטיס הכפול"})),...(sel.history||[])].sort((a,b)=>String(a.at).localeCompare(String(b.at))).slice(-70);
-          kept.__histNote=`אוחד עם כרטיס כפול (${o.name||""}${o.phone?" · "+o.phone:""}${o.address&&o.address!=="—"?" · "+o.address:""})`;
-          const ex=[...(sel.extraContacts||[])]; (o.extraContacts||[]).forEach(e=>{ if(!ex.some(x=>x.phone===e.phone)) ex.push(e); }); if(o.phone&&nP(o.phone)!==ph&&!ex.some(x=>nP(x.phone)===nP(o.phone))) ex.push({role:"טלפון נוסף",name:o.contactName||"",phone:o.phone}); kept.extraContacts=ex;
-          const now=new Date().toISOString(); kept.updatedAt=now;
+          const kept=custMergeData(sel,o);
+          const now=kept.updatedAt;
           setCustomers(cs=>cs.map(c=>String(c.id)===String(sel.id)?kept:String(c.id)===String(o.id)?{...c,deleted:true,mergedInto:sel.id,updatedAt:now}:c));
           const mv=x=>String(x.customerId)===String(o.id)?{...x,customerId:sel.id,updatedAt:now}:x;
           setAppointments&&setAppointments(as=>as.map(mv)); setFinance&&setFinance(fs=>fs.map(mv)); setExecLogs&&setExecLogs(ls=>ls.map(mv));
@@ -13457,7 +13467,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="200";
+const APP_BUILD="201";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13735,6 +13745,21 @@ function App(){
   ]);
   const [execLogsAll,setExecLogs]=useLS("execLogs", []);
   const execLogs = React.useMemo(()=>activeOnly(execLogsAll),[execLogsAll]);
+  // 🔗 איחוד אוטומטי של כרטיסים כפולים בטוחים (אותו טלפון + אותו שם) — נשאר כרטיס אחד עם כל הפרטים
+  React.useEffect(()=>{ const t=setTimeout(()=>{ try{
+      const pairs=custSureDups(customers); if(!pairs.length) return;
+      const keepOf={}, merged={}; const root=id=>{ while(keepOf[id]!=null) id=keepOf[id]; return id; };
+      const byId=new Map(customers.map(c=>[String(c.id),c]));
+      pairs.forEach(([a,b])=>{ const ka=root(String(a.id)), kb=root(String(b.id)); if(ka===kb) return;
+        const [k,o]=Number(ka)<Number(kb)?[ka,kb]:[kb,ka]; // הכרטיס הוותיק נשאר (המזהה הקטן) — זהה בכל מכשיר
+        const K=merged[k]||byId.get(k), O=merged[o]||byId.get(o); merged[k]=custMergeData(K,O); keepOf[o]=k; });
+      const moved=Object.keys(keepOf); if(!moved.length) return;
+      const now=new Date().toISOString();
+      setCustomers(cs=>cs.map(c=>{ const id=String(c.id); if(merged[id]&&!keepOf[id]) return merged[id]; if(keepOf[id]!=null&&!c.deleted) return {...c,deleted:true,mergedInto:root(id),updatedAt:now}; return c; }));
+      const mv=x=>x&&x.customerId!=null&&keepOf[String(x.customerId)]!=null?{...x,customerId:root(String(x.customerId)),updatedAt:now}:x;
+      setAppointments(as=>as.map(mv)); setFinance(fs=>fs.map(mv)); setExecLogs(ls=>ls.map(mv)); setMaintenance(ms=>ms.map(mv)); setProjects(ps=>ps.map(mv));
+      showToast&&showToast(`🔗 אוחדו ${moved.length} כרטיסי לקוח כפולים`);
+    }catch(e){ console.warn("auto-merge",e); } },6000); return ()=>clearTimeout(t); },[customers.length,customers.filter(c=>c&&!c.deleted).length]);
   const trashItems = React.useMemo(()=>[...deletedItems,
     ...execLogsAll.filter(x=>x&&x.deleted).map(x=>({...x,name:"יומן ביצוע · "+(x.clientName||"ללא שם")+(x.date?" · "+fmtDate(x.date):""),_type:"יומן ביצוע",_setter:()=>softRestore(setExecLogs,x.id)}))],[deletedItems,execLogsAll]);
   const debtCount = React.useMemo(()=>{ try{ return new Set(openDebts(activeFinance,execLogs,customers).map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size; }catch(e){ return 0; } },[activeFinance,execLogs,customers]);
