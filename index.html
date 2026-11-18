@@ -8901,49 +8901,49 @@ function docHtml(doc){
   const side=[doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:"",doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:"",!T.receipt&&doc.payTerms&&(doc.hidePayTerms===false||(doc.hidePayTerms==null&&doc.payTerms!=="מיידי"))&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:"",!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""].join("");
   return `
   <div style="max-width:740px;margin:0 auto;position:relative;">
-    ${doc.preview?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:56px;font-weight:800;color:rgba(37,99,235,.12);transform:rotate(-18deg);pointer-events:none;">תצוגה מקדימה — עוד לא הופק</div>`:doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
+    ${doc.preview?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:60.5px;font-weight:800;color:rgba(37,99,235,.12);transform:rotate(-18deg);pointer-events:none;">תצוגה מקדימה — עוד לא הופק</div>`:doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:69px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
     <div style="display:flex;justify-content:space-between;border-bottom:3px solid #1a5c3a;padding-bottom:14px;margin-bottom:16px;">
       <div><img src="${LOGO_URL}" alt="${COMPANY.name}" style="height:82px;width:auto;display:block;margin-bottom:6px;"/>
-        <div style="font-size:18px;font-weight:800;color:#111;">${COMPANY.name}</div>
-        <div style="font-size:13.5px;color:#333;line-height:1.6;">${COMPANY.legalName&&COMPANY.legalName!==COMPANY.name?COMPANY.legalName+" · ":""}עוסק מורשה ${COMPANY.taxId}<br/>${COMPANY.address||""}<br/>${[COMPANY.phone,COMPANY.email].filter(Boolean).join(" · ")}</div></div>
+        <div style="font-size:19.5px;font-weight:800;color:#111;">${COMPANY.name}</div>
+        <div style="font-size:14.5px;color:#333;line-height:1.6;">${COMPANY.legalName&&COMPANY.legalName!==COMPANY.name?COMPANY.legalName+" · ":""}עוסק מורשה ${COMPANY.taxId}<br/>${COMPANY.address||""}<br/>${[COMPANY.phone,COMPANY.email].filter(Boolean).join(" · ")}</div></div>
       <div style="text-align:left;">
-        <div style="font-size:30px;font-weight:800;color:#1a5c3a;line-height:1.2;">${doc.docType} <span style="white-space:nowrap;">${doc.preview?"":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</span></div>
-        ${doc.preview?`<div style="font-size:15px;color:#555;">המספר יוקצה בהפקה</div>`:""}
-        ${doc.refund?`<div style="font-size:13.5px;font-weight:700;color:#b91c1c;">החזר כספי ללקוח</div>`:""}
-        <div style="font-size:15px;color:#555;">תאריך: ${fmtDate(doc.date)}</div>
-        ${T.accounting?`<div style="font-size:13.5px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}${doc.signed?" · מסמך ממוחשב":""}</div>`:""}
-        ${doc.allocationNum?`<div style="font-size:13.5px;color:#111;margin-top:2px;">מספר הקצאה: <b>${doc.allocationNum}</b></div>`:""}
+        <div style="font-size:32.5px;font-weight:800;color:#1a5c3a;line-height:1.2;">${doc.docType} <span style="white-space:nowrap;">${doc.preview?"":(doc.draft?"טיוטה ":"")+String(doc.docSeq||"").padStart(4,"0")}</span></div>
+        ${doc.preview?`<div style="font-size:16px;color:#555;">המספר יוקצה בהפקה</div>`:""}
+        ${doc.refund?`<div style="font-size:14.5px;font-weight:700;color:#b91c1c;">החזר כספי ללקוח</div>`:""}
+        <div style="font-size:16px;color:#555;">תאריך: ${fmtDate(doc.date)}</div>
+        ${T.accounting?`<div style="font-size:14.5px;font-weight:700;color:#1a5c3a;margin-top:2px;">${doc.copy?"העתק נאמן למקור":"מקור"}${doc.signed?" · מסמך ממוחשב":""}</div>`:""}
+        ${doc.allocationNum?`<div style="font-size:14.5px;color:#111;margin-top:2px;">מספר הקצאה: <b>${doc.allocationNum}</b></div>`:""}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:${side?"1fr 1fr":"1fr"};gap:14px;margin-bottom:16px;">
-      <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:15px;line-height:1.7;">
+      <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:16px;line-height:1.7;">
         <div style="font-weight:700;color:#1a5c3a;">לכבוד</div>
         <div><b>${c.name||""}</b>${c.taxId?` · ע.מ./ח.פ. ${c.taxId}`:""}</div>
         <div>${c.address||""}</div>
         ${c.contactName?`<div>איש קשר: ${c.contactName}${c.phone?" · טלפון: "+c.phone:""}${c.email?" · "+c.email:""}</div>`:(c.phone||c.email)?`<div>טלפון: ${c.phone||""}${c.email?" · "+c.email:""}</div>`:""}
       </div>
-      ${side?`<div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:15px;line-height:1.7;">${side}</div>`:""}
+      ${side?`<div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:16px;line-height:1.7;">${side}</div>`:""}
     </div>
-    ${doc.docType!=="קבלה"?`<table style="width:100%;border-collapse:collapse;font-size:15px;margin-bottom:12px;">
+    ${doc.docType!=="קבלה"?`<table style="width:100%;border-collapse:collapse;font-size:16px;margin-bottom:12px;">
       <thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:10px 12px;text-align:right;">תיאור</th><th style="padding:10px 12px;">כמות</th><th style="padding:10px 12px;">יחידה</th><th style="padding:10px 12px;text-align:left;">מחיר ליח׳ (לפני מע״מ)</th><th style="padding:10px 12px;text-align:left;">סה״כ</th></tr></thead>
       <tbody>${lines}</tbody></table>
-    <table style="width:320px;margin-right:auto;border-collapse:collapse;font-size:16px;margin-bottom:14px;">
+    <table style="width:320px;margin-right:auto;border-collapse:collapse;font-size:17.5px;margin-bottom:14px;">
       ${doc.disc?`<tr><td style="padding:7px 12px;">הנחה${doc.discount&&doc.discount.type==="%"?" ("+doc.discount.value+"%)":""}</td><td style="padding:7px 12px;text-align:left;color:#b91c1c;">-${money(doc.inclVat?doc.disc/(1+VAT_RATE/100):doc.disc)}</td></tr>`:""}
       <tr><td style="padding:7px 12px;">סה״כ לפני מע״מ</td><td style="padding:7px 12px;text-align:left;">${money(doc.before)}</td></tr>
       <tr><td style="padding:7px 12px;">מע״מ ${VAT_RATE}%</td><td style="padding:7px 12px;text-align:left;">${money(doc.vat)}</td></tr>
-      <tr style="background:#e8f5ee;font-weight:800;"><td style="padding:10px 12px;color:#1a5c3a;">${doc.docType==="חשבונית זיכוי"?"סה״כ לזיכוי":"סה״כ לתשלום"}</td><td style="padding:10px 12px;text-align:left;color:#1a5c3a;font-size:21px;">${money(doc.total)}</td></tr>
+      <tr style="background:#e8f5ee;font-weight:800;"><td style="padding:10px 12px;color:#1a5c3a;">${doc.docType==="חשבונית זיכוי"?"סה״כ לזיכוי":"סה״כ לתשלום"}</td><td style="padding:10px 12px;text-align:left;color:#1a5c3a;font-size:22.5px;">${money(doc.total)}</td></tr>
     </table>`:""}
-    ${T.receipt?`<div style="font-weight:700;color:#1a5c3a;font-size:16px;margin:6px 0;">פירוט התקבולים</div>
-    <table style="width:100%;border-collapse:collapse;font-size:15px;margin-bottom:12px;">
+    ${T.receipt?`<div style="font-weight:700;color:#1a5c3a;font-size:17.5px;margin:6px 0;">פירוט התקבולים</div>
+    <table style="width:100%;border-collapse:collapse;font-size:16px;margin-bottom:12px;">
       <thead><tr style="background:#0f766e;color:#fff;"><th style="padding:9px 12px;text-align:right;">אמצעי תשלום</th><th style="padding:9px 12px;text-align:right;">פרטים</th><th style="padding:9px 12px;">תאריך</th><th style="padding:9px 12px;text-align:left;">סכום</th></tr></thead>
       <tbody>${pays.map((p,i)=>`<tr style="background:${i%2?"#fff":"#f0fdfa"}"><td style="padding:9px 12px;">${p.method}</td><td style="padding:9px 12px;">${payDetailsText(p)||"—"}</td><td style="padding:9px 12px;text-align:center;">${fmtDate(p.date||doc.date)}</td><td style="padding:9px 12px;text-align:left;font-weight:600;">${money(p.amount)}</td></tr>`).join("")}
       <tr style="background:#ccfbf1;font-weight:800;"><td colspan="3" style="padding:10px 12px;">סה״כ התקבל</td><td style="padding:10px 12px;text-align:left;">${money(pays.reduce((s,p)=>s+(parseFloat(p.amount)||0),0))}</td></tr></tbody></table>`:""}
-    ${doc.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:15px;white-space:pre-wrap;"><b>הערות:</b> ${doc.notes}</div>`:""}
-    ${!T.receipt&&doc.docType!=="חשבונית זיכוי"?(COMPANY.bank?`<div style="border:1px solid #d1e7da;background:#f6fbf8;border-radius:8px;padding:10px 14px;font-size:15px;line-height:1.7;margin-bottom:12px;"><div style="font-weight:800;color:#1a5c3a;">פרטים להעברה בנקאית</div>${COMPANY.bank.name} (${COMPANY.bank.code}) · סניף ${COMPANY.bank.branch} · חשבון ${COMPANY.bank.account}<br/>על שם: <b>${COMPANY.bank.holder}</b> · צ׳קים לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`:`<div style="font-size:13.5px;color:#444;margin-bottom:10px;">צ׳קים והעברות לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`):""}
-    ${doc.footer?`<div style="font-size:13.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
+    ${doc.notes?`<div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:16px;white-space:pre-wrap;"><b>הערות:</b> ${doc.notes}</div>`:""}
+    ${!T.receipt&&doc.docType!=="חשבונית זיכוי"?(COMPANY.bank?`<div style="border:1px solid #d1e7da;background:#f6fbf8;border-radius:8px;padding:10px 14px;font-size:16px;line-height:1.7;margin-bottom:12px;"><div style="font-weight:800;color:#1a5c3a;">פרטים להעברה בנקאית</div>${COMPANY.bank.name} (${COMPANY.bank.code}) · סניף ${COMPANY.bank.branch} · חשבון ${COMPANY.bank.account}<br/>על שם: <b>${COMPANY.bank.holder}</b> · צ׳קים לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`:`<div style="font-size:14.5px;color:#444;margin-bottom:10px;">צ׳קים והעברות לפקודת: <b>${COMPANY.payee||COMPANY.legalName||COMPANY.name}</b></div>`):""}
+    ${doc.footer?`<div style="font-size:14.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:8px;white-space:pre-wrap;">${doc.footer}</div>`:""}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #e5e7eb;padding-top:18px;margin-top:10px;">
-      ${doc.signed?`<div style="font-size:13.5px;color:#1a5c3a;line-height:1.6;"><b>✔ חתום דיגיטלית</b><br/>${COMPANY.legalName||COMPANY.name}</div>`:(doc.draft||doc.preview)&&T.accounting?`<div style="font-size:13.5px;color:#64748b;line-height:1.6;border:1px dashed #94a3b8;border-radius:8px;padding:6px 10px;"><b>✔ חתום דיגיטלית</b><br/>${COMPANY.legalName||COMPANY.name}<div style="font-size:10px;">(דוגמה — במסמך הרשמי תופיע כאן החתימה, והקובץ ייחתם)</div></div>`:`<div><div style="font-size:15px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:12.5px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>`}
-      <div style="text-align:left;font-size:12.5px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב — חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
+      ${doc.signed?`<div style="font-size:14.5px;color:#1a5c3a;line-height:1.6;"><b>✔ חתום דיגיטלית</b><br/>${COMPANY.legalName||COMPANY.name}</div>`:(doc.draft||doc.preview)&&T.accounting?`<div style="font-size:14.5px;color:#64748b;line-height:1.6;border:1px dashed #94a3b8;border-radius:8px;padding:6px 10px;"><b>✔ חתום דיגיטלית</b><br/>${COMPANY.legalName||COMPANY.name}<div style="font-size:11px;">(דוגמה — במסמך הרשמי תופיע כאן החתימה, והקובץ ייחתם)</div></div>`:`<div><div style="font-size:16px;color:#555;margin-bottom:26px;">חתימה:</div><div style="border-bottom:1px solid #999;"></div><div style="font-size:13.5px;color:#555;margin-top:4px;">${COMPANY.signer||""}</div></div>`}
+      <div style="text-align:left;font-size:13.5px;color:#999;align-self:end;">${doc.preview?"תצוגה מקדימה — המסמך עוד לא הופק":doc.draft?"טיוטה — לבדיקה בלבד, לא מסמך רשמי.":"הופק במערכת ממוחשבת של "+(COMPANY.legalName||COMPANY.name)}${doc.signed?`<div style="color:#1a5c3a;font-weight:700;margin-top:3px;">🔏 מסמך ממוחשב — חתום בחתימה אלקטרונית מאובטחת</div>`:""}</div>
     </div>
   </div>`;
 }
@@ -13741,7 +13741,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="214";
+const APP_BUILD="215";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
