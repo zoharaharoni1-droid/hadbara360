@@ -10288,7 +10288,7 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
   return `<div style="max-width:900px;margin:0 auto;font-size:13px;line-height:1.6">
    <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1a5c3a;padding-bottom:12px">
      <div><img src="${LOGO_URL}" style="height:64px"/><div style="font-size:12px;color:#555">${esc(COMPANY.licensePrefix||"")} · ${esc(COMPANY.phone||"")}</div></div>
-     <div style="text-align:left"><div style="font-size:24px;font-weight:800;color:#1a5c3a">תיק הדברה</div><div style="font-size:15px;font-weight:700">${esc(m.customerName)}</div><div style="font-size:12px;color:#555">עודכן: ${fmtDate(todayStr())}</div></div>
+     <div style="text-align:left"><div style="font-size:24px;font-weight:800;color:#1a5c3a">תיק הדברה${m.proposal?`<div style="font-size:15px;color:#b45309">הצעה לאחזקה</div>`:""}</div><div style="font-size:15px;font-weight:700">${esc(m.customerName)}</div><div style="font-size:12px;color:#555">עודכן: ${fmtDate(todayStr())}</div></div>
    </div>
    ${H(1,"פרטי המקום")}
    <table><tr><td style="${td};width:30%;background:#f0f9f4">שם המקום</td><td style="${td}">${esc(m.customerName)}${m.billingName&&m.billingName!==m.customerName?" ("+esc(m.billingName)+")":""}</td></tr>
@@ -10301,18 +10301,20 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
    ${techs.length?`<div style="font-weight:700;margin:10px 0 4px">מדבירים מורשים המטפלים במקום</div><table><tr><th style="${th}">שם</th><th style="${th}">סוג רישיון</th><th style="${th}">מס׳ רישיון</th><th style="${th}">בתוקף עד</th></tr>${techs.map(w=>`<tr><td style="${td}">${esc(w.name)}</td><td style="${td}">${esc(w.license||"")}</td><td style="${td}">${esc(w.licenseNum||"")}</td><td style="${td}">${w.licenseExpiry?fmtDate(w.licenseExpiry):"—"}</td></tr>`).join("")}</table>`:""}
    ${licSrc?`<div style="margin:10px 0;page-break-inside:avoid"><div style="font-weight:700;margin-bottom:4px">רישיון מדביר — המשרד להגנת הסביבה (לפי חוק הסדרת העיסוק בהדברה תברואית, התשע״ו-2016)</div><img src="${licSrc}" style="max-width:420px;width:100%;border:1px solid #ddd;border-radius:8px"/></div>`:""}
    ${cdocs.length?`<div style="font-weight:700;margin:10px 0 4px">מסמכים נוספים</div><table><tr><th style="${th}">מסמך</th><th style="${th}">קובץ</th><th style="${th}">תוקף</th></tr>${cdocs.join("")}</table>`:""}
-   ${H(3,"תוכנית השירות")}
-   <table><tr><td style="${td};width:30%;background:#f0f9f4">תדירות ביקור</td><td style="${td}">${esc(fq)}${win&&m.visitWindow&&m.visitWindow!=="day"?" · "+esc(win):""}</td></tr>
-   <tr><td style="${td};background:#f0f9f4">תחילת השירות</td><td style="${td}">${fmtDate(m.startDate)}${m.openEnded?" · ללא תאריך סיום":m.endDate?" · עד "+fmtDate(m.endDate):""}</td></tr>
+   ${H(3,m.proposal?"תוכנית שירות מומלצת":"תוכנית השירות")}
+   ${m.proposal?`<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12.5px">📝 מסמך מקדים לקראת אחזקה — הפרטים הסופיים ייקבעו בהסכם.</div>`:""}
+   <table><tr><td style="${td};width:30%;background:#f0f9f4">${m.proposal?"תדירות ביקור מומלצת":"תדירות ביקור"}</td><td style="${td}">${esc(fq)}${win&&m.visitWindow&&m.visitWindow!=="day"?" · "+esc(win):""}</td></tr>
+   ${m.proposal?`<tr><td style="${td};background:#f0f9f4">מחיר</td><td style="${td}">${parseFloat(m.price)>0?"₪"+esc(m.price)+" לביקור"+(m.priceInclVat?" (כולל מע״מ)":" + מע״מ"):"ייקבע בהמשך"}</td></tr>`:`<tr><td style="${td};background:#f0f9f4">תחילת השירות</td><td style="${td}">${fmtDate(m.startDate)}${m.openEnded?" · ללא תאריך סיום":m.endDate?" · עד "+fmtDate(m.endDate):""}</td></tr>`}
    <tr><td style="${td};background:#f0f9f4">מזיקים עיקריים לטיפול</td><td style="${td}">${esc(maintList(m.pests).join(", ")||"—")}</td></tr>
    <tr><td style="${td};background:#f0f9f4">כלול בשירות</td><td style="${td}">${m.coverAll!==false?"כל המזיקים הנפוצים"+(maintList(m.excludedPests).length?" למעט: "+esc(maintList(m.excludedPests).join(", ")):""):esc(maintList(m.includedPests).join(", ")||"—")}</td></tr>
    </table>
-   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-right:4px solid #1a5c3a;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:12.5px;line-height:1.7">
+   ${m.proposal?"":`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-right:4px solid #1a5c3a;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:12.5px;line-height:1.7">
      <b>היקף השירות ותוספות.</b> השירות השוטף כולל ביקורי ניטור, בדיקת תחנות, חידוש פיתיונות וטיפול שגרתי לפי התדירות שסוכמה.
      טיפול נרחב מעבר לשגרה — כגון התפרצות חריגה, מזיק שהטיפול בו מורכב או ממושך, עבודה בגובה או אטימת פתחים —
      וכן הגדלת תדירות הביקורים (למשל פעמיים בחודש במקום פעם אחת), כרוכים בתשלום נוסף שייקבע על ידי חברת ההדברה
      ויתואם עם הלקוח ויאושר על ידו מראש, לפני הביצוע.
-   </div>
+   </div>`}
+   ${m.proposal&&String(m.proposalNotes||"").trim()?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px;white-space:pre-wrap;line-height:1.7"><b>💡 המלצות</b>\n${esc(m.proposalNotes)}</div>`:""}
    ${H(4,"מיפוי המקום — תחנות ומלכודות")}
    ${stations.length?`<table><tr><th style="${th}">אזור</th><th style="${th}">מס׳</th><th style="${th}">סוג</th><th style="${th}">מיקום</th></tr>${stRows}</table>`:"<div>לא הוצבו תחנות</div>"}
    ${maps}
@@ -10717,12 +10719,20 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"12px 0 6px"}}>🚫 לא כלול בכלל</label>
       <MaintPestChips value={f.excludedPests} onChange={v=>set("excludedPests",v)} exclude={[...f.pests,...f.paidPests]}/>
     </FieldCard>
-    <FieldCard title="💰 תדירות ומחיר">
-      <Sel label="תדירות ביקור" value={f.frequency} onChange={v=>set("frequency",v)} options={[...MAINTENANCE_FREQUENCIES,"אחר"]}/>
+    <FieldCard title="📝 שלב">
+      <div style={{display:"flex",gap:6}}>
+        {[[false,"✅ אחזקה שסוכמה"],[true,"📝 הצעה — עוד לא סוכם"]].map(([v,l])=><button key={l} type="button" onClick={()=>setF(x=>({...x,proposal:v,...(v&&x.status==="פעיל"&&!init.id?{status:"מושעה"}:{})}))} style={{flex:1,padding:"11px 8px",borderRadius:10,border:"1.5px solid "+(!!f.proposal===v?CLR.primary:"#cbd5e1"),background:!!f.proposal===v?CLR.primaryLight:"#fff",color:!!f.proposal===v?CLR.primary:"#475569",fontWeight:!!f.proposal===v?800:500,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>)}
+      </div>
+      {f.proposal&&<div style={{fontSize:12.5,color:"#475569",marginTop:8}}>התיק יופק כ<b>"תיק הדברה — הצעה לאחזקה"</b>: התדירות תופיע כמומלצת, המחיר יכול להישאר "ייקבע בהמשך", ואפשר להוסיף המלצות בכתיבה חופשית. האחזקה לא משבצת ביקורים ביומן.</div>}
+      {f.proposal&&<div style={{marginTop:10}}><label style={{fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:600}}>💡 המלצות והערות להצעה (יופיעו בתיק)</label>
+        <textarea value={f.proposalNotes||""} onChange={e=>set("proposalNotes",e.target.value)} rows={4} placeholder={"למשל: מומלץ לבצע אטימת פתחים בחניון מינוס 1, להציב 6 תיבות נוספות בהיקף חבקוק 5, ניטור חודשי של המטבח…"} style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/></div>}
+    </FieldCard>
+    <FieldCard title={f.proposal?"💰 תדירות מומלצת ומחיר":"💰 תדירות ומחיר"}>
+      <Sel label={f.proposal?"תדירות ביקור מומלצת":"תדירות ביקור"} value={f.frequency} onChange={v=>set("frequency",v)} options={[...MAINTENANCE_FREQUENCIES,"אחר"]}/>
       {f.frequency==="אחר"&&<Inp label="תדירות — במילים" value={f.frequencyOther} onChange={v=>set("frequencyOther",v)} placeholder="למשל: 3 פעמים בחודש בקיץ, פעם בחודש בחורף"/>}
       {["אחזקה חודשית","כל חודשיים","רבעוני (כל 3 חודשים)","כל 6 חודשים","שנתי"].includes(f.frequency)&&<Sel label="מתי בחודש מגיעים" value={(VISIT_WINDOWS.find(x=>x[0]===(f.visitWindow||"day"))||VISIT_WINDOWS[0])[1]} onChange={v=>set("visitWindow",(VISIT_WINDOWS.find(x=>x[1]===v)||VISIT_WINDOWS[0])[0])} options={VISIT_WINDOWS.map(x=>x[1])}/>}
       <div style={{display:"flex",gap:6,alignItems:"flex-end",marginBottom:4}}>
-        <div style={{flex:1}}><Inp label="מחיר לביקור (₪)" type="number" value={f.price} onChange={v=>set("price",v)}/></div>
+        <div style={{flex:1}}><Inp label={f.proposal?"מחיר לביקור (₪) — אפשר להשאיר ריק":"מחיר לביקור (₪)"} type="number" value={f.price} onChange={v=>set("price",v)}/></div>
         <div style={{display:"flex",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden",marginBottom:12}}>
           {[[false,"לפני מע״מ"],[true,"כולל מע״מ"]].map(([v,l])=><button key={l} type="button" onClick={()=>set("priceInclVat",v)} style={{border:"none",padding:"9px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit",background:f.priceInclVat===v?CLR.primary:"#fff",color:f.priceInclVat===v?"#fff":"#475569",fontWeight:f.priceInclVat===v?700:500}}>{l}</button>)}
         </div>
@@ -10857,7 +10867,7 @@ function Maintenance({maintenance,setMaintenance,customers,setCustomers,appointm
               <div style={{fontWeight:700,fontSize:15,color:"#111",marginBottom:2}}>{m.customerName}</div>
               <div style={{fontSize:12,color:CLR.muted}}>{m.address}</div>
             </div>
-            <span style={{background:statusColor[m.status]||"#f3f4f6",color:statusText[m.status]||"#374151",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{m.status}</span>
+            {m.proposal&&<span style={{background:"#fef3c7",color:"#92400e",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap",marginLeft:4}}>📝 הצעה</span>}<span style={{background:statusColor[m.status]||"#f3f4f6",color:statusText[m.status]||"#374151",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{m.status}</span>
           </div>
           {contacts.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
             {contacts.map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,fontSize:13}}>
@@ -13684,7 +13694,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="208";
+const APP_BUILD="209";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
