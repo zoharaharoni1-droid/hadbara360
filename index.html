@@ -9723,7 +9723,68 @@ function BuildingsEditor({buildings,onChange,main}){
     <button type="button" onClick={add} style={{width:"100%",padding:"9px",borderRadius:10,border:"1.5px dashed #7dd3fc",background:"#fff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>+ הוסף מבנה / כתובת</button>
   </div>;
 }
-function SiteMapEditor({zones,stations,onZones,onStations,buildings=[]}){
+// 🗺️ מיפוי פשוט: לכל מבנה — מוסיפים תחנות, ולכל תחנה בנפרד: איפה בדיוק + אזור (או אזור חדש בלחיצה)
+function SiteMapEditor(props){
+  const [adv,setAdv]=useState(false);
+  return <div>
+    <SimpleSiteMap {...props}/>
+    <button type="button" onClick={()=>setAdv(v=>!v)} style={{width:"100%",marginTop:8,padding:"8px",borderRadius:10,border:"1px solid #cbd5e1",background:adv?"#f1f5f9":"#fff",color:"#334155",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{adv?"▲ סגור":"✏️ ציור מפה / תמונת שרטוט וסימון נקודות (מתקדם)"}</button>
+    {adv&&<div style={{marginTop:10,borderTop:"1px dashed #cbd5e1",paddingTop:10}}><SiteMapEditorFull {...props}/></div>}
+  </div>; }
+function SimpleSiteMap({zones,stations,onZones,onStations,buildings=[]}){
+  zones=zones||[]; stations=stations||[]; buildings=buildings||[];
+  const blds=buildings.length?buildings:[{id:"",name:"המקום",address:""}];
+  const bOf=st=>{ const z=zones.find(q=>q.id===st.zone); const b=z&&z.bld!=null?z.bld:st.bld; return buildings.some(x=>x.id===b)?b:""; };
+  const [open,setOpen]=useState(()=>Object.fromEntries(blds.map(b=>[b.id,true])));
+  const [addT,setAddT]=useState({}); const [addN,setAddN]=useState({});
+  const customs=customDevTypes(); const types=[...SITE_DEVICE_TYPES.filter(t=>t.k!=="other"),...customs];
+  const fld={padding:"7px 9px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",boxSizing:"border-box"};
+  const add=bid=>{ const tp=addT[bid]||"bait"; const n=Math.max(1,Math.min(100,parseInt(addN[bid])||1)); let {pre,n:st}=nextDevNum(stations,tp); const used=new Set(stations.map(x=>String(x.num))); const out=[];
+    for(let i=0;i<n;i++){ while(used.has(pre+st)) st++; used.add(pre+st); out.push({num:pre+st,type:tp,zone:"",location:"",...(bid?{bld:bid}:{})}); st++; }
+    onStations([...stations,...out]); setAddN(x=>({...x,[bid]:1})); };
+  const upd=(i,patch)=>onStations(stations.map((x,j)=>j===i?{...x,...patch}:x));
+  const setZone=(i,bid,v)=>{ if(v==="__new"){ const nm=String(prompt("שם האזור — למשל: צד ימין, חצר אחורית, מטבח")||"").trim(); if(!nm) return;
+      let z=zones.find(q=>q.name===nm&&(q.bld||"")===bid); if(!z){ z={id:"z"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:nm,...(bid?{bld:bid}:{})}; onZones([...zones,z]); }
+      upd(i,{zone:z.id,...(bid?{bld:bid}:{})}); return; }
+    if(v.startsWith("b:")){ upd(i,{bld:v.slice(2),zone:""}); return; }
+    upd(i,{zone:v,...(bid?{bld:bid}:{})}); };
+  const zColor=id=>{ const k=zones.findIndex(z=>z.id===id); const P=["#e0f2fe","#dcfce7","#fef3c7","#fce7f3","#ede9fe","#ffedd5","#ccfbf1"]; return k<0?"#fff":P[k%P.length]; };
+  return <div>
+    <div style={{fontSize:12.5,color:"#475569",marginBottom:8}}>מוסיפים תחנות לכל {buildings.length?"מבנה":"מקום"}, ולכל תחנה כותבים איפה בדיוק ובוחרים אזור. אזור חדש — בוחרים "➕ אזור חדש" ליד התחנה.</div>
+    {blds.map(b=>{ const bid=b.id; const items=stations.map((x,i)=>({x,i})).filter(o=>bOf(o.x)===bid); const bz=zones.filter(z=>(z.bld||"")===bid||(!bid&&!buildings.some(q=>q.id===z.bld)));
+      const isOpen=open[bid]!==false;
+      return <div key={bid||"main"} style={{border:"1px solid #bae6fd",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
+        <button type="button" onClick={()=>setOpen(o=>({...o,[bid]:!isOpen}))} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f0f9ff",border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+          <b style={{flex:1,fontSize:14.5,color:"#0369a1"}}>🏢 {b.name||"מבנה"}{b.address?<span style={{fontWeight:500,color:"#0f172a"}}> · {b.address}</span>:null}</b>
+          <span style={{fontSize:12.5,color:"#475569"}}>{items.length} נקודות</span><span style={{color:"#94a3b8"}}>{isOpen?"▲":"▼"}</span>
+        </button>
+        {isOpen&&<div style={{padding:"8px 10px"}}>
+          {items.map(({x,i})=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,background:zColor(x.zone),borderRadius:10,padding:4}}>
+            <span title={devType(x).label} style={{minWidth:46,height:34,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",fontSize:12.5,flexShrink:0}}>{devType(x).icon}{x.num}</span>
+            <input value={x.location||""} onChange={e=>upd(i,{location:e.target.value})} placeholder="איפה בדיוק? למשל: ליד דלת המטבח, צד ימין" style={{...fld,flex:1,minWidth:0}}/>
+            <select value={x.zone&&bz.some(z=>z.id===x.zone)?x.zone:""} onChange={e=>setZone(i,bid,e.target.value)} style={{...fld,maxWidth:130,fontSize:13,padding:"7px 4px"}}>
+              <option value="">— אזור —</option>
+              {bz.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
+              <option value="__new">➕ אזור חדש…</option>
+              {buildings.length>1&&buildings.filter(q=>q.id!==bid).map(q=><option key={q.id} value={"b:"+q.id}>→ העבר ל{q.name||q.address}</option>)}
+            </select>
+            <button type="button" onClick={()=>onStations(stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:30,height:34,cursor:"pointer",flexShrink:0}}>✕</button>
+          </div>)}
+          {!items.length&&<div style={{fontSize:12.5,color:"#94a3b8",padding:"2px 2px 8px"}}>עוד אין נקודות ב{b.name||"מבנה"}</div>}
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:10,padding:6}}>
+            <span style={{fontSize:13,fontWeight:700}}>➕ הוסף:</span>
+            <div style={{display:"inline-flex",alignItems:"center",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden",background:"#fff"}}>
+              <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:Math.max(1,(parseInt(o[bid])||1)-1)}))} style={{border:"none",background:"#f1f5f9",width:30,height:32,fontSize:17,cursor:"pointer"}}>−</button>
+              <b style={{minWidth:28,textAlign:"center"}}>{parseInt(addN[bid])||1}</b>
+              <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:(parseInt(o[bid])||1)+1}))} style={{border:"none",background:"#f1f5f9",width:30,height:32,fontSize:17,cursor:"pointer"}}>+</button>
+            </div>
+            <select value={addT[bid]||"bait"} onChange={e=>setAddT(o=>({...o,[bid]:e.target.value}))} style={{...fld,flex:1,minWidth:140,fontSize:13}}>{types.map(t=><option key={t.k} value={t.k}>{t.icon} {t.label}</option>)}</select>
+            <Btn sm onClick={()=>add(bid)}>הוסף</Btn>
+          </div>
+        </div>}
+      </div>; })}
+  </div>; }
+function SiteMapEditorFull({zones,stations,onZones,onStations,buildings=[]}){
   zones=zones||[]; stations=stations||[]; buildings=buildings||[];
   const [bld,setBld]=useState((buildings[0]||{}).id||"");
   const hasB=buildings.length>0; const curB=hasB?(buildings.find(b=>b.id===bld)?bld:""):"";
@@ -13551,7 +13612,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="203";
+const APP_BUILD="204";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
