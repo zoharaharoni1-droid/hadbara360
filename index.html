@@ -9288,11 +9288,11 @@ function computeDebts(finance,execLogs,customers){
   (finance||[]).forEach(f=>{ if(!f||f.deleted) return;
     if(isDocRec(f)){ const t=docTypeOf(f); if(!["חשבונית מס","חשבון עסקה"].includes(t)) return; if(f.creditedBy&&!f.paidByDocId) return;
       const c=custBy(f.customerId,f.customer); out.push({key:"f"+f.id,kind:"doc",rec:f,cust:c,name:f.customer||(c&&c.name)||"—",phone:(f.cust&&f.cust.phone)||(c&&c.phone)||"",amount:docTotalOf(f),date:f.date,label:t+" "+(f.official?String(f.docSeq||"").padStart(4,"0"):(f.invoiceNum||"")),desc:((f.lines||[])[0]||{}).desc||"",paid:f.status==="שולם",paidRef:f.paidByDocId||f.paidNote||"",paidAt:f.paidAt||""}); }
-    else if(f.category==="חוב"){ const c=custBy(f.customerId,f.customer); out.push({key:"m"+f.id,kind:"manual",rec:f,cust:c,name:f.customer||(c&&c.name)||"—",phone:f.phone||(c&&c.phone)||"",amount:parseFloat(f.amount)||0,date:f.date,label:f.source||"חוב",desc:f.desc||"",paid:f.status==="שולם",paidRef:f.paidByDocId||f.paidNote||"",paidAt:f.paidAt||""}); }
+    else if(f.category==="חוב"){ const c=custBy(f.customerId,f.customer); const pp=(f.partPays||[]).reduce((t,x)=>t+(parseFloat(x.amount)||0),0); out.push({key:"m"+f.id,kind:"manual",rec:f,cust:c,name:f.customer||(c&&c.name)||"—",phone:f.phone||(c&&c.phone)||"",amount:Math.max(0,(parseFloat(f.amount)||0)-pp),orig:parseFloat(f.amount)||0,partPaid:pp,date:f.date,label:f.source||"חוב",desc:f.desc||"",paid:f.status==="שולם",paidRef:f.paidByDocId||f.paidNote||"",paidAt:f.paidAt||""}); }
   });
-  (execLogs||[]).forEach(l=>{ if(!l||l.deleted) return; const amt=parseFloat(l.agreedPrice||l.paymentAmount)||0; if(!amt) return;
+  (execLogs||[]).forEach(l=>{ if(!l||l.deleted) return; const amt0=parseFloat(l.debtAmount!=null&&l.debtAmount!==""?l.debtAmount:(l.agreedPrice||l.paymentAmount))||0; if(!amt0) return; const pp=(l.partPays||[]).reduce((t,x)=>t+(parseFloat(x.amount)||0),0); const amt=Math.max(0,amt0-pp);
     const hasDoc=logHasDoc(l,finance); if(l.paymentDone&&!l.debtClosed) return; if(hasDoc&&!l.debtClosed) return;
-    const c=custBy(l.customerId,l.clientName); out.push({key:"l"+l.id,kind:"log",rec:l,cust:c,name:l.clientName||(c&&c.name)||"—",phone:l.phone||(c&&c.phone)||"",amount:amt,date:l.date,label:"יומן ביצוע "+(l.docNum||""),desc:"הדברת "+(l.pest||[]).join(", "),paid:!!l.debtClosed,paidRef:(l.debtClosed&&l.debtClosed.ref)||"",paidAt:(l.debtClosed&&l.debtClosed.at)||""}); });
+    const c=custBy(l.customerId,l.clientName); out.push({key:"l"+l.id,kind:"log",rec:l,cust:c,name:l.clientName||(c&&c.name)||"—",phone:l.phone||(c&&c.phone)||"",amount:amt,orig:amt0,partPaid:pp,date:l.date,label:"יומן ביצוע "+(l.docNum||""),desc:"הדברת "+(l.pest||[]).join(", "),paid:!!l.debtClosed,paidRef:(l.debtClosed&&l.debtClosed.ref)||"",paidAt:(l.debtClosed&&l.debtClosed.at)||""}); });
   return out;
 }
 const openDebts=(finance,execLogs,customers)=>computeDebts(finance,execLogs,customers).filter(d=>!d.paid);
@@ -9318,6 +9318,16 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
   const payDoc=d=>{ if(d.kind==="doc") go({kind:"follow",id:d.rec.id,type:docTypeOf(d.rec)==="חשבון עסקה"?"חשבונית מס/קבלה":"קבלה"});
     else if(d.kind==="log") go({kind:"log",id:d.rec.id});
     else go({kind:"debt",debt:{id:d.rec.id,custId:d.cust?d.cust.id:null,custName:d.name,desc:d.desc||d.label,amount:d.amount}}); };
+  const [edit,setEdit]=useState(null);
+  const updRec=(d,patch)=>{ const at=new Date().toISOString(); if(d.kind==="log") setExecLogs(ls=>ls.map(x=>String(x.id)===String(d.rec.id)?{...x,...patch,updatedAt:at}:x)); else setFinance(fs=>fs.map(x=>String(x.id)===String(d.rec.id)?{...x,...patch,updatedAt:at}:x)); };
+  const partPay=d=>{ const v=prompt(`כמה ${d.name} שילם עכשיו? (נשאר: ${money(d.amount)})`,""); if(v===null) return; const a=parseFloat(String(v).replace(/[^0-9.]/g,"")); if(!a) return;
+    const note=prompt("איך שולם? (לא חובה — למשל: העברה, מזומן, קבלה ב'יש חשבונית')","")||"";
+    const pp=[...(d.rec.partPays||[]),{at:new Date().toISOString(),amount:a,note}]; updRec(d,{partPays:pp});
+    if(a>=d.amount-0.01) closeDebt(d,"שולם במלואו"+(note?" · "+note:""),{setFinance,setExecLogs}); showToast(a>=d.amount-0.01?"✓ החוב נסגר":"✓ נרשם תשלום של "+money(a)+" · נשאר "+money(d.amount-a)); };
+  const saveEdit=()=>{ const e=edit, d=e.d; const amt=parseFloat(e.amount); if(!amt&&amt!==0) return alert("סכום");
+    if(d.kind==="log") updRec(d,{debtAmount:String(amt)});
+    else { const c=e.custId!=null?(customers||[]).find(x=>String(x.id)===String(e.custId)):null; updRec(d,{amount:amt,desc:e.desc,customer:c?c.name:e.name.trim()||d.name,customerId:c?c.id:null,phone:e.phone||(c&&c.phone)||""}); }
+    setEdit(null); showToast("✓ החוב עודכן"); };
   const markPaid=d=>{ const n=prompt("לסמן ששולם — בלי להפיק מסמך כאן.\nאיך / איפה? (למשל: קבלה הופקה ב'יש חשבונית', שולם במזומן)","שולם"); if(n===null) return; closeDebt(d,n||"סומן כשולם",{setFinance,setExecLogs}); };
   const reopen=d=>{ if(!confirm("להחזיר לחובות הפתוחים?")) return; if(d.kind==="log") setExecLogs(ls=>ls.map(x=>String(x.id)===String(d.rec.id)?{...x,debtClosed:null}:x)); else setFinance(fs=>fs.map(x=>String(x.id)===String(d.rec.id)?{...x,status:"פתוח",paidAt:"",paidNote:"",paidByDocId:x.paidByDocId&&isDocRec(x)?x.paidByDocId:""}:x)); };
   const remind=g=>{ const ph=String(g.phone||"").replace(/[^0-9]/g,"").replace(/^0/,"972")||String(prompt("טלפון לתזכורת:")||"").replace(/[^0-9]/g,"").replace(/^0/,"972"); if(!ph) return; window.open("https://wa.me/"+ph+"?text="+encodeURIComponent(debtReminderText(g.name,g.items)),"_blank"); };
@@ -9350,11 +9360,13 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
           {g.items.sort((a,b)=>String(a.date).localeCompare(String(b.date))).map(d=><div key={d.key} style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",flexWrap:"wrap",padding:"8px 0",borderBottom:"1px dashed #eef2f7"}}>
             <div style={{minWidth:0,flex:"1 1 200px"}}><div style={{fontWeight:700,fontSize:14}}>{d.label} <span style={{fontWeight:400,color:"#64748b",fontSize:12}}>{d.date?"· "+fmtDate(d.date):""}{view==="open"&&d.date?" · לפני "+age(d)+" ימים":""}</span></div>
               <div style={{fontSize:12,color:"#64748b"}}>{d.desc}{view==="paid"&&d.paidRef?" · ✓ "+d.paidRef:""}{view==="paid"&&d.paidAt?" · "+fmtDate(String(d.paidAt).slice(0,10)):""}</div></div>
-            <div style={{fontWeight:800,fontSize:15}}>{money(d.amount)}</div>
+            <div style={{fontWeight:800,fontSize:15,textAlign:"left"}}>{money(d.amount)}{d.partPaid>0&&<div style={{fontSize:11.5,fontWeight:600,color:"#0369a1"}}>שולם {money(d.partPaid)} מתוך {money(d.orig)}</div>}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",width:"100%"}}>
               {view==="open"?<>
                 <button type="button" onClick={()=>payDoc(d)} style={b("#16a34a",true)}>🧾 שולם — הפק {d.kind==="doc"&&docTypeOf(d.rec)==="חשבונית מס"?"קבלה":"חשבונית מס/קבלה"}</button>
                 <button type="button" onClick={()=>markPaid(d)} style={b("#64748b")}>✓ סמן כשולם (בלי מסמך)</button>
+                {d.kind!=="doc"&&<button type="button" onClick={()=>partPay(d)} style={b("#0369a1")}>💵 שילם חלק</button>}
+                {d.kind!=="doc"&&<button type="button" onClick={()=>setEdit({d,amount:String(d.orig||d.amount),desc:d.desc||"",name:d.name,phone:d.phone||"",custId:d.cust?d.cust.id:null})} style={b("#7c3aed")}>✏️ ערוך</button>}
                 {d.kind==="doc"&&<button type="button" onClick={()=>printDoc(d.rec,!!d.rec.originalAt)} style={b("#1a5c3a")}>👁 צפייה</button>}
               </>:<button type="button" onClick={()=>reopen(d)} style={b("#b45309")}>↩ החזר לפתוחים</button>}
             </div>
@@ -9367,6 +9379,19 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
       </div>; })}
     </div>
     <div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:10,lineHeight:1.6}}>חוב = חשבונית מס / חשבון עסקה שלא שולמו, יומן ביצוע בלי תשלום ובלי חשבונית, או חוב שהוספת ידנית. כשמפיקים קבלה או חשבונית מס/קבלה — החוב עובר ל"שולמו".</div>
+    {edit&&<Modal title={"✏️ עריכת חוב — "+edit.d.name} onClose={()=>setEdit(null)} width={460}>
+      {edit.d.kind==="log"?<div style={{fontSize:13,color:"#475569",marginBottom:10}}>חוב מיומן ביצוע {edit.d.rec.docNum||""} — אפשר לשנות את הסכום שנשאר לגבייה (יומן הביצוע עצמו לא משתנה).</div>:<>
+        <Inp label="שם / לקוח" value={edit.name} onChange={v=>setEdit(x=>({...x,name:v,custId:null}))}/>
+        {edit.custId!=null?<div style={{fontSize:12.5,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",margin:"-6px 0 12px"}}>✓ מקושר ללקוח: <b>{((customers||[]).find(c=>String(c.id)===String(edit.custId))||{}).name}</b> <button type="button" onClick={()=>setEdit(x=>({...x,custId:null}))} style={{border:"none",background:"transparent",color:"#64748b",cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",fontSize:12}}>בטל קישור</button></div>
+          :<CustSuggest customers={customers} q={edit.name} title="לקשר ללקוח קיים?" onPick={c=>setEdit(x=>({...x,name:c.name,custId:c.id,phone:x.phone||c.phone||""}))}/>}
+        <Inp label="טלפון" value={edit.phone} onChange={v=>setEdit(x=>({...x,phone:v}))}/>
+        <Inp label="פירוט" value={edit.desc} onChange={v=>setEdit(x=>({...x,desc:v}))}/>
+      </>}
+      <Inp label="סכום החוב (₪)" type="number" value={edit.amount} onChange={v=>setEdit(x=>({...x,amount:v}))}/>
+      {edit.d.partPaid>0&&<div style={{fontSize:12.5,color:"#0369a1",margin:"-6px 0 10px"}}>כבר שולם {money(edit.d.partPaid)} — יישאר לגבייה {money(Math.max(0,(parseFloat(edit.amount)||0)-edit.d.partPaid))}</div>}
+      {(edit.d.rec.partPays||[]).length>0&&<div style={{fontSize:12.5,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"6px 10px",marginBottom:10}}>{edit.d.rec.partPays.map((p,i)=><div key={i}>💵 {fmtDate(String(p.at).slice(0,10))} · {money(p.amount)}{p.note?" · "+p.note:""}</div>)}</div>}
+      <div style={{display:"flex",gap:8}}><Btn onClick={saveEdit} style={{flex:1}}>✅ שמור</Btn><Btn v="ghost" onClick={()=>setEdit(null)}>ביטול</Btn></div>
+    </Modal>}
     {add&&<Modal title="+ חוב ידני" onClose={()=>setAdd(null)} width={440}>
       <label style={{fontSize:13,fontWeight:600,color:"#334155"}}>לקוח</label>
       <input value={add.name} onChange={e=>{ const v=e.target.value; const c=(customers||[]).find(x=>x.name===v); setAdd(a=>({...a,name:v,phone:a.phone||(c&&c.phone)||""})); }} list="h360-debt-cust" placeholder="הקלד שם לקוח" style={{width:"100%",padding:"9px 11px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",margin:"4px 0 12px"}}/>
@@ -13741,7 +13766,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="215";
+const APP_BUILD="216";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
