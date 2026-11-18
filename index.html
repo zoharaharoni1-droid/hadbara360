@@ -2896,7 +2896,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [checks,setChecks]=useState(()=>initialData?.stationChecks||[]);
   const stations=(contract&&contract.stations)||[];
   const chk=num=>checks.find(c=>String(c.num)===String(num))||{num,activity:"",baitReplaced:false};
-  const stMeta=num=>{ const st=stations.find(x=>String(x.num)===String(num))||{}; const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone); const sb=!z&&st.bld&&((contract&&contract.buildings)||[]).find(b=>b.id===st.bld); return {t:devType(st).label,z:z?zoneTitle(z,contract):sb?(sb.name||"מבנה")+(sb.address?" ("+sb.address+")":""):"",loc:st.location||""}; };
+  const stMeta=num=>{ const st=stations.find(x=>String(x.num)===String(num))||{}; const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone); const sb=!z&&st.bld&&((contract&&contract.buildings)||[]).find(b=>b.id===st.bld); return {t:devType(st).label,z:z?zoneTitle(z,contract):sb?bldLabel(sb):"",loc:st.location||""}; };
   const setChk=(num,patch)=>setChecks(cs=>{const ex=cs.find(c=>String(c.num)===String(num));return ex?cs.map(c=>String(c.num)===String(num)?{...c,...stMeta(num),...patch}:c):[...cs,{num,activity:"",baitReplaced:false,...stMeta(num),...patch}];});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const elCities=useIlCities();
@@ -3111,7 +3111,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         <button type="button" onClick={()=>setChecks(stations.map(st=>({num:st.num,activity:"אין פעילות",baitReplaced:false,...stMeta(st.num)})))} style={{border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",borderRadius:8,padding:"5px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ הכל ללא פעילות</button>
       </div>
       {stations.map(st=>{const c=chk(st.num);return <div key={st.num} style={{background:"#fff",border:"1px solid #bae6fd",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
-        <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>{devType(st).icon} {devType(st).label} {st.num}{(()=>{const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone);const sb=!z&&st.bld&&((contract&&contract.buildings)||[]).find(b=>b.id===st.bld); return z||sb?<span style={{fontWeight:600,color:"#0f766e"}}> · {z?zoneTitle(z,contract):(sb.name||"מבנה")+(sb.address?" ("+sb.address+")":"")}</span>:null;})()}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>{devType(st).icon} {devType(st).label} {st.num}{(()=>{const z=((contract&&contract.zones)||[]).find(q=>q.id===st.zone);const sb=!z&&st.bld&&((contract&&contract.buildings)||[]).find(b=>b.id===st.bld); return z||sb?<span style={{fontWeight:600,color:"#0f766e"}}> · {z?zoneTitle(z,contract):bldLabel(sb)}</span>:null;})()}{st.location?<span style={{fontWeight:400,color:CLR.muted}}> · {st.location}</span>:null}</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
           {STATION_ACTIVITY.map(a=>{const on=c.activity===a;const col=a==="פעילות גבוהה"?"#dc2626":a==="פעילות קלה"?"#ca8a04":a==="חסרה / פגומה"?"#475569":"#16a34a";return <button key={a} type="button" onClick={()=>setChk(st.num,{activity:a})} style={{padding:"5px 10px",borderRadius:20,border:`1.5px solid ${on?col:CLR.border}`,background:on?col:"#fff",color:on?"#fff":"#334155",fontSize:12,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{a}</button>;})}
           <label style={{display:"flex",alignItems:"center",gap:4,fontSize:12,marginRight:"auto",cursor:"pointer"}}><input type="checkbox" checked={!!c.baitReplaced} onChange={e=>setChk(st.num,{baitReplaced:e.target.checked})}/> {devType(st).repl}</label>
@@ -9700,7 +9700,9 @@ async function uploadToContracts(file,folder){
 
 // ─── 🗺️ מיפוי המקום ────────────────────────────────────────────────────
 // 🏢 שם אזור כולל המבנה שלו (כשיש כמה מבנים / כתובות במקום)
-function zoneTitle(z,m){ if(!z) return ""; const b=((m&&m.buildings)||[]).find(b=>b.id===z.bld); return b&&((m.buildings||[]).length>1||b.address)?`${b.name||"מבנה"}${b.address?" ("+b.address+")":""} · ${z.name}`:z.name; }
+// שם מבנה להצגה: הכתובת, ואם נתת שם משלך (לא "מבנה 1") — גם השם
+function bldLabel(b){ if(!b) return ""; const nm=String(b.name||"").trim(); const own=nm&&!/^מבנה\s*\d+$/.test(nm); const ad=String(b.address||"").trim(); return own&&ad?nm+" — "+ad:ad||nm||"מבנה"; }
+function zoneTitle(z,m){ if(!z) return ""; const b=((m&&m.buildings)||[]).find(b=>b.id===z.bld); return b?`${bldLabel(b)} · ${z.name}`:z.name; }
 function bldAddr(b){ return [[b.street,b.houseNum].filter(Boolean).join(" "),b.city].filter(Boolean).join(", "); }
 // 🏢 מבנים / כתובות בתוך מקום אחד (מלון עם כמה בניינים, מסעדה + מחסן ממול)
 function BuildingsEditor({buildings,onChange,main}){
@@ -9708,12 +9710,12 @@ function BuildingsEditor({buildings,onChange,main}){
   const fld={padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,fontFamily:"inherit",background:"#fff",boxSizing:"border-box",width:"100%",minHeight:46};
   const lb={fontSize:12.5,color:"#475569",fontWeight:600,display:"block",margin:"6px 0 3px"};
   const upd=(i,patch)=>onChange(buildings.map((b,j)=>{ if(j!==i) return b; const nb={...b,...patch}; nb.address=bldAddr(nb); return nb; }));
-  const add=()=>{ const n=buildings.length+1; const b={id:"b"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:"מבנה "+n,city:main.city||"",street:main.street||"",houseNum:"",notes:""}; b.address=bldAddr(b); onChange([...buildings,b]); };
+  const add=()=>{ const n=buildings.length+1; const b={id:"b"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:"",city:main.city||"",street:main.street||"",houseNum:"",notes:""}; b.address=bldAddr(b); onChange([...buildings,b]); };
   return <div>
     <div style={{fontSize:12.5,color:"#475569",marginBottom:8}}>למקום עם כמה בניינים או כתובות (למשל: חבקוק 1, 3, 5 — או מסעדה ומחסן ממול). כל מבנה ממופה בנפרד עם האזורים והתחנות שלו.</div>
     {buildings.map((b,i)=><div key={b.id} style={{border:"1px solid #bae6fd",background:"#f0f9ff",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
       <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-        <div style={{flex:1}}><label style={lb}>שם המבנה</label><input value={b.name||""} onChange={e=>upd(i,{name:e.target.value})} placeholder="למשל: בניין A / מחסן" style={{...fld,fontWeight:700}}/></div>
+        <div style={{flex:1}}><label style={lb}>שם (לא חובה — אם ריק יוצג לפי הכתובת)</label><input value={b.name||""} onChange={e=>upd(i,{name:e.target.value})} placeholder="למשל: מחסן / אגף צפוני" style={{...fld,fontWeight:700}}/></div>
         <button type="button" onClick={()=>{ if(confirm("להסיר את "+(b.name||"המבנה")+"? (האזורים והתחנות שבו יעברו ל'כללי')")) onChange(buildings.filter((_,j)=>j!==i)); }} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:10,width:46,height:46,cursor:"pointer",fontSize:16}}>✕</button>
       </div>
       <label style={lb}>עיר</label><input value={b.city||""} onChange={e=>upd(i,{city:e.target.value})} placeholder="עיר" style={fld}/>
@@ -9758,7 +9760,7 @@ function SimpleSiteMap({zones,stations,onZones,onStations,buildings=[]}){
       const isOpen=open[bid]!==false;
       return <div key={bid||"main"} style={{border:"1px solid #bae6fd",borderRadius:12,marginBottom:10,overflow:"hidden"}}>
         <button type="button" onClick={()=>setOpen(o=>({...o,[bid]:!isOpen}))} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f0f9ff",border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
-          <b style={{flex:1,fontSize:14.5,color:"#0369a1"}}>🏢 {b.name||"מבנה"}{b.address?<span style={{fontWeight:500,color:"#0f172a"}}> · {b.address}</span>:null}</b>
+          <b style={{flex:1,fontSize:14.5,color:"#0369a1"}}>🏢 {buildings.length?bldLabel(b):"המקום"}</b>
           <span style={{fontSize:12.5,color:"#475569"}}>{items.length} נקודות</span><span style={{color:"#94a3b8"}}>{isOpen?"▲":"▼"}</span>
         </button>
         {isOpen&&<div style={{padding:"8px 10px"}}>
@@ -9775,10 +9777,10 @@ function SimpleSiteMap({zones,stations,onZones,onStations,buildings=[]}){
               <option value="">— אזור —</option>
               {bz.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
               <option value="__new">➕ אזור חדש…</option>
-              {buildings.length>1&&buildings.filter(q=>q.id!==bid).map(q=><option key={q.id} value={"b:"+q.id}>→ העבר ל{q.name||q.address}</option>)}
+              {buildings.length>1&&buildings.filter(q=>q.id!==bid).map(q=><option key={q.id} value={"b:"+q.id}>→ העבר ל{bldLabel(q)}</option>)}
             </select>
           </div>)}
-          {!items.length&&<div style={{fontSize:12.5,color:"#94a3b8",padding:"2px 2px 8px"}}>עוד אין נקודות ב{b.name||"מבנה"}</div>}
+          {!items.length&&<div style={{fontSize:12.5,color:"#94a3b8",padding:"2px 2px 8px"}}>עוד אין נקודות ב{buildings.length?bldLabel(b):"מקום"}</div>}
           <div style={{background:"#f8fafc",border:"1px dashed #94a3b8",borderRadius:12,padding:10}}>
             <span style={{fontSize:14,fontWeight:800,display:"block",marginBottom:8}}>➕ הוסף:</span>
             <select value={addT[bid]||"bait"} onChange={e=>setAddT(o=>({...o,[bid]:e.target.value}))} style={{...fld,width:"100%",marginBottom:8}}>{types.map(t=><option key={t.k} value={t.k}>{t.icon} {t.label}</option>)}</select>
@@ -9826,11 +9828,11 @@ function SiteMapEditorFull({zones,stations,onZones,onStations,buildings=[]}){
     {hasB&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:8,marginBottom:12}}>
       <div style={{fontSize:13,fontWeight:700,color:"#0369a1",marginBottom:6}}>🏢 בחר מבנה למיפוי</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-        {buildings.map(b=><button key={b.id} type="button" onClick={()=>{ setBld(b.id); const z0=allZones.find(z=>z.bld===b.id); setZoneId(z0?z0.id:""); setOpenZ(null); setPinFor(null); }} style={{...chip(curB===b.id),textAlign:"right"}}>🏢 {b.name||"מבנה"}{b.address?<span style={{fontWeight:400}}> · {b.address}</span>:null} <b style={{color:"#94a3b8"}}>{bCount(b.id)}</b></button>)}
+        {buildings.map(b=><button key={b.id} type="button" onClick={()=>{ setBld(b.id); const z0=allZones.find(z=>z.bld===b.id); setZoneId(z0?z0.id:""); setOpenZ(null); setPinFor(null); }} style={{...chip(curB===b.id),textAlign:"right"}}>🏢 {bldLabel(b)} <b style={{color:"#94a3b8"}}>{bCount(b.id)}</b></button>)}
         {(allZones.some(z=>!buildings.some(b=>b.id===z.bld))||bCount("")>0)&&<button type="button" onClick={()=>{ setBld("__none"); setZoneId(""); }} style={chip(!curB)}>כללי <b style={{color:"#94a3b8"}}>{bCount("")}</b></button>}
       </div>
     </div>}
-    <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>1️⃣ אזורים {hasB&&curB?"ב"+((buildings.find(b=>b.id===curB)||{}).name||"מבנה"):"במקום"}</div>
+    <div style={{fontSize:13,fontWeight:700,marginBottom:6}}>1️⃣ אזורים {hasB&&curB?"ב"+bldLabel(buildings.find(b=>b.id===curB)):"במקום"}</div>
     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
       {zones.map(z=><span key={z.id} style={{...chip(zoneId===z.id),display:"inline-flex",gap:6,alignItems:"center"}} onClick={()=>setZoneId(z.id)}>{z.name} <b style={{color:"#94a3b8"}}>{stations.filter(s=>s.zone===z.id).length}</b>
         <button type="button" onClick={ev=>{ev.stopPropagation(); if(confirm("למחוק את האזור "+z.name+"? (הנקודות שבו יישארו בלי אזור)")){ onZones(allZones.filter(x=>x.id!==z.id)); } }} style={{border:"none",background:"none",color:"#dc2626",cursor:"pointer",padding:0}}>✕</button></span>)}
@@ -9865,7 +9867,7 @@ function SiteMapEditorFull({zones,stations,onZones,onStations,buildings=[]}){
           <option value="">⇄ העבר את כולן…</option>
           {zones.filter(zz=>zz.id!==z.id).map(zz=><option key={zz.id} value={zz.id}>לאזור: {zz.name}</option>)}
           {z.id&&<option value="__none">בלי אזור</option>}
-          {hasB&&buildings.filter(b=>b.id!==curB).map(b=><option key={b.id} value={"b:"+b.id}>למבנה: {b.name||b.address}</option>)}
+          {hasB&&buildings.filter(b=>b.id!==curB).map(b=><option key={b.id} value={"b:"+b.id}>למבנה: {bldLabel(b)}</option>)}
         </select>}
         {z.id&&<button type="button" onClick={()=>setDrawZ(z.id)} style={{fontSize:12,border:"1px solid #1a5c3a",color:"#1a5c3a",borderRadius:8,padding:"4px 8px",background:z.drawing&&(z.drawing.items||[]).length?"#ecfdf5":"#fff",cursor:"pointer",fontWeight:700}}>✏️ {z.drawing&&(z.drawing.items||[]).length?"ערוך ציור":"צייר מפה"}{z.drawing&&z.drawing.draft?" 🚧 בבנייה":""}</button>}
         {z.id&&<label style={{fontSize:12,border:"1px solid #cbd5e1",borderRadius:8,padding:"4px 8px",cursor:"pointer",background:"#fff"}}><input type="file" accept="image/*" onChange={e=>onPlan(z,e)} style={{display:"none"}}/>{busy?"⏳":z.plan?"🔄 החלף תוכנית":"🖼️ תוכנית / צילום"}</label>}
@@ -10263,8 +10265,12 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
   for(const z of zones){ if(!z.plan) continue; const src=inline?await imgDataUrl(z.plan.path):await signedUrl(z.plan.path,60*60*24*7); if(!src) continue;
     const pins=stations.filter(s=>s.zone===z.id&&s.x!=null).map(s=>`<span style="position:absolute;left:${s.x}%;top:${s.y}%;transform:translate(-50%,-50%);background:#fff;border:2px solid #1a5c3a;border-radius:10px;padding:0 4px;font-size:10px;font-weight:700;white-space:nowrap">${devType(s).icon}${esc(s.num)}</span>`).join("");
     maps+=`<div style="page-break-inside:avoid;margin:10px 0"><div style="font-weight:700;margin-bottom:4px">🗺️ ${esc(zoneTitle(z,m))}</div><div style="position:relative;display:inline-block;max-width:100%"><img src="${src}" style="max-width:100%;max-height:520px;display:block;border:1px solid #ddd"/>${pins}</div></div>`; }
-  const stRows=(zones.length?[...zones,{id:"",name:"כללי"}]:[{id:"",name:""}]).map(z=>{ const items=stations.filter(s=>z.id?s.zone===z.id:(!s.zone||!zones.some(q=>q.id===s.zone))); if(!items.length) return "";
-    return items.map((s,i)=>`<tr>${i===0?`<td style="${td};font-weight:700" rowspan="${items.length}">${esc(zoneTitle(z,m)||"—")}</td>`:""}<td style="${td};text-align:center;font-weight:700">${devType(s).icon} ${esc(s.num)}</td><td style="${td}">${esc(devType(s).label)}</td><td style="${td}">${esc(s.location||"")}</td></tr>`).join(""); }).join("");
+  const blds=m.buildings||[]; const bOfSt=s=>{ const z=zones.find(q=>q.id===s.zone); const b=z&&z.bld!=null?z.bld:s.bld; return blds.some(x=>x.id===b)?b:""; };
+  const stRows=[...blds.map(b=>b.id),""].map(bid=>{ const inB=stations.filter(s=>bOfSt(s)===bid); if(!inB.length) return "";
+    const bz=zones.filter(z=>bid?z.bld===bid:!blds.some(x=>x.id===z.bld));
+    const groups=[...bz.map(z=>({name:z.name,items:inB.filter(s=>s.zone===z.id)})),{name:bz.length?"ללא אזור":"",items:inB.filter(s=>!s.zone||!bz.some(z=>z.id===s.zone))}].filter(g=>g.items.length);
+    const head=blds.length?`<tr><td colspan="4" style="${td};background:#e0f2fe;font-weight:800;font-size:13px">🏢 ${esc(bid?bldLabel(blds.find(x=>x.id===bid)):"כללי")}</td></tr>`:"";
+    return head+groups.map(g=>g.items.map((s,i)=>`<tr>${i===0?`<td style="${td};font-weight:700" rowspan="${g.items.length}">${esc(g.name||"—")}</td>`:""}<td style="${td};text-align:center;font-weight:700">${devType(s).icon} ${esc(s.num)}</td><td style="${td}">${esc(devType(s).label)}</td><td style="${td}">${esc(s.location||"")}</td></tr>`).join("")).join(""); }).join("");
   const matRows=[]; for(const x of mats){ const docs=[]; if(x.label) docs.push("תווית: "+await link(x.label)); if(x.sds) docs.push("SDS: "+await link(x.sds)); if(x.regCert) docs.push("תעודת רישום: "+await link(x.regCert)); if(x.batch) docs.push("אצווה: "+esc(x.batch));
     matRows.push(`<tr><td style="${td};font-weight:700">${esc(x.name)}</td><td style="${td}">${esc(x.reg||"—")}</td><td style="${td}">${esc(x.holder||"")}</td><td style="${td}">${esc(x.form||"")}</td><td style="${td};font-size:11px">${esc(x.active||"")}</td><td style="${td};font-size:11px">${esc(x.targets||"")}</td><td style="${td};white-space:nowrap">${esc(x.expiry||"")}</td><td style="${td};font-size:11px">${docs.join("<br>")||"<span style='color:#b45309'>יש לצרף SDS ותווית</span>"}</td></tr>`); }
   const aid=[...new Set(mats.flatMap(x=>firstAidFor(x.active)))];
@@ -10282,7 +10288,7 @@ async function pestFileHtml(m,{workers=[],execLogs=[],companyDocs=[],inline=fals
    </div>
    ${H(1,"פרטי המקום")}
    <table><tr><td style="${td};width:30%;background:#f0f9f4">שם המקום</td><td style="${td}">${esc(m.customerName)}${m.billingName&&m.billingName!==m.customerName?" ("+esc(m.billingName)+")":""}</td></tr>
-   <tr><td style="${td};background:#f0f9f4">כתובת</td><td style="${td}">${esc(m.address||"")}</td></tr>${(m.buildings||[]).length?`<tr><td style="${td};background:#f0f9f4">מבנים</td><td style="${td}">${m.buildings.map(b=>esc((b.name||"מבנה")+(b.address?" — "+b.address:""))).join("<br>")}</td></tr>`:""}
+   <tr><td style="${td};background:#f0f9f4">כתובת</td><td style="${td}">${esc(m.address||"")}</td></tr>${(m.buildings||[]).length?`<tr><td style="${td};background:#f0f9f4">מבנים</td><td style="${td}">${m.buildings.map(b=>esc(bldLabel(b))).join("<br>")}</td></tr>`:""}
    <tr><td style="${td};background:#f0f9f4">סוג המקום</td><td style="${td}">${esc(m.type||"")}</td></tr>
    <tr><td style="${td};background:#f0f9f4">אנשי קשר</td><td style="${td}">${contacts.map(c=>esc([c.name,c.role,c.phone].filter(Boolean).join(" · "))).join("<br>")||"—"}</td></tr></table>
    ${H(2,"חברת ההדברה")}
@@ -10570,7 +10576,7 @@ function maintReportHtml(m, logs, ym){
       <div style="text-align:left"><div style="font-size:18px;font-weight:700;color:#1a5c3a">דוח הדברה חודשי</div><div style="font-size:14px;color:#555">${MONTHS[mo-1]} ${y}</div></div>
     </div>
     <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.8">
-      <b>מקום:</b> ${esc(m.customerName)} · <b>כתובת:</b> ${esc(m.address||"—")} · <b>סוג:</b> ${esc(m.type||"—")}<br>${(m.buildings||[]).length?`<b>מבנים:</b> ${m.buildings.map(b=>esc((b.name||"מבנה")+(b.address?" ("+b.address+")":""))).join(" · ")}<br>`:""}
+      <b>מקום:</b> ${esc(m.customerName)} · <b>כתובת:</b> ${esc(m.address||"—")} · <b>סוג:</b> ${esc(m.type||"—")}<br>${(m.buildings||[]).length?`<b>מבנים:</b> ${m.buildings.map(b=>esc(bldLabel(b))).join(" · ")}<br>`:""}
       <b>תדירות:</b> ${esc(m.frequency)} · <b>מזיקים בחוזה:</b> ${esc(maintList(m.pests).join(", ")||"—")}${maintList(m.excludedPests).length?" · <b>לא כלול:</b> "+esc(maintList(m.excludedPests).join(", ")):""}${stations.length?" · <b>תחנות האכלה:</b> "+stations.length:""}
     </div>
     <h3 style="color:#1a5c3a;margin:6px 0 8px">ביקורים בחודש (${list.length})</h3>
@@ -10871,7 +10877,7 @@ function Maintenance({maintenance,setMaintenance,customers,setCustomers,appointm
           <div style={{display:"flex",flexDirection:"column",gap:4,fontSize:12,background:"#f8fafc",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
             <div>🕓 ביקור אחרון: <b>{logs[0]?fmtDate(logs[0].date):"—"}</b>{logs.length?<span style={{color:CLR.muted}}> · {logs.length} ביקורים</span>:null}</div>
             {m.autoSchedule&&<div>📅 ביקור הבא: <b>{nextVisit?fmtDate(nextVisit.date)+" "+(nextVisit.time||""):"—"}</b>{worker?<span style={{color:CLR.muted}}> · 👷 {worker.name}</span>:null}</div>}
-            {(m.buildings||[]).length>0&&<div>🏢 {m.buildings.length} מבנים: {m.buildings.map(b=>b.address||b.name).join(" · ")}</div>}
+            {(m.buildings||[]).length>0&&<div>🏢 {m.buildings.length} מבנים: {m.buildings.map(b=>bldLabel(b)).join(" · ")}</div>}
             {(m.stations||[]).length>0&&<div>🗺️ {SITE_DEVICE_TYPES.map(t=>[t,m.stations.filter(x=>(x.type||"bait")===t.k).length]).filter(x=>x[1]).map(([t,n])=>t.icon+" "+n+" "+t.label).join(" · ")}{(m.zones||[]).length?" · "+m.zones.length+" אזורים":""}</div>}
             {m.openEnded&&<div style={{color:CLR.muted}}>♾️ ללא תאריך סיום{m.endNote?" · "+m.endNote:""}</div>}
             {dl!=null&&<div style={{color:dl<=30?"#b91c1c":CLR.muted,fontWeight:dl<=30?700:400}}>⏳ {dl<0?`החוזה הסתיים לפני ${-dl} ימים`:`החוזה מסתיים בעוד ${dl} ימים`} ({fmtDate(m.endDate)})</div>}
@@ -13626,7 +13632,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="205";
+const APP_BUILD="206";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
