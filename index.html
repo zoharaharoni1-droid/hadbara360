@@ -9733,7 +9733,9 @@ function SiteMapEditor({zones,stations,onZones,onStations,buildings=[]}){
   const [type,setType]=useState("bait"); const [zoneId,setZoneId]=useState((zones[0]||{}).id||""); const [qty,setQty]=useState(1);
   const [zName,setZName]=useState(""); const [pinFor,setPinFor]=useState(null); const [openZ,setOpenZ]=useState(null); const [busy,setBusy]=useState(false);
   const [otherName,setOtherName]=useState(""); const [drawZ,setDrawZ]=useState(null); const customs=customDevTypes();
-  const addZone=name=>{ name=String(name||"").trim(); if(!name) return; if(zones.some(z=>z.name===name)) return; const z={id:"z"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name,...(curB?{bld:curB}:{})}; onZones([...allZones,z]); setZoneId(z.id); setZName(""); };
+  const addZone=name=>{ name=String(name||"").trim(); if(!name) return; if(zones.some(z=>z.name===name)) return; const z={id:"z"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name,...(curB?{bld:curB}:{})}; onZones([...allZones,z]); setZoneId(z.id); setZName("");
+    const loose=stations.filter(st=>(!st.zone||!allZones.some(q=>q.id===st.zone))&&stInB(st)).length;
+    if(loose&&confirm(`יש ${loose} נקודות בלי אזור${curB?" במבנה הזה":""}. להעביר את כולן לאזור "${name}"?`)) onStations(stations.map(st=>(!st.zone||!allZones.some(q=>q.id===st.zone))&&stInB(st)?{...st,zone:z.id}:st)); };
   const addDevices=()=>{ let tp=type;
     if(type==="other"){ const nm=otherName.trim(); if(!nm) return alert("כתוב מה מציבים — למשל: מלכודת כלוב"); tp="c:"+nm; const L=lsGet("h360_devtypes",[]); if(!L.includes(tp)) lsSet("h360_devtypes",[...L,tp]); setType(tp); setOtherName(""); }
     const n=Math.max(1,Math.min(200,parseInt(qty)||1)); let {pre,n:st}=nextDevNum(stations,tp); const used=new Set(stations.map(s=>String(s.num))); const out=[];
@@ -9786,6 +9788,14 @@ function SiteMapEditor({zones,stations,onZones,onStations,buildings=[]}){
     {groups.map(({z,items})=><div key={z.id||"none"} style={{border:"1px solid #e2e8f0",borderRadius:10,marginBottom:8,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#f8fafc"}}>
         <b style={{flex:1}}>📍 {z.name} <span style={{fontWeight:400,color:"#64748b",fontSize:12}}>({items.length})</span></b>
+        {items.length>0&&(zones.length>(z.id?1:0)||(hasB&&buildings.length>1))&&<select value="" onChange={e=>{ const v=e.target.value; if(!v) return; const ids=new Set(items.map(x=>x.i));
+            if(v.startsWith("b:")){ const b=v.slice(2); onStations(stations.map((st,j)=>ids.has(j)?{...st,bld:b,zone:""}:st)); }
+            else onStations(stations.map((st,j)=>ids.has(j)?{...st,zone:v==="__none"?"":v,...(curB?{bld:curB}:{})}:st)); }} style={{...fld,padding:"4px 6px",fontSize:12,maxWidth:150}}>
+          <option value="">⇄ העבר את כולן…</option>
+          {zones.filter(zz=>zz.id!==z.id).map(zz=><option key={zz.id} value={zz.id}>לאזור: {zz.name}</option>)}
+          {z.id&&<option value="__none">בלי אזור</option>}
+          {hasB&&buildings.filter(b=>b.id!==curB).map(b=><option key={b.id} value={"b:"+b.id}>למבנה: {b.name||b.address}</option>)}
+        </select>}
         {z.id&&<button type="button" onClick={()=>setDrawZ(z.id)} style={{fontSize:12,border:"1px solid #1a5c3a",color:"#1a5c3a",borderRadius:8,padding:"4px 8px",background:z.drawing&&(z.drawing.items||[]).length?"#ecfdf5":"#fff",cursor:"pointer",fontWeight:700}}>✏️ {z.drawing&&(z.drawing.items||[]).length?"ערוך ציור":"צייר מפה"}{z.drawing&&z.drawing.draft?" 🚧 בבנייה":""}</button>}
         {z.id&&<label style={{fontSize:12,border:"1px solid #cbd5e1",borderRadius:8,padding:"4px 8px",cursor:"pointer",background:"#fff"}}><input type="file" accept="image/*" onChange={e=>onPlan(z,e)} style={{display:"none"}}/>{busy?"⏳":z.plan?"🔄 החלף תוכנית":"🖼️ תוכנית / צילום"}</label>}
         {z.plan&&<button type="button" onClick={()=>{setOpenZ(openZ===z.id?null:z.id);setPinFor(null);}} style={{fontSize:12,border:"1px solid #cbd5e1",borderRadius:8,padding:"4px 8px",background:openZ===z.id?CLR.primaryLight:"#fff",cursor:"pointer"}}>🗺️ {openZ===z.id?"סגור מפה":"מפה"}</button>}
@@ -9800,7 +9810,7 @@ function SiteMapEditor({zones,stations,onZones,onStations,buildings=[]}){
         {items.map(({s,i})=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:5}}>
           <span title={devType(s).label} style={{minWidth:44,height:32,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",fontSize:12,flexShrink:0}}>{devType(s).icon}{s.num}</span>
           <input value={s.location||""} onChange={e=>upd(i,{location:e.target.value})} placeholder={devType(s).label+" — מיקום מדויק"} style={{...fld,flex:1,minWidth:0,padding:"6px 8px",fontSize:13}}/>
-          {zones.length>0&&<select value={s.zone||""} onChange={e=>upd(i,{zone:e.target.value})} style={{...fld,padding:"6px 4px",fontSize:12,maxWidth:96}}><option value="">—</option>{zones.map(zz=><option key={zz.id} value={zz.id}>{zz.name}</option>)}</select>}
+          {(zones.length>0||(hasB&&buildings.length>1))&&<select value={s.zone||""} onChange={e=>{ const v=e.target.value; if(v.startsWith("b:")) upd(i,{bld:v.slice(2),zone:""}); else upd(i,{zone:v,...(curB?{bld:curB}:{})}); }} style={{...fld,padding:"6px 4px",fontSize:12,maxWidth:110}}><option value="">— אזור —</option>{zones.map(zz=><option key={zz.id} value={zz.id}>{zz.name}</option>)}{hasB&&buildings.filter(b=>b.id!==curB).map(b=><option key={b.id} value={"b:"+b.id}>→ {b.name||b.address}</option>)}</select>}
           {z.plan&&<button type="button" title="מקם על המפה" onClick={()=>{setOpenZ(z.id);setPinFor(i);}} style={{border:"1px solid #e2e8f0",background:s.x!=null?"#ecfdf5":"#fff",borderRadius:8,width:32,height:32,cursor:"pointer"}}>📌</button>}
           <button type="button" onClick={()=>onStations(stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:32,height:32,cursor:"pointer",flexShrink:0}}>✕</button>
         </div>)}
@@ -10249,6 +10259,36 @@ function openPrintAsync(title,htmlPromise){
   htmlPromise.then(html=>{ w.document.open(); w.document.write(`<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title><style>*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,'Segoe UI',sans-serif;}body{padding:28px;color:#111;direction:rtl;background:#fff;}table{width:100%;border-collapse:collapse;}a{color:#1d4ed8}@media print{.noprint{display:none;}body{padding:10px;}h2{page-break-after:avoid}tr{page-break-inside:avoid}}.btnbar{position:fixed;top:10px;left:10px;display:flex;gap:8px;}.btnbar button{padding:8px 16px;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:700;}</style></head><body><div class="btnbar noprint"><button onclick="window.print()" style="background:#1a5c3a;color:#fff;">🖨️ הדפס / שמור PDF</button><button onclick="window.close()" style="background:#eee;color:#333;">סגור</button></div><div style="margin-top:48px;">${html}</div></body></html>`); w.document.close(); })
     .catch(e=>{ w.document.body.innerHTML="<p style='padding:30px'>שגיאה: "+(e.message||e)+"</p>"; });
 }
+// 🧪 חומרים לאחזקה — בוחרים מהערכה שלי / ממאגר החומרים הרשומים; אזהרה כשאין תווית או SDS (אפשר להעלות מיד או להשלים בעתיד)
+function MaintMaterialsPicker({mats,onChange,maintenance=[]}){
+  mats=mats||[]; const reg=useRegProducts(); const lib=useMatLib(); const [q,setQ]=useState(""); const [busy,setBusy]=useState("");
+  const kit=(lsGet("h360_mykit",[])||[]).map(x=>x.name).filter(Boolean);
+  const used=[...new Set((maintenance||[]).flatMap(m=>(m.fileMaterials||[]).map(x=>x.name)))];
+  const sugg=[...new Set([...kit,...used])].filter(n=>!mats.some(x=>x.name===n));
+  const withLib=x=>{ const L=lib[x.name]||{}; const y={...x}; ["sds","label","regCert"].forEach(k=>{ if(!y[k]&&L[k]) y[k]=L[k]; }); return y; };
+  const add=name=>{ name=String(name||"").trim(); if(!name||mats.some(x=>x.name===name)) return; onChange([...mats,matFromName(name,reg,maintenance)]); setQ(""); };
+  const hits=q.trim().length>=2?reg.filter(r=>r[0].includes(q.trim())||String(r[4]||"").includes(q.trim())).slice(0,8):[];
+  const up=async(name,key,e)=>{ const file=(e.target.files||[])[0]; e.target.value=""; if(!file) return; setBusy(name+key);
+    try{ const p=await uploadToContracts(file,"sds"); onChange(mats.map(x=>x.name===name?{...x,[key]:p}:x)); await saveMatLibEntry(name,{[key]:p}); }catch(err){ alert("העלאה נכשלה: "+(err.message||err)); } setBusy(""); };
+  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"};
+  const view=mats.map(withLib); const missN=view.filter(x=>!x.label||!x.sds).length;
+  return <div>
+    {sugg.length>0&&<><div style={{fontSize:12.5,color:"#475569",marginBottom:4}}>מהערכה שלי ומחוזים אחרים — לחץ להוספה:</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{sugg.slice(0,24).map(n=><button key={n} type="button" onClick={()=>add(n)} style={{padding:"5px 10px",borderRadius:20,border:"1px dashed #86efac",background:"#fff",color:"#166534",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>+ {n}</button>)}</div></>}
+    <input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); add(q); } }} placeholder="🔍 חפש חומר לפי שם או חומר פעיל (או כתוב שם ולחץ Enter)" style={{...fld,width:"100%",marginBottom:6}}/>
+    {hits.length>0&&<div style={{border:"1px solid #e2e8f0",borderRadius:8,marginBottom:8,maxHeight:220,overflowY:"auto"}}>{hits.map(r=><button key={r[0]+r[2]} type="button" onClick={()=>add(r[0])} style={{display:"block",width:"100%",textAlign:"right",border:"none",borderBottom:"1px solid #f1f5f9",background:"#fff",padding:"7px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13}}><b>{r[0]}</b> <span style={{color:"#64748b"}}>{r[4]?"· "+r[4]:""}{r[2]?" · רישום "+r[2]:""}</span></button>)}</div>}
+    {missN>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"7px 10px",fontSize:13,color:"#92400e",marginBottom:8}}>⚠️ ל-{missN} חומרים חסרה תווית או SDS — אפשר להעלות עכשיו, או להשלים בעתיד (תופיע תזכורת בתיק ההדברה).</div>}
+    {view.map(x=><div key={x.name} style={{border:"1px solid "+(!x.label||!x.sds?"#fde68a":"#bbf7d0"),background:!x.label||!x.sds?"#fffdf5":"#f0fdf4",borderRadius:10,padding:"8px 10px",marginBottom:6}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}><b style={{flex:1}}>🧪 {x.name}</b>
+        <button type="button" onClick={()=>onChange(mats.filter(y=>y.name!==x.name))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:28,height:28,cursor:"pointer"}}>✕</button></div>
+      {(x.active||x.reg)&&<div style={{fontSize:12,color:"#64748b"}}>{[x.active,x.reg&&"רישום "+x.reg].filter(Boolean).join(" · ")}</div>}
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+        {[["label","🏷️ תווית"],["sds","📄 SDS"]].map(([k,l])=>x[k]?<span key={k} style={{fontSize:12,background:"#dcfce7",color:"#166534",borderRadius:12,padding:"3px 9px"}}>✓ {l}</span>
+          :<label key={k} style={{fontSize:12,background:"#fef3c7",color:"#92400e",border:"1px solid #fde68a",borderRadius:12,padding:"3px 9px",cursor:"pointer"}}><input type="file" accept="application/pdf,image/*" onChange={e=>up(x.name,k,e)} style={{display:"none"}}/>{busy===x.name+k?"⏳ מעלה…":"⚠️ אין "+l.replace(/^\S+\s/,"")+" — העלה"}</label>)}
+      </div>
+    </div>)}
+    {!mats.length&&<div style={{fontSize:12.5,color:"#94a3b8"}}>עוד לא נבחרו חומרים</div>}
+  </div>; }
 function PestFileModal({m,maintenance=[],workers=[],execLogs=[],onSave,onClose,onNewExec}){
   const reg=useRegProducts();
   const lib=useMatLib();
@@ -10492,7 +10532,7 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
     pests:maintList(init.pests), excludedPests:maintList(init.excludedPests), contractFiles:init.contractFiles||[],
     ...(init.city||init.street?{}:splitAddr(init.address)), coverAll:init.coverAll!==false, includedPests:maintList(init.includedPests), paidPests:maintList(init.paidPests),
     visitWindow:init.visitWindow||"day", priceInclVat:!!init.priceInclVat, zones:init.zones||[], openEnded:!!init.openEnded, endNote:init.endNote||"", frequencyOther:init.frequencyOther||"",
-    extras:Array.isArray(init.extras)?init.extras:(init.extraVisitPrice?[{desc:"ביקור נוסף",price:String(init.extraVisitPrice),approval:false}]:[])});
+    extras:Array.isArray(init.extras)?init.extras:(init.extraVisitPrice?[{desc:"ביקור נוסף",price:String(init.extraVisitPrice),approval:false}]:[]), fileMaterials:init.fileMaterials||[]});
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const types=[...new Set([...MAINTENANCE_TYPES.filter(t=>t!=="אחר"),...knownTypes,...(f.type&&f.type!=="אחר"?[f.type]:[])])];
   const [otherOpen,setOtherOpen]=useState(false);
@@ -10635,6 +10675,9 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
         {(f.visitWindow||"day")==="day"?<div style={{display:"flex",gap:8}}><div style={{flex:1}}><Sel label="משעה" value={f.visitTime||"08:00"} onChange={v=>set("visitTime",v)} options={TIME_SLOTS}/></div><div style={{flex:1}}><Sel label="עד שעה (לא חובה)" value={f.visitTimeTo||""} onChange={v=>set("visitTimeTo",v)} options={["",...TIME_SLOTS.filter(t=>t>(f.visitTime||"08:00"))]}/></div></div>:<div className="h360-hint" style={{fontSize:12,color:"#475569",alignSelf:"center"}}>הביקור ייכנס ליומן "במהלך היום" בתחילת החלון, עם תווית "גמיש עד…". מזיזים אותו ליום שתואם.</div>}
       </G2>}
       {f.autoSchedule&&<div className="h360-hint" style={{fontSize:12,color:CLR.muted}}>הביקורים ישובצו חודשיים קדימה. ביקור שיוצא בשבת עובר ליום ראשון.</div>}
+    </FieldCard>
+    <FieldCard title={`🧪 חומרים שאשתמש בהם (${(f.fileMaterials||[]).length})`}>
+      <MaintMaterialsPicker mats={f.fileMaterials||[]} onChange={v=>set("fileMaterials",v)} maintenance={window.__h360Maint||[]}/>
     </FieldCard>
     <FieldCard title={`🏢 מבנים / כתובות במקום${(f.buildings||[]).length?" ("+f.buildings.length+")":" (לא חובה)"}`}>
       <BuildingsEditor buildings={f.buildings||[]} onChange={v=>set("buildings",v)} main={{city:f.city||"",street:f.street||""}}/>
@@ -13508,7 +13551,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="202";
+const APP_BUILD="203";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
