@@ -8956,7 +8956,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const [allocationNum,setAllocationNum]=useState(P.allocationNum||"");
   const [apptId,setApptId]=useState(P.apptId!=null?String(P.apptId):"");
   const [itemPick,setItemPick]=useState(null); // אינדקס שורה שפתוח בה בורר פריטים
-  const official=!!docSet().official; const [saving,setSaving]=useState(false); const [einvLocal,setEinvLocal]=useState(""); const [extRef,setExtRef]=useState("");
+  const official=!!docSet().official; const [saving,setSaving]=useState(false); const [sendRec,setSendRec]=useState(null); const [einvLocal,setEinvLocal]=useState(""); const [extRef,setExtRef]=useState("");
   const refDoc=P.refDocId!=null?(finance||[]).find(f=>String(f.id)===String(P.refDocId)):null;
   React.useEffect(()=>{ if(cust){ setCustQ(cust.name||""); setCx(x=>({...x,name:cust.name||"",taxId:P.taxId||cust.taxId||"",address:cust.address||"",phone:cust.phone||"",email:cust.email||"",contactName:cust.contactName||""})); } },[custId]);
   const tot=docTotals(lines,inclVat,showDisc?discount:null,roundTotal);
@@ -9192,10 +9192,12 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       <Txt label="🔒 הערה פנימית (רק לך, לא מופיעה במסמך)" value={privateNote} onChange={setPrivateNote} rows={2}/>
     </div>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",position:"sticky",bottom:-20,background:"#fff",padding:"10px 0",borderTop:"1px solid #eef2f7"}}>
-      <Btn onClick={async()=>{const r=await save(); if(r) onClose();}} disabled={saving} style={{flex:1}}>{saving?"⏳ מפיק…":official&&T.accounting?"✅ הפק "+type:"✅ שמור טיוטה"}</Btn>
+      <Btn onClick={async()=>{const r=await save(); if(r) setSendRec(r);}} disabled={saving} style={{flex:"1 1 100%"}}>{saving?"⏳ מפיק…":official&&T.accounting?"📤 הפק ושלח ללקוח":"📤 שמור ושלח ללקוח"}</Btn>
+      <Btn v="secondary" onClick={async()=>{const r=await save(); if(r) onClose();}} disabled={saving} style={{flex:1}}>{official&&T.accounting?"✅ הפק בלי לשלוח":"✅ שמור טיוטה"}</Btn>
       <Btn v="secondary" onClick={()=>{ if(!cx.name.trim()) return alert("בחר לקוח"); printDoc({...build(),preview:official&&T.accounting,official:false}); }}>👁 תצוגה מקדימה</Btn>
       <Btn v="ghost" onClick={onClose}>ביטול</Btn>
     </div>
+    {sendRec&&<SendDocModal doc={sendRec} saved={true} phone={(sendRec.cust&&sendRec.cust.phone)||""} customers={customers} onClose={()=>{ setSendRec(null); onClose(); }}/>}
   </Modal>;
 }
 
@@ -13717,7 +13719,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="212";
+const APP_BUILD="213";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
