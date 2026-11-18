@@ -6049,6 +6049,11 @@ function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, add
 // ═══ 🔎 חיפוש חכם: בכל השדות של רשומה (גם אנשי קשר, הערות, ממצאים), טלפון בלי מקפים/רווחים ═══
 const __hayCache=new WeakMap();
 const normQ=t=>String(t||"").toLowerCase().replace(/[״"׳'`]/g,"").replace(/\s+/g," ").trim();
+// Supabase מחזיר עד 1000 שורות בכל בקשה — מביאים בדפים כדי שאף רשומה לא תיעלם (היו 1004 לקוחות)
+async function sbFetchAll(tbl,cols){ const PAGE=1000; let all=[]; for(let from=0;from<200000;from+=PAGE){
+    const {data,error}=await sb.from(tbl).select(cols).order('updated_at',{ascending:true}).order('id',{ascending:true}).range(from,from+PAGE-1);
+    if(error) return {data:null,error}; all=all.concat(data||[]); if(!data||data.length<PAGE) break; }
+  return {data:all,error:null}; }
 function hayOf(o){
   if(!o||typeof o!=="object") return {t:normQ(o),d:String(o||"").replace(/\D/g,"")};
   const c=__hayCache.get(o); if(c) return c;
@@ -12162,7 +12167,7 @@ function useLS(key, init){
     const syncFromSupabase = async () => {
       const P=pendOf(key);
       if(Object.keys(P.rows).length||Object.keys(P.dels).length) await pendPush(key,tbl);
-      sb.from(tbl).select('*').order('updated_at', {ascending:true})
+      sbFetchAll(tbl,'*')
         .then(({data, error})=>{
           if(error || !data) return; // טבלה ריקה = אין נתונים (לא מציגים דוגמאות)
           let sbRows = data.map(r => r.data).filter(Boolean);
@@ -13021,7 +13026,7 @@ async function collectBackup(){
   const data={};
   for(const k of BACKUP_KEYS){
     const tbl=SB_TABLES[k];
-    if(sb&&tbl){ const {data:rows,error}=await sb.from(tbl).select('data'); if(!error&&rows){ data[k]=rows.map(r=>r.data); continue; } }
+    if(sb&&tbl){ const {data:rows,error}=await sbFetchAll(tbl,'data'); if(!error&&rows){ data[k]=rows.map(r=>r.data); continue; } }
     try{ const v=localStorage.getItem(k.startsWith("h360_")?k:"h360_"+k); data[k]=v?JSON.parse(v):[]; }catch(e){ data[k]=[]; }
   }
   return {version:2,exportedAt:new Date().toISOString(),data};
@@ -13343,7 +13348,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="196";
+const APP_BUILD="197";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
