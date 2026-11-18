@@ -6097,6 +6097,42 @@ function hayOf(o){
 // מתאים אם כל מילה בחיפוש מופיעה. מספרים (טלפון) — בלי מקפים/רווחים
 // מיון לקוחות לפי א-ב, ובחיפוש — מי שהשם שלו מתחיל במה שהוקלד קודם
 function custSortAlpha(arr){ return [...(arr||[])].sort((a,b)=>String(a.name||"").trim().localeCompare(String(b.name||"").trim(),"he")); }
+// 🔎 הצעות מלקוחות קיימים בזמן הקלדה (אות אחת = שמות שמתחילים בה; יותר = חיפוש מלא)
+function custNormPh(x){ return String(x||"").replace(/\D/g,"").replace(/^972/,"0"); }
+function custSuggest(customers,q){ q=String(q||"").trim(); if(!q) return []; const one=q.length===1;
+  const L=(customers||[]).filter(c=>c&&!c.deleted&&(one?[c.name,c.placeName,c.bizName,c.contactName].some(x=>String(x||"").split(/\s+/).some(w=>w.startsWith(q))):smartMatch(c,q)));
+  return custRank(custSortAlpha(L),q).slice(0,8); }
+function custFindByPhone(customers,phone){ const ph=custNormPh(phone); if(ph.length<9) return null;
+  for(const c of (customers||[])){ if(!c||c.deleted) continue; if(custNormPh(c.phone)===ph) return {c,name:c.contactName||c.name||""};
+    const e=[...(c.extraContacts||[]),...(c.contacts||[])].find(x=>x&&custNormPh(x.phone)===ph); if(e) return {c,name:e.name||""}; }
+  return null; }
+function custStreetNum(c){ const ap=custAddrParts(c,[]); let st=ap.street||"", hn=ap.buildingNum||""; if(!hn){ const m=st.match(/^(.*?)\s+(\d+[א-ת]?)$/); if(m){ st=m[1]; hn=m[2]; } } return {city:ap.city||"",street:st,houseNum:hn,addrMore:ap.addrMore||""}; }
+function custContacts(c){ const first={name:c.contactName||(c.placeName?"":c.name)||"",phone:c.phone||"",role:c.contactName?"איש קשר":""};
+  const rest=[...(c.extraContacts||[]),...(c.contacts||[])].filter(x=>x&&(x.name||x.phone)).map(x=>({name:x.name||"",phone:x.phone||"",role:x.role||""}));
+  const out=[first,...rest].filter(x=>x.name||x.phone); const seen=new Set(); return out.filter(x=>{ const k=custNormPh(x.phone)||x.name; if(seen.has(k)) return false; seen.add(k); return true; }); }
+// אחזקה / פרויקט חדש בלי לקוח מקושר → מקשרים ללקוח קיים (טלפון / שם) או פותחים לו תיק הדברה
+function ensureCustomerFor(customers,setCustomers,{customerId,name,phone,base}){
+  if(!setCustomers||!String(name||"").trim()) return customerId??null;
+  if(customerId!=null&&(customers||[]).some(c=>!c.deleted&&String(c.id)===String(customerId))) return customerId;
+  const ph=custNormPh(phone), nm=String(name).trim();
+  const ex=(customers||[]).find(c=>!c.deleted&&((ph.length>=9&&custNormPh(c.phone)===ph)||[c.name,c.placeName].map(x=>String(x||"").trim()).includes(nm)));
+  if(ex) return ex.id;
+  const id=Date.now()+Math.floor(Math.random()*997), now=new Date().toISOString();
+  setCustomers(cs=>[...cs,{status:"פעיל",...base,id,name:nm,phone:phone||base.phone||"",createdAt:now,updatedAt:now}]);
+  return id; }
+function CustSuggest({customers,q,onPick,off=false,title="לקוחות קיימים שלך"}){
+  const [closed,setClosed]=useState(null);
+  const qq=String(q||"").trim(); if(off||!qq||closed===qq) return null;
+  const L=custSuggest(customers,qq); if(!L.length) return null;
+  if(L.length===1&&[L[0].name,L[0].placeName].map(x=>String(x||"").trim()).includes(qq)&&closed==="__picked") return null;
+  return <div style={{border:"1px solid #bae6fd",background:"#f0f9ff",borderRadius:10,padding:"6px 8px",margin:"-6px 0 12px"}}>
+    <div style={{display:"flex",alignItems:"center",fontSize:12,color:"#0369a1",fontWeight:700,marginBottom:4}}><span style={{flex:1}}>🔎 {title} — לחץ כדי למלא את כל הפרטים</span>
+      <button type="button" onClick={()=>setClosed(qq)} style={{border:"none",background:"transparent",cursor:"pointer",color:"#64748b",fontSize:14}}>✕</button></div>
+    {L.map(c=><button key={c.id} type="button" onClick={()=>{ setClosed("__picked"); onPick(c); }} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",background:"#fff",border:"1px solid #e0f2fe",borderRadius:8,padding:"6px 10px",marginBottom:4,fontSize:13,color:"#0f172a"}}>
+      <b>{c.name}</b>{c.contactName&&c.contactName!==c.name?<span style={{color:"#475569"}}> · {c.contactName}</span>:null}{c.bizName&&c.bizName!==c.name?<span style={{color:"#475569"}}> · 🧾 {c.bizName}</span>:null}
+      <div style={{fontSize:12,color:"#64748b"}}>{[c.address&&c.address!=="—"?c.address:"",c.phone].filter(Boolean).join(" · ")}</div>
+    </button>)}
+  </div>; }
 function custRank(arr,q){ const n=elNorm(q); if(!n) return arr; const st=[],rest=[]; arr.forEach(c=>(elNorm(c.name).startsWith(n)?st:rest).push(c)); return [...st,...rest]; }
 function smartMatch(o,q){
   const qq=normQ(q); if(!qq) return true; const h=hayOf(o);
@@ -6748,7 +6784,7 @@ function WAPasteBox({onApply,cityNames}){
 // ═══ 👤/🏢 זהות הלקוח — אותו בלוק בהזמנת עבודה, בלקוח חדש וביומן ביצוע ═══
 // פרטי: שם + טלפון. עסקי: איש קשר + טלפון + שם המקום, ובהרחבה — שם אחר על המסמכים + ח.פ
 const custDocName=c=>c?(c.bizName||c.name||""):"";
-function ClientIdentity({v,onChange,sharedHint=""}){
+function ClientIdentity({v,onChange,sharedHint="",customers=null,onPick=null,linked=false}){
   const biz=v.kind==="biz";
   const [docOpen,setDocOpen]=useState(()=>!!(v.doc&&v.doc!==v.place)||!!v.taxId);
   const set=(k,x)=>onChange({...v,[k]:x});
@@ -6760,8 +6796,10 @@ function ClientIdentity({v,onChange,sharedHint=""}){
       <button type="button" onClick={()=>set("kind","biz")} style={chip(biz)}>🏢 עסק / מוסד / ועד בית</button>
     </div>
     <G2><Inp label={biz?"שם איש הקשר *":"שם הלקוח *"} value={v.name||""} onChange={x=>set("name",x)} placeholder={biz?"למשל: יוסי":""}/><Inp label={biz?"טלפון איש הקשר *":"טלפון *"} value={v.phone||""} onChange={x=>set("phone",x)} placeholder="050-000-0000"/></G2>
+    {customers&&onPick&&<CustSuggest customers={customers} q={v.name} onPick={onPick} off={linked}/>}
     {biz&&<>
       <Inp label="🏪 שם המקום (איך שכולם מכירים)" value={v.place||""} onChange={x=>set("place",x)} placeholder={sharedHint||"למשל: שווארמה שמש, גן השקמה"}/>
+      {customers&&onPick&&<CustSuggest customers={customers} q={v.place} onPick={onPick} off={linked}/>}
       {<G2><Inp label="🧾 שם על המסמכים" value={v.doc||""} onChange={x=>set("doc",x)} placeholder="למשל: נ.ש. עסקים בע״מ"/><Inp label="ח.פ / ע.מ (לא חובה)" value={v.taxId||""} onChange={x=>set("taxId",x)}/></G2>}
       <div style={{fontSize:12,color:"#1e40af",background:"#eff6ff",borderRadius:8,padding:"6px 10px",marginTop:-4,marginBottom:12}}>🧾 במסמכים: <b>{docShown||"—"}</b>{v.place&&v.doc&&v.doc!==v.place?<> · 🏪 מקום: <b>{v.place}</b></>:null} · 👤 איש קשר: <b>{v.name||"—"}</b></div>
     </>}
@@ -6987,7 +7025,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       </div>
       {dupCand&&<button type="button" onClick={()=>{ pickExisting(dupCand); showToast("✓ נבחר הלקוח הקיים — השמירה תעדכן אותו"); }} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 10px",marginBottom:10}}>⚠️ כבר יש לקוח כזה: <b>{dupCand.name}</b>{dupCand.phone?" · "+dupCand.phone:""}{dupCand.address?" · "+dupCand.address:""} — <u>לחץ כדי לבחור אותו</u> (בלי כרטיס כפול)</button>}
       {existingId!=null&&!initialCustomer&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
-      <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""}
+      <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""} customers={customers} onPick={c=>{ pickExisting(c); showToast("✓ נבחר לקוח קיים — השמירה תעדכן אותו"); }} linked={existingId!=null}
         onChange={x=>setF(p=>({...p,clientKind:x.kind,name:x.name,phone:x.phone,placeName:x.place||"",bizName:x.doc||"",taxId:x.taxId||""}))}/>
       {(()=>{ const extra=<>
       <Inp label="אימייל" value={f.email} onChange={v=>set("email",v)}/>
@@ -10411,7 +10449,17 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
   const types=[...new Set([...MAINTENANCE_TYPES.filter(t=>t!=="אחר"),...knownTypes,...(f.type&&f.type!=="אחר"?[f.type]:[])])];
   const [otherOpen,setOtherOpen]=useState(false);
-  const setC=(i,k,v)=>set("contacts",f.contacts.map((c,j)=>j===i?{...c,[k]:v}:c));
+  const setC=(i,k,v)=>set("contacts",f.contacts.map((c,j)=>{ if(j!==i) return c; const nc={...c,[k]:v};
+    if(k==="phone"&&!String(c.name||"").trim()){ const m=custFindByPhone(customers,v); if(m&&m.name) nc.name=m.name; } return nc; }));
+  const [pickCust,setPickCust]=useState(false);
+  const fromCust=c=>{ const a=custStreetNum(c); const place=c.placeName||c.name||"";
+    setF(x=>({...x,customerId:c.id,customerName:place,city:a.city||x.city,street:a.street||x.street,houseNum:a.houseNum||x.houseNum,addrMore:a.addrMore||x.addrMore,
+      billingName:c.bizName&&c.bizName!==place?c.bizName:x.billingName,billingTaxId:c.taxId||x.billingTaxId,
+      contacts:(()=>{ const cs=custContacts(c); return cs.length?cs:x.contacts; })(),
+      ...((()=>{ const pt=String(c.propertyType||"").trim(); const t=pt&&types.find(t=>t===pt||t.includes(pt)||(pt==="בית פרטי"&&/וילה/.test(t))); return t?{type:t}:{}; })())}));
+    setOtherOpen(false); setPickCust(false); showToast("✓ פרטי "+place+" נטענו מהלקוחות"); };
+  const linkedCust=f.customerId!=null?(customers||[]).find(c=>String(c.id)===String(f.customerId)):null;
+  const phoneHit=!f.customerId?(f.contacts||[]).map(c=>custFindByPhone(customers,c.phone)).find(Boolean):null;
   const [uploading,setUploading]=useState(false);
   const onFile=async e=>{
     const files=[...(e.target.files||[])]; e.target.value="";
@@ -10452,7 +10500,11 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       placeholder={"למשל: מסעדת השף הלבן, הרצל 20 תל אביב, איש קשר רונן מנהל המסעדה 054-1112233. ג'וקים ומכרסמים, לא כולל נמלים. פעם בחודש, 450 שקל לביקור. חוזה לשנה, 6 תחנות, משה מדביר קבוע בשעה 7. יש חתול במחסן"}
       chips={r=>[spChip("מקום",r.customerName),spChip("כתובת",r.address),spChip("סוג",r.type),r.contact&&spChip("איש קשר",[r.contact.name,r.contact.role,r.contact.phone].filter(Boolean).join(" · ")),r.pests&&r.pests.length&&spChip("מזיקים",r.pests.join(", ")),r.excludedPests&&spChip("🚫 לא כולל",r.excludedPests.join(", ")),spChip("תדירות",r.frequency),spChip("מחיר לביקור",r.price&&"₪"+r.price),spChip("ביקור נוסף",r.extraVisitPrice&&"₪"+r.extraVisitPrice),spChip("התחלה",r.startDate&&fmtDate(r.startDate)),spChip("סיום חוזה",r.endDate&&fmtDate(r.endDate)),spChip("תחנות",r.stations),spChip("מדביר",r.workerId&&((workers.find(w=>String(w.id)===String(r.workerId))||{}).name)),spChip("שעה",r.visitTime),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <FieldCard title="📍 המקום">
+      {linkedCust?<div style={{fontSize:12.5,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ מקושר לתיק הלקוח: <b>{linkedCust.name}</b> <button type="button" onClick={()=>set("customerId",null)} style={{border:"none",background:"transparent",color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:12,textDecoration:"underline"}}>בטל קישור</button></div>
+        :<button type="button" onClick={()=>setPickCust(true)} style={{width:"100%",padding:"9px",borderRadius:10,border:"1.5px dashed #7dd3fc",background:"#f0f9ff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>📂 לקוח קיים? חפש ומלא את כל הפרטים</button>}
+      {pickCust&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setPickCust(false)} onSelect={fromCust}/>}
       <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מסעדת השף הלבן"/>
+      <CustSuggest customers={customers} q={f.customerName} onPick={fromCust} off={!!linkedCust}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr 0.6fr",gap:8}}>
         <Inp label="עיר" value={f.city||""} onChange={v=>set("city",v)} placeholder="תל אביב"/>
         <Inp label="רחוב" value={f.street||""} onChange={v=>set("street",v)} placeholder="הרצל"/>
@@ -10470,6 +10522,7 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       </details>
     </FieldCard>
     <FieldCard title="👤 אנשי קשר">
+      {phoneHit&&!linkedCust&&<button type="button" onClick={()=>fromCust(phoneHit.c)} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"7px 10px",marginBottom:8}}>📞 המספר שייך ללקוח קיים: <b>{phoneHit.c.name}</b> — <u>לחץ למילוי כל הפרטים</u></button>}
       {f.contacts.map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr auto",gap:6,alignItems:"end",marginBottom:6}}>
         <Inp label={i===0?"שם איש קשר":""} value={c.name} onChange={v=>setC(i,"name",v)}/>
         <Inp label={i===0?"טלפון":""} value={c.phone} onChange={v=>setC(i,"phone",v)}/>
@@ -10571,7 +10624,8 @@ async function openDataFile(c){
   }catch(e){ alert("לא ניתן לפתוח את הקובץ"); }
 }
 
-function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAppointments,workers=[],execLogs=[]}){
+function Maintenance({maintenance,setMaintenance,customers,setCustomers,appointments=[],setAppointments,workers=[],execLogs=[]}){
+  const withCust=m=>{ const cid=ensureCustomerFor(customers,setCustomers,{customerId:m.customerId,name:m.customerName,phone:m.phone,base:{...maintToCustomer(m),extraContacts:(maintToCustomer(m).contacts||[]),source:"אחזקה"}}); return cid!=null?{...m,customerId:cid}:m; };
   const [showNew,setShowNew]=useState(false);
   const [histFor,setHistFor]=useState(null);
   const [reportFor,setReportFor]=useState(null);
@@ -10675,8 +10729,8 @@ function Maintenance({maintenance,setMaintenance,customers,appointments=[],setAp
           </div>
         </div>;})}
     </div>}
-    {showNew&&<MaintenanceModal workers={workers} knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m=>{setMaintenance(ms=>[...ms,m]); if(m.autoSchedule) setTimeout(()=>runSchedule([m]),0);}} customers={customers}/>}
-    {editM&&<MaintenanceModal workers={workers} knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m=>{setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x));
+    {showNew&&<MaintenanceModal workers={workers} knownTypes={knownTypes} onClose={()=>setShowNew(false)} onSave={m0=>{ const m=withCust(m0); setMaintenance(ms=>[...ms,m]); if(m.autoSchedule) setTimeout(()=>runSchedule([m]),0);}} customers={customers}/>}
+    {editM&&<MaintenanceModal workers={workers} knownTypes={knownTypes} initial={editM} onClose={()=>setEditM(null)} onSave={m0=>{ const m=withCust(m0); setMaintenance(ms=>ms.map(x=>x.id===editM.id?{...x,...m,id:x.id}:x));
       if(setAppointments&&((m.visitTime||"08:00")!==(editM.visitTime||"08:00")||(m.visitTimeTo||"")!==(editM.visitTimeTo||""))){ const t=m.visitTime||"08:00"; const tw=t+(m.visitTimeTo&&m.visitTimeTo>t?"–"+m.visitTimeTo:""); const td=todayStr(); let n=0;
         setAppointments(as=>as.map(a=>String(a.maintenanceId)===String(editM.id)&&!a.deleted&&a.date>=td&&a.status==="ממתין"&&!isAllDay(a)?(n++,{...a,time:t,timeWindow:tw,updatedAt:new Date().toISOString()}):a)); setTimeout(()=>n&&showToast("🕐 עודכנו "+n+" ביקורים עתידיים לשעות "+tw),200); }
       if(m.autoSchedule) setTimeout(()=>runSchedule([{...editM,...m,id:editM.id}]),0);}} customers={customers}/>}
@@ -10753,7 +10807,8 @@ function ProjectBuildingRow({b,workers,onUpdate,onRemove,onSchedule}){
   </div>;
 }
 
-function NewProjectModal({onClose,onSave,workers}){
+function NewProjectModal({onClose,onSave,workers,customers=[]}){
+  const [pickCust,setPickCust]=useState(false);
   const [f,setF]=useState({name:"",clientName:"",phone:"",pestType:"כללי",status:"תכנון",notes:"",startDate:todayStr(),totalPrice:""});
   const [buildings,setBuildings]=useState([{id:1,address:"",buildingCode:"",floors:"",workerId:"",workerName:"",date:"",price:"",status:"ממתין"}]);
   const set=(k,v)=>setF(x=>({...x,[k]:v}));
@@ -10771,7 +10826,17 @@ function NewProjectModal({onClose,onSave,workers}){
       chips={r=>[spChip("פרויקט",r.name),spChip("לקוח",r.clientName),spChip("טלפון",r.phone),spChip("מזיק",r.pestType),spChip("סטטוס",r.status),spChip("התחלה",r.startDate&&fmtDate(r.startDate)),r.buildings&&spChip("בניינים",r.buildings.map(b=>b.address||"בניין").join(" · ")+(r.buildings[0].floors?" · "+r.buildings[0].floors+" קומות":"")+(r.buildings[0].price?" · ₪"+r.buildings[0].price+" לבניין":"")+(r.buildings[0].workerName?" · "+r.buildings[0].workerName:"")),spChip("מחיר כולל",r.totalPrice&&"₪"+r.totalPrice),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
     <FieldCard title="פרטי הפרויקט">
       <G2><Inp label="שם הפרויקט *" value={f.name} onChange={v=>set("name",v)} placeholder="פרויקט ברחוב הרצל..."/><Sel label="סטטוס" value={f.status} onChange={v=>set("status",v)} options={PROJECT_STATUSES}/></G2>
-      <G2><Inp label="שם לקוח / ועד" value={f.clientName} onChange={v=>set("clientName",v)}/><Inp label="טלפון" value={f.phone} onChange={v=>set("phone",v)}/></G2>
+      {(()=>{ const lc=f.customerId!=null?customers.find(c=>String(c.id)===String(f.customerId)):null;
+        const fromCust=c=>{ setF(x=>({...x,customerId:c.id,clientName:c.placeName||c.name||"",phone:c.phone||x.phone,contactName:c.contactName||""})); setPickCust(false); showToast("✓ פרטי הלקוח נטענו"); };
+        const ph=!lc?custFindByPhone(customers,f.phone):null;
+        return <>
+          {lc?<div style={{fontSize:12.5,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ מקושר לתיק הלקוח: <b>{lc.name}</b> <button type="button" onClick={()=>set("customerId",null)} style={{border:"none",background:"transparent",color:"#64748b",cursor:"pointer",fontFamily:"inherit",fontSize:12,textDecoration:"underline"}}>בטל קישור</button></div>
+            :<button type="button" onClick={()=>setPickCust(true)} style={{width:"100%",padding:"9px",borderRadius:10,border:"1.5px dashed #7dd3fc",background:"#f0f9ff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>📂 לקוח קיים? חפש ומלא את הפרטים</button>}
+          {pickCust&&<ExistingCustomerSearch customers={customers} onClose={()=>setPickCust(false)} onSelect={fromCust}/>}
+          <G2><Inp label="שם לקוח / ועד" value={f.clientName} onChange={v=>set("clientName",v)}/><Inp label="טלפון" value={f.phone} onChange={v=>{ const m=!f.clientName&&custFindByPhone(customers,v); setF(x=>({...x,phone:v,...(m?{clientName:m.c.placeName||m.c.name,customerId:m.c.id}:{})})); }}/></G2>
+          <CustSuggest customers={customers} q={f.clientName} onPick={fromCust} off={!!lc}/>
+          {ph&&<button type="button" onClick={()=>fromCust(ph.c)} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"7px 10px",marginBottom:10}}>📞 המספר שייך ללקוח קיים: <b>{ph.c.name}</b> — <u>לחץ לקישור</u></button>}
+        </>; })()}
       <G2><Sel label="סוג מזיק" value={f.pestType} onChange={v=>set("pestType",v)} options={PROJECT_PEST_TYPES}/><Inp label="תאריך התחלה" type="date" value={f.startDate} onChange={v=>set("startDate",v)}/></G2>
       <Txt label="תיאור / הערות" value={f.notes} onChange={v=>set("notes",v)} rows={2}/>
     </FieldCard>
@@ -10900,7 +10965,7 @@ function Projects({projects,setProjects,workers,appointments,setAppointments,cus
       })}
     </div>
 
-    {showNew&&<NewProjectModal workers={workers} onClose={()=>setShowNew(false)} onSave={p=>setProjects(ps=>[...ps,p])}/>}
+    {showNew&&<NewProjectModal workers={workers} customers={customers} onClose={()=>setShowNew(false)} onSave={p0=>{ const cid=ensureCustomerFor(customers,setCustomers,{customerId:p0.customerId,name:p0.clientName,phone:p0.phone,base:{source:"פרויקט",propertyType:"בניין משותף",...(p0.contactName?{contactName:p0.contactName,placeName:p0.clientName}:{})}}); setProjects(ps=>[...ps,{...p0,customerId:cid}]); }}/>}
   </div>;
 }
 
@@ -13392,7 +13457,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="199";
+const APP_BUILD="200";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13919,7 +13984,7 @@ function App(){
             {tab==="calendar"&&<GcalBanner/>}
             {tab==="calendar"&&<WeekCalendar appointments={calAppointments} setAppointments={setApptsCal} customers={customers} setCustomers={setCustomers} workers={activeWorkers} collabs={collabs} finance={activeFinance} setFinance={setFinance} execLogs={execLogs} setExecLogs={setExecLogs} currentUser={user} maintenance={activeMaintenance} openReq={openReq} onOpenDone={()=>{setOpenReq(null);setTab("fieldview");}}/>}
             {tab==="invoices"&&(()=>{ const own=permOf(authUser,"invoices")==="own"; const meW=myWorkerFor(user,activeWorkers); return <Invoices mineOnly={own?{id:authUser.id,workerName:meW?meW.name:authUser.name}:null} finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={own?execLogs.filter(l=>l.workerName===(meW?meW.name:authUser.name)):execLogs} setExecLogs={setExecLogs}/>; })()}
-            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
+            {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} setCustomers={setCustomers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}
