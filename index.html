@@ -682,6 +682,27 @@ function calcToCrm(items,curPests,curScope){
   });
   return {pests,unknown,scope}; }
 
+// 🕘 היסטוריית שינויים בכרטיס לקוח
+function CustHistory({c,onRestore}){
+  const [open,setOpen]=useState(false);
+  const h=(c&&c.history||[]).slice().reverse(); if(!h.length) return null;
+  const when=t=>{ const d=new Date(t); if(isNaN(d)) return ""; const p=x=>String(x).padStart(2,"0"); return p(d.getDate())+"/"+p(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2)+" "+p(d.getHours())+":"+p(d.getMinutes()); };
+  return <div style={{border:"1px solid #e2e8f0",borderRadius:12,marginBottom:12,background:"#fff"}}>
+    <button type="button" onClick={()=>setOpen(!open)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",border:"none",background:"transparent",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
+      <span style={{fontSize:16}}>🕘</span><b style={{flex:1,fontSize:14,color:"#0f172a"}}>היסטוריית שינויים</b><span style={{fontSize:12,color:"#64748b"}}>{h.length} · אחרון {when(h[0].at)}</span><span style={{color:"#94a3b8"}}>{open?"▲":"▼"}</span>
+    </button>
+    {open&&<div style={{padding:"0 12px 10px",maxHeight:"45vh",overflowY:"auto"}}>
+      {h.map((e,i)=><div key={i} style={{borderTop:"1px dashed #e2e8f0",padding:"8px 0",fontSize:13}}>
+        <div style={{color:"#64748b",marginBottom:3}}>{when(e.at)}{e.by?" · "+e.by:""}{e.note?<b style={{color:"#0369a1"}}> · {e.note}</b>:null}</div>
+        {(e.changes||[]).map((x,j)=><div key={j} style={{display:"flex",gap:6,alignItems:"baseline",flexWrap:"wrap",padding:"1px 0"}}>
+          <span style={{color:"#475569",minWidth:80}}>{CUST_HIST_FIELDS[x.k]||x.k}:</span>
+          <span style={{textDecoration:"line-through",color:"#b91c1c"}}>{x.from||"(ריק)"}</span><span>←</span><b style={{color:"#166534"}}>{x.to||"(ריק)"}</b>
+          {onRestore&&x.k!=="extraContacts"&&x.k!=="deleted"&&<button type="button" onClick={()=>onRestore(x.k,x.from)} style={{marginRight:"auto",border:"1px solid #cbd5e1",background:"#f8fafc",borderRadius:14,padding:"1px 9px",fontSize:12,cursor:"pointer",fontFamily:"inherit",color:"#0369a1"}}>↩ החזר</button>}
+        </div>)}
+      </div>)}
+    </div>}
+  </div>;
+}
 // עורך "מה סוכם" — מופיע מתחת לבחירת המזיקים
 function ScopeEditor({pests,scope,onChange}){
   if(!pests||!pests.length) return null;
@@ -6049,6 +6070,17 @@ function buildOrderConfirmText({name, pests, date, timeFrom, timeTo, allDay, add
 // ═══ 🔎 חיפוש חכם: בכל השדות של רשומה (גם אנשי קשר, הערות, ממצאים), טלפון בלי מקפים/רווחים ═══
 const __hayCache=new WeakMap();
 const normQ=t=>String(t||"").toLowerCase().replace(/[״"׳'`]/g,"").replace(/\s+/g," ").trim();
+const CUST_HIST_FIELDS={name:"שם",contactName:"איש קשר",placeName:"שם המקום",bizName:"שם על המסמכים",taxId:"ח.פ / ע.מ",phone:"טלפון",email:"אימייל",address:"כתובת",city:"עיר",street:"רחוב",buildingNum:"מספר בית",aptNum:"דירה",floor:"קומה",entrance:"כניסה",addrMore:"פרטי כתובת",propertyType:"סוג נכס",rooms:"חדרים",floors:"קומות בבניין",notes:"הערות",propertyNotes:"הערות על הנכס",status:"סטטוס",tag:"תגית",source:"מקור",extraContacts:"אנשי קשר נוספים",pestType:"מזיקים",lastPrice:"מחיר אחרון",deleted:"נמחק"};
+function custHistVal(k,v){ if(v==null) return ""; if(k==="extraContacts") return (v||[]).map(c=>[c.role,c.name,c.phone].filter(Boolean).join(" ")).join(" | "); if(k==="deleted") return v?"כן":""; if(Array.isArray(v)) return v.join(", "); if(typeof v==="object") return JSON.stringify(v); return String(v); }
+function custWho(){ try{ return (JSON.parse(localStorage.getItem("crm_auth")||"{}").name)||""; }catch(_){ return ""; } }
+function addCustHist(prev,next){ if(!Array.isArray(next)||!Array.isArray(prev)) return next; const pm=new Map(prev.map(c=>[String(c&&c.id),c])); const at=new Date().toISOString(), by=custWho();
+  return next.map(c=>{ if(!c) return c; const o=pm.get(String(c.id)); if(o===c) return c;
+    if(!o){ if(c.history&&c.history.length) return c; return {...c,history:[{at,by,note:"הכרטיס נוצר"}]}; }
+    const ch=[]; Object.keys(CUST_HIST_FIELDS).forEach(k=>{ const a=custHistVal(k,o[k]).trim(), b=custHistVal(k,c[k]).trim(); if(a!==b&&!(a==="—"&&!b)&&!(!a&&b==="—")) ch.push({k,from:a,to:b}); });
+    const note=c.__histNote; if(note!==undefined){ c={...c}; delete c.__histNote; }
+    if(!ch.length&&!note) return c===o?c:{...c,history:c.history||o.history};
+    const h=[...((c.history&&c.history.length>=(o.history||[]).length?c.history:o.history)||[]),{at,by,changes:ch,...(note?{note}:{})}].slice(-80);
+    return {...c,history:h}; }); }
 // Supabase מחזיר עד 1000 שורות בכל בקשה — מביאים בדפים כדי שאף רשומה לא תיעלם (היו 1004 לקוחות)
 async function sbFetchAll(tbl,cols){ const PAGE=1000; let all=[]; for(let from=0;from<200000;from+=PAGE){
     const {data,error}=await sb.from(tbl).select(cols).order('updated_at',{ascending:true}).order('id',{ascending:true}).range(from,from+PAGE-1);
@@ -7900,13 +7932,18 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         if(!dups.length) return null;
         const merge=o=>{ if(!confirm(`לאחד את הכרטיס "${o.name}"${o.phone?" ("+o.phone+")":""} לתוך הכרטיס הזה?\n\n• פרטים שחסרים כאן יושלמו ממנו\n• התורים, יומני הביצוע והמסמכים שלו יעברו לכאן\n• הכרטיס הכפול יוסר מהרשימה`)) return;
           const empty=v=>v==null||v===""||v==="—"||(Array.isArray(v)&&!v.length);
-          const kept={...sel}; Object.keys(o).forEach(k=>{ if(["id","createdAt","deleted"].includes(k)) return; if(empty(kept[k])&&!empty(o[k])) kept[k]=o[k]; });
+          // הפרטים שעודכנו אחרונים גוברים; כל פרט שחסר בהם נלקח מהכרטיס השני — שום פרט לא נמחק
+          const tOf=c=>String(c.updatedAt||c.createdAt||"");
+          const [nw,od]=tOf(o)>tOf(sel)?[o,sel]:[sel,o];
+          const kept={...sel}; new Set([...Object.keys(sel),...Object.keys(o)]).forEach(k=>{ if(["id","createdAt","deleted","history","mergedInto"].includes(k)) return; kept[k]=!empty(nw[k])?nw[k]:!empty(od[k])?od[k]:(sel[k]!==undefined?sel[k]:o[k]); });
+          kept.history=[...(o.history||[]).map(h=>({...h,note:(h.note?h.note+" · ":"")+"מהכרטיס הכפול"})),...(sel.history||[])].sort((a,b)=>String(a.at).localeCompare(String(b.at))).slice(-70);
+          kept.__histNote=`אוחד עם כרטיס כפול (${o.name||""}${o.phone?" · "+o.phone:""}${o.address&&o.address!=="—"?" · "+o.address:""})`;
           const ex=[...(sel.extraContacts||[])]; (o.extraContacts||[]).forEach(e=>{ if(!ex.some(x=>x.phone===e.phone)) ex.push(e); }); if(o.phone&&nP(o.phone)!==ph&&!ex.some(x=>nP(x.phone)===nP(o.phone))) ex.push({role:"טלפון נוסף",name:o.contactName||"",phone:o.phone}); kept.extraContacts=ex;
           const now=new Date().toISOString(); kept.updatedAt=now;
           setCustomers(cs=>cs.map(c=>String(c.id)===String(sel.id)?kept:String(c.id)===String(o.id)?{...c,deleted:true,mergedInto:sel.id,updatedAt:now}:c));
           const mv=x=>String(x.customerId)===String(o.id)?{...x,customerId:sel.id,updatedAt:now}:x;
           setAppointments&&setAppointments(as=>as.map(mv)); setFinance&&setFinance(fs=>fs.map(mv)); setExecLogs&&setExecLogs(ls=>ls.map(mv));
-          setSel(kept); showToast("✓ הכרטיסים אוחדו"); };
+          const ks={...kept}; delete ks.__histNote; setSel(ks); showToast("✓ הכרטיסים אוחדו"); };
         return <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:12,padding:"10px 12px",marginBottom:12}}>
           <div style={{fontSize:13.5,fontWeight:800,color:"#92400e",marginBottom:6}}>⚠️ יש כרטיס כפול ללקוח הזה</div>
           {dups.map(o=><div key={o.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:13,marginBottom:4}}>
@@ -7914,6 +7951,11 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             <button type="button" onClick={()=>merge(o)} style={{border:"1px solid #f59e0b",background:"#fff",color:"#92400e",borderRadius:20,padding:"4px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⇄ אחד לכרטיס אחד</button>
           </div>)}
         </div>; })()}
+      <CustHistory c={customers.find(x=>String(x.id)===String(sel.id))||sel} onRestore={(k,v)=>{ const cur=customers.find(x=>String(x.id)===String(sel.id))||sel; const lbl=CUST_HIST_FIELDS[k]||k;
+          if(!confirm(`להחזיר את "${lbl}" ל: ${v||"(ריק)"}?`)) return;
+          const val=v;
+          const up={...cur,[k]:val,updatedAt:new Date().toISOString(),__histNote:"שוחזר: "+lbl};
+          setCustomers(cs=>cs.map(x=>String(x.id)===String(cur.id)?up:x)); setSel({...up}); showToast("↩ "+lbl+" שוחזר"); }}/>
       {(()=>{ const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const l=st.log;
         return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(st.need?"#38bdf8":l?"#16a34a":"#cbd5e1"),borderRadius:12,padding:"12px 14px",marginBottom:12}}>
           <div style={{fontWeight:800,fontSize:17}}>{sel.name}</div>
@@ -13348,7 +13390,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="197";
+const APP_BUILD="198";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13454,7 +13496,9 @@ function App(){
     window.addEventListener("resize",check);
     return()=>window.removeEventListener("resize",check);
   },[]);
-  const [customers,setCustomers]=useLS("customers", []);
+  const [customers,setCustomersRaw]=useLS("customers", []);
+  // 🕘 היסטוריית שינויים בכל כרטיס לקוח — כל שמירה נרשמת (מה היה ← מה נהיה)
+  const setCustomers=React.useCallback(v=>setCustomersRaw(prev=>addCustHist(prev,typeof v==="function"?v(prev):v)),[]);
   // שמות שכבר קיימים אצל לקוחות → המילוי החכם יזהה אותם בעתיד גם בלי "שם:" לפני
   React.useEffect(()=>{ try{ const L=new Set(); const bad=new Set(WA_CITIES);
     (customers||[]).forEach(c=>{ if(!c||c.deleted) return; [c.contactName,c.name,...((c.contacts||[]).map(x=>x&&x.name))].forEach(v=>{ const w=String(v||"").trim().split(/\s+/)[0]; if(/^[א-ת][א-ת'׳]{1,11}$/.test(w)&&!bad.has(w)&&!/^(?:ה|בית|גן|חברת|משרד|מסעדת|חנות|בע"?מ|עמותת|קבוצת|מרכז|מכון)/.test(w)) L.add(w.replace(/['׳"]/g,"'")); }); });
