@@ -8876,7 +8876,7 @@ function docHtml(doc){
     return `<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:8px 10px;">${l.desc||""}</td><td style="padding:8px 10px;text-align:center;">${q}</td><td style="padding:8px 10px;text-align:center;">${l.unit||"יח׳"}</td><td style="padding:8px 10px;text-align:left;">${money(unitBefore)}</td><td style="padding:8px 10px;text-align:left;font-weight:600;">${money(unitBefore*q)}</td></tr>`; }).join("");
   const pays=(doc.payments||[]).filter(p=>parseFloat(p.amount));
   const c=doc.cust||{};
-  const side=[doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:"",doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:"",!T.receipt&&doc.payTerms&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:"",!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""].join("");
+  const side=[doc.refText?`<div><b>בהתייחס ל:</b> ${doc.refText}</div>`:"",doc.execDocNum?`<div><b>יומן ביצוע:</b> ${doc.execDocNum}</div>`:"",!T.receipt&&doc.payTerms&&(doc.hidePayTerms===false||(doc.hidePayTerms==null&&doc.payTerms!=="מיידי"))&&doc.docType!=="חשבונית זיכוי"?`<div><b>תנאי תשלום:</b> ${doc.payTerms}</div>`:"",!T.receipt&&doc.dueDate?`<div><b>לתשלום עד:</b> ${fmtDate(doc.dueDate)}</div>`:""].join("");
   return `
   <div style="max-width:740px;margin:0 auto;position:relative;">
     ${doc.preview?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:56px;font-weight:800;color:rgba(37,99,235,.12);transform:rotate(-18deg);pointer-events:none;">תצוגה מקדימה — עוד לא הופק</div>`:doc.draft?`<div style="position:absolute;top:35%;left:0;right:0;text-align:center;font-size:64px;font-weight:800;color:rgba(220,38,38,.10);transform:rotate(-18deg);pointer-events:none;">טיוטה — לא מסמך רשמי</div>`:""}
@@ -8897,8 +8897,8 @@ function docHtml(doc){
       <div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">
         <div style="font-weight:700;color:#1a5c3a;">לכבוד</div>
         <div><b>${c.name||""}</b>${c.taxId?` · ע.מ./ח.פ. ${c.taxId}`:""}</div>
-        ${c.contactName?`<div>איש קשר: ${c.contactName}</div>`:""}
-        <div>${c.address||""}</div><div>${c.phone||""}${c.email?" · "+c.email:""}</div>
+        <div>${c.address||""}</div>
+        ${c.contactName?`<div>איש קשר: ${c.contactName}${c.phone?" · טלפון: "+c.phone:""}${c.email?" · "+c.email:""}</div>`:(c.phone||c.email)?`<div>טלפון: ${c.phone||""}${c.email?" · "+c.email:""}</div>`:""}
       </div>
       ${side?`<div style="background:#f0f9f4;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;">${side}</div>`:""}
     </div>
@@ -8948,6 +8948,8 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
   const [roundTotal,setRoundTotal]=useState(!!P.roundTotal);
   const [payments,setPayments]=useState(P.payments&&P.payments.length?P.payments:[]);
   const [payTerms,setPayTerms]=useState(P.payTerms||"מיידי");
+  const [hidePayTerms,setHidePayTerms]=useState(()=>P.hidePayTerms!=null?!!P.hidePayTerms:(()=>{ try{ return localStorage.getItem("h360_hide_payterms")!=="0"; }catch(_){ return true; } })());
+  React.useEffect(()=>{ try{ localStorage.setItem("h360_hide_payterms",hidePayTerms?"1":"0"); }catch(_){} },[hidePayTerms]);
   const [dueDate,setDueDate]=useState(P.dueDate||"");
   const [notes,setNotes]=useState(P.notes||"");
   const [footer,setFooter]=useState(P.footer||"");
@@ -8995,7 +8997,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       before, vat, total, amount:type==="חשבונית זיכוי"?-before:before,
       payments:T.receipt?payments.filter(p=>parseFloat(p.amount)):[],
       payMethod:T.receipt?(payments.find(p=>parseFloat(p.amount))||{}).method||"":"",
-      payTerms:T.receipt?"":payTerms, dueDate:T.receipt?"":dueDate,
+      payTerms:T.receipt?"":payTerms, hidePayTerms:!!hidePayTerms, dueDate:T.receipt?"":dueDate,
       status:P.refund?"החזר":T.receipt?"שולם":type==="חשבונית זיכוי"?"זיכוי":"ממתין",
       allocationNum:allocationNum.trim(), needsAllocation:alloc,
       apptId:apptId?(isNaN(+apptId)?apptId:+apptId):null, execLogId:P.execLogId||null, execDocNum:P.execDocNum||"", ...(P.debtId!=null?{debtId:P.debtId}:{}),
@@ -9097,6 +9099,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     <div style={{...card,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"end"}}>
       <div><Inp label="תאריך המסמך" type="date" value={date} onChange={setDate}/>{lastDate&&<div style={{fontSize:11,color:CLR.muted,marginTop:-8}}>אפשר מ-{fmtDate(lastDate)} עד היום (מספור רציף)</div>}</div>
       {!T.receipt&&<Sel label="תנאי תשלום" value={payTerms} onChange={setPayTerms} options={PAY_TERMS}/>}
+      {!T.receipt&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13.5,margin:"-6px 0 12px",cursor:"pointer"}}><input type="checkbox" checked={!hidePayTerms} onChange={e=>setHidePayTerms(!e.target.checked)} style={{width:18,height:18}}/>להציג את תנאי התשלום במסמך <span style={{color:"#64748b",fontSize:12}}>(כשלא מסומן — המערכת זוכרת לעצמה, הלקוח לא רואה)</span></label>}
       {!T.receipt&&<Inp label="לתשלום עד (לא חובה)" type="date" value={dueDate} onChange={setDueDate}/>}
     </div>
 
@@ -13716,7 +13719,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="210";
+const APP_BUILD="211";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
