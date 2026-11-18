@@ -6760,7 +6760,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       ...(existingId!=null?{id:existingId}:{totalPaid:0,lastTreatment:""}),
     };
     if(custOnly){ delete customer.pestType; delete customer.pests; delete customer.lastPrice; }
-    else customer.openOrder=doSchedule?null:{at:new Date().toISOString(),pests:allPests(),pestType:pestLabel(),price:f.price||"",notes:f.notes||"",rawMsg:String(f.rawMsg||""),timeFrom:f.timeFrom||"",timeTo:f.timeTo||"",allDay:!!f.allDay,workerId:schedWorker||""};
+    else customer.openOrder=(doSchedule||!(allPests().length||f.price||String(f.notes||"").trim()||String(f.rawMsg||"").trim()))?null:{at:new Date().toISOString(),pests:allPests(),pestType:pestLabel(),price:f.price||"",notes:f.notes||"",rawMsg:String(f.rawMsg||""),timeFrom:f.timeFrom||"",timeTo:f.timeTo||"",allDay:!!f.allDay,workerId:schedWorker||""};
     const saved=onSave(customer);
     let schedInfo=null;
     if(!custOnly&&doSchedule&&saved){
@@ -6804,7 +6804,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     setTimeout(()=>showToast("✅ מולא מההודעה: "+r.found.join(", ")+(r.name?"":" · שם לא צוין")),50);
   };
   React.useEffect(()=>{ const c=initialCustomer||(!custOnly&&window.__h360PendingOrder); if(!c) return; if(!initialCustomer) window.__h360PendingOrder=null; setExistingId(c.id);
-    const sp=(!c.city&&!c.street&&c.address)?splitAddr(c.address):null;
+    const sp=(!c.street&&c.address)?(()=>{ const q=custAddrParts(c,ilCities.map(x=>x.name)); return {city:q.city,street:[q.street,q.buildingNum].filter(Boolean).join(" "),houseNum:""}; })():null;
     if(!initialCustomer){ try{ DK&&localStorage.removeItem(DK); }catch(e){} setRestored(false); }
     setF(prev0=>{ const prev=initialCustomer?prev0:blankF(); return ({...prev,name:c.contactName||c.name||prev.name,...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{}),notes:custOnly?(c.notes||""):"",custNotes:custOnly?"":(c.notes||""),rawMsg:custOnly?(c.intakeText||""):prev.rawMsg,status:c.status||prev.status,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",phone:c.phone||"",email:c.email||"",city:c.city||"",street:c.street||"",buildingNum:c.buildingNum||"",aptNum:c.aptNum||"",entrance:c.entrance||"",floor:c.floor||prev.floor,propertyType:c.propertyType||prev.propertyType,rooms:c.rooms||prev.rooms,floors:c.floors||"",sewers:c.sewers||"",hasYard:!!c.hasYard,propertyNotes:c.propertyNotes||"",extraContacts:c.extraContacts||[],source:c.source||"",levels:c.levels||prev.levels,underground:c.underground||prev.underground,buildingAreas:c.buildingAreas||prev.buildingAreas,addrMore:c.addrMore||"",buildingCode:c.buildingCode||"",parking:c.parking??null,elevator:c.elevator??null,propOther:!!c.propertyType&&!PROPERTY_TYPES.includes(c.propertyType),...(sp?{city:sp.city,street:sp.street,buildingNum:sp.houseNum}:{})}); });
     const oo=!custOnly&&!initialCustomer&&(c.openOrder||(c.__fromHistory&&{pests:c.pests,pestType:c.pestType,price:c.lastPrice}));
@@ -7064,10 +7064,13 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </div>
     {showExistingSearch&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setShowExistingSearch(false)} onSelect={c=>{
       setExistingId(c.id);
+      const ap=custAddrParts(c,ilCities.map(x=>x.name));
       setF(prev=>({...prev,clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),taxId:c.taxId||"",bizName:c.bizName&&c.bizName!==(c.placeName||c.name)?c.bizName:"",
-        name:c.name||prev.name, phone:c.phone||prev.phone, email:c.email||prev.email,
-        city:c.city||prev.city, street:c.street||prev.street,
-        buildingNum:c.buildingNum||prev.buildingNum, aptNum:c.aptNum||prev.aptNum,
+        name:c.contactName||c.name||prev.name, phone:c.phone||prev.phone, email:c.email||prev.email,
+        city:ap.city||prev.city, street:(c.street?ap.street:[ap.street,ap.buildingNum].filter(Boolean).join(" "))||prev.street, addrMore:ap.addrMore||prev.addrMore||"",
+        extraContacts:c.extraContacts&&c.extraContacts.length?c.extraContacts:prev.extraContacts, source:c.source||prev.source,
+        propertyNotes:c.propertyNotes||prev.propertyNotes, buildingAreas:c.buildingAreas&&c.buildingAreas.length?c.buildingAreas:prev.buildingAreas,
+        buildingNum:c.buildingNum||(c.street?ap.buildingNum:"")||"", aptNum:c.aptNum||prev.aptNum,
         entrance:c.entrance||prev.entrance, floor:c.floor||prev.floor,
         propertyType:c.propertyType||prev.propertyType, rooms:c.rooms||prev.rooms,
         floors:c.floors||prev.floors, sewers:c.sewers||prev.sewers,
@@ -9413,6 +9416,16 @@ const priceIncl=(p,incl)=>{ const n=parseFloat(p)||0; return incl?n:r2(n*VAT_MUL
 function splitAddr(a){ const parts=String(a||"").split(",").map(x=>x.trim()).filter(Boolean); if(!parts.length) return {city:"",street:"",houseNum:"",addrMore:""};
   const city=parts.length>1?parts[parts.length-1]:""; const first=parts[0]; const m=first.match(/^(.*?)\s+(\d+[א-ת]?)$/); const more=parts.slice(1,parts.length>1?-1:undefined).join(", ");
   return {city,street:m?m[1]:first,houseNum:m?m[2]:"",addrMore:more}; }
+// כתובת של לקוח (גם כשהיא שמורה כשורה אחת, למשל מיבוא מיש חשבונית) → עיר / רחוב / מספר
+function custAddrParts(c,cityNames){ c=c||{}; let city=String(c.city||"").trim(), street=String(c.street||"").trim(), num=String(c.buildingNum||"").trim(), more=String(c.addrMore||"").trim();
+  const a=String(c.address||"").trim(); if(street||!a||a==="—") return {city,street,buildingNum:num,addrMore:more};
+  const sp=splitAddr(a); let st=sp.street, hn=sp.houseNum, ct=city||sp.city;
+  if(!ct&&cityNames&&cityNames.length){ // "חבקוק 3 תל אביב" בלי פסיק
+    const full=[sp.street,sp.houseNum].filter(Boolean).join(" ");
+    const hit=cityNames.filter(n=>n&&full.endsWith(" "+n)||full===n).sort((x,y)=>y.length-x.length)[0];
+    if(hit){ const rest=full.slice(0,full.length-hit.length).trim(); const m=rest.match(/^(.*?)\s+(\d+[א-ת]?)$/); ct=hit; st=m?m[1]:rest; hn=m?m[2]:""; } }
+  if(ct&&sp.city&&ct!==sp.city&&!city) ct=sp.city;
+  return {city:ct,street:st,buildingNum:num||hn,addrMore:more||sp.addrMore}; }
 function joinAddr(f){ const st=[f.street,f.houseNum].filter(Boolean).join(" "); return [st,f.addrMore,f.city].map(x=>String(x||"").trim()).filter(Boolean).join(", "); }
 const maintPriceIncl=m=>!!m.priceInclVat;
 // חלונות ביקור חודשיים
@@ -13199,7 +13212,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="192";
+const APP_BUILD="193";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
