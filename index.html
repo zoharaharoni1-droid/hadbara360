@@ -9705,20 +9705,23 @@ function bldAddr(b){ return [[b.street,b.houseNum].filter(Boolean).join(" "),b.c
 // 🏢 מבנים / כתובות בתוך מקום אחד (מלון עם כמה בניינים, מסעדה + מחסן ממול)
 function BuildingsEditor({buildings,onChange,main}){
   buildings=buildings||[];
-  const fld={padding:"8px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",boxSizing:"border-box",width:"100%"};
+  const fld={padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,fontFamily:"inherit",background:"#fff",boxSizing:"border-box",width:"100%",minHeight:46};
+  const lb={fontSize:12.5,color:"#475569",fontWeight:600,display:"block",margin:"6px 0 3px"};
   const upd=(i,patch)=>onChange(buildings.map((b,j)=>{ if(j!==i) return b; const nb={...b,...patch}; nb.address=bldAddr(nb); return nb; }));
   const add=()=>{ const n=buildings.length+1; const b={id:"b"+Date.now().toString(36)+Math.random().toString(36).slice(2,4),name:"מבנה "+n,city:main.city||"",street:main.street||"",houseNum:"",notes:""}; b.address=bldAddr(b); onChange([...buildings,b]); };
   return <div>
     <div style={{fontSize:12.5,color:"#475569",marginBottom:8}}>למקום עם כמה בניינים או כתובות (למשל: חבקוק 1, 3, 5 — או מסעדה ומחסן ממול). כל מבנה ממופה בנפרד עם האזורים והתחנות שלו.</div>
-    {buildings.map((b,i)=><div key={b.id} style={{border:"1px solid #bae6fd",background:"#f0f9ff",borderRadius:10,padding:8,marginBottom:8}}>
-      <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1.3fr 0.6fr auto",gap:6,alignItems:"center"}}>
-        <input value={b.name||""} onChange={e=>upd(i,{name:e.target.value})} placeholder="שם — למשל: בניין A / מחסן" style={{...fld,fontWeight:700}}/>
-        <input value={b.city||""} onChange={e=>upd(i,{city:e.target.value})} placeholder="עיר" style={fld}/>
-        <input value={b.street||""} onChange={e=>upd(i,{street:e.target.value})} placeholder="רחוב" style={fld}/>
-        <input value={b.houseNum||""} onChange={e=>upd(i,{houseNum:e.target.value})} placeholder="מס׳" style={fld}/>
-        <button type="button" onClick={()=>{ if(confirm("להסיר את "+(b.name||"המבנה")+"? (האזורים והתחנות שבו יעברו ל'כללי')")) onChange(buildings.filter((_,j)=>j!==i)); }} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:32,height:34,cursor:"pointer"}}>✕</button>
+    {buildings.map((b,i)=><div key={b.id} style={{border:"1px solid #bae6fd",background:"#f0f9ff",borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+      <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+        <div style={{flex:1}}><label style={lb}>שם המבנה</label><input value={b.name||""} onChange={e=>upd(i,{name:e.target.value})} placeholder="למשל: בניין A / מחסן" style={{...fld,fontWeight:700}}/></div>
+        <button type="button" onClick={()=>{ if(confirm("להסיר את "+(b.name||"המבנה")+"? (האזורים והתחנות שבו יעברו ל'כללי')")) onChange(buildings.filter((_,j)=>j!==i)); }} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:10,width:46,height:46,cursor:"pointer",fontSize:16}}>✕</button>
       </div>
-      <input value={b.notes||""} onChange={e=>upd(i,{notes:e.target.value})} placeholder="הערות למבנה (לא חובה) — קוד כניסה, איש קשר במקום…" style={{...fld,marginTop:6,fontSize:13}}/>
+      <label style={lb}>עיר</label><input value={b.city||""} onChange={e=>upd(i,{city:e.target.value})} placeholder="עיר" style={fld}/>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:3}}><label style={lb}>רחוב</label><input value={b.street||""} onChange={e=>upd(i,{street:e.target.value})} placeholder="רחוב" style={fld}/></div>
+        <div style={{flex:1,minWidth:70}}><label style={lb}>מספר</label><input value={b.houseNum||""} onChange={e=>upd(i,{houseNum:e.target.value})} placeholder="מס׳" style={fld}/></div>
+      </div>
+      <label style={lb}>הערות למבנה (לא חובה)</label><textarea value={b.notes||""} onChange={e=>upd(i,{notes:e.target.value})} rows={2} placeholder="קוד כניסה, איש קשר במקום…" style={{...fld,resize:"vertical"}}/>
     </div>)}
     <button type="button" onClick={add} style={{width:"100%",padding:"9px",borderRadius:10,border:"1.5px dashed #7dd3fc",background:"#fff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>+ הוסף מבנה / כתובת</button>
   </div>;
@@ -9738,7 +9741,7 @@ function SimpleSiteMap({zones,stations,onZones,onStations,buildings=[]}){
   const [open,setOpen]=useState(()=>Object.fromEntries(blds.map(b=>[b.id,true])));
   const [addT,setAddT]=useState({}); const [addN,setAddN]=useState({});
   const customs=customDevTypes(); const types=[...SITE_DEVICE_TYPES.filter(t=>t.k!=="other"),...customs];
-  const fld={padding:"7px 9px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,fontFamily:"inherit",background:"#fff",boxSizing:"border-box"};
+  const fld={padding:"11px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,fontFamily:"inherit",background:"#fff",boxSizing:"border-box",minHeight:46};
   const add=bid=>{ const tp=addT[bid]||"bait"; const n=Math.max(1,Math.min(100,parseInt(addN[bid])||1)); let {pre,n:st}=nextDevNum(stations,tp); const used=new Set(stations.map(x=>String(x.num))); const out=[];
     for(let i=0;i<n;i++){ while(used.has(pre+st)) st++; used.add(pre+st); out.push({num:pre+st,type:tp,zone:"",location:"",...(bid?{bld:bid}:{})}); st++; }
     onStations([...stations,...out]); setAddN(x=>({...x,[bid]:1})); };
@@ -9759,27 +9762,34 @@ function SimpleSiteMap({zones,stations,onZones,onStations,buildings=[]}){
           <span style={{fontSize:12.5,color:"#475569"}}>{items.length} נקודות</span><span style={{color:"#94a3b8"}}>{isOpen?"▲":"▼"}</span>
         </button>
         {isOpen&&<div style={{padding:"8px 10px"}}>
-          {items.map(({x,i})=><div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,background:zColor(x.zone),borderRadius:10,padding:4}}>
-            <span title={devType(x).label} style={{minWidth:46,height:34,borderRadius:8,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",fontSize:12.5,flexShrink:0}}>{devType(x).icon}{x.num}</span>
-            <input value={x.location||""} onChange={e=>upd(i,{location:e.target.value})} placeholder="איפה בדיוק? למשל: ליד דלת המטבח, צד ימין" style={{...fld,flex:1,minWidth:0}}/>
-            <select value={x.zone&&bz.some(z=>z.id===x.zone)?x.zone:""} onChange={e=>setZone(i,bid,e.target.value)} style={{...fld,maxWidth:130,fontSize:13,padding:"7px 4px"}}>
+          {items.map(({x,i})=><div key={i} style={{marginBottom:10,background:zColor(x.zone),border:"1px solid #e2e8f0",borderRadius:12,padding:"10px 10px"}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+              <span style={{minWidth:54,height:40,borderRadius:10,background:"#fff7ed",border:"1px solid #fed7aa",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,color:"#9a3412",fontSize:15,flexShrink:0}}>{devType(x).icon} {x.num}</span>
+              <b style={{flex:1,fontSize:14.5,color:"#334155"}}>{devType(x).label}</b>
+              <button type="button" onClick={()=>{ if(confirm("למחוק את "+devType(x).label+" "+x.num+"?")) onStations(stations.filter((_,j)=>j!==i)); }} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:10,width:40,height:40,cursor:"pointer",flexShrink:0,fontSize:15}}>✕</button>
+            </div>
+            <label style={{fontSize:12.5,color:"#475569",fontWeight:600,display:"block",marginBottom:3}}>📍 איפה בדיוק</label>
+            <textarea value={x.location||""} onChange={e=>upd(i,{location:e.target.value})} rows={2} placeholder="למשל: ליד דלת המטבח, בצד ימין של הכניסה" style={{...fld,width:"100%",resize:"vertical",lineHeight:1.4}}/>
+            <label style={{fontSize:12.5,color:"#475569",fontWeight:600,display:"block",margin:"8px 0 3px"}}>🗂️ אזור</label>
+            <select value={x.zone&&bz.some(z=>z.id===x.zone)?x.zone:""} onChange={e=>setZone(i,bid,e.target.value)} style={{...fld,width:"100%"}}>
               <option value="">— אזור —</option>
               {bz.map(z=><option key={z.id} value={z.id}>{z.name}</option>)}
               <option value="__new">➕ אזור חדש…</option>
               {buildings.length>1&&buildings.filter(q=>q.id!==bid).map(q=><option key={q.id} value={"b:"+q.id}>→ העבר ל{q.name||q.address}</option>)}
             </select>
-            <button type="button" onClick={()=>onStations(stations.filter((_,j)=>j!==i))} style={{border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:30,height:34,cursor:"pointer",flexShrink:0}}>✕</button>
           </div>)}
           {!items.length&&<div style={{fontSize:12.5,color:"#94a3b8",padding:"2px 2px 8px"}}>עוד אין נקודות ב{b.name||"מבנה"}</div>}
-          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:10,padding:6}}>
-            <span style={{fontSize:13,fontWeight:700}}>➕ הוסף:</span>
-            <div style={{display:"inline-flex",alignItems:"center",border:"1px solid #d1d5db",borderRadius:8,overflow:"hidden",background:"#fff"}}>
-              <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:Math.max(1,(parseInt(o[bid])||1)-1)}))} style={{border:"none",background:"#f1f5f9",width:30,height:32,fontSize:17,cursor:"pointer"}}>−</button>
-              <b style={{minWidth:28,textAlign:"center"}}>{parseInt(addN[bid])||1}</b>
-              <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:(parseInt(o[bid])||1)+1}))} style={{border:"none",background:"#f1f5f9",width:30,height:32,fontSize:17,cursor:"pointer"}}>+</button>
+          <div style={{background:"#f8fafc",border:"1px dashed #94a3b8",borderRadius:12,padding:10}}>
+            <span style={{fontSize:14,fontWeight:800,display:"block",marginBottom:8}}>➕ הוסף:</span>
+            <select value={addT[bid]||"bait"} onChange={e=>setAddT(o=>({...o,[bid]:e.target.value}))} style={{...fld,width:"100%",marginBottom:8}}>{types.map(t=><option key={t.k} value={t.k}>{t.icon} {t.label}</option>)}</select>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <div style={{display:"inline-flex",alignItems:"center",border:"1px solid #cbd5e1",borderRadius:10,overflow:"hidden",background:"#fff"}}>
+                <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:Math.max(1,(parseInt(o[bid])||1)-1)}))} style={{border:"none",background:"#f1f5f9",width:44,height:46,fontSize:20,cursor:"pointer"}}>−</button>
+                <b style={{minWidth:40,textAlign:"center",fontSize:17}}>{parseInt(addN[bid])||1}</b>
+                <button type="button" onClick={()=>setAddN(o=>({...o,[bid]:(parseInt(o[bid])||1)+1}))} style={{border:"none",background:"#f1f5f9",width:44,height:46,fontSize:20,cursor:"pointer"}}>+</button>
+              </div>
+              <button type="button" onClick={()=>add(bid)} style={{flex:1,height:46,border:"none",borderRadius:10,background:CLR.primary,color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>הוסף</button>
             </div>
-            <select value={addT[bid]||"bait"} onChange={e=>setAddT(o=>({...o,[bid]:e.target.value}))} style={{...fld,flex:1,minWidth:140,fontSize:13}}>{types.map(t=><option key={t.k} value={t.k}>{t.icon} {t.label}</option>)}</select>
-            <Btn sm onClick={()=>add(bid)}>הוסף</Btn>
           </div>
         </div>}
       </div>; })}
@@ -10653,10 +10663,10 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
       {pickCust&&<ExistingCustomerSearch customers={customers||[]} onClose={()=>setPickCust(false)} onSelect={fromCust}/>}
       <Inp label="שם המקום / הלקוח *" value={f.customerName} onChange={v=>set("customerName",v)} placeholder="למשל: מסעדת השף הלבן"/>
       <CustSuggest customers={customers} q={f.customerName} onPick={fromCust} off={!!linkedCust}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr 0.6fr",gap:8}}>
-        <Inp label="עיר" value={f.city||""} onChange={v=>set("city",v)} placeholder="תל אביב"/>
-        <Inp label="רחוב" value={f.street||""} onChange={v=>set("street",v)} placeholder="הרצל"/>
-        <Inp label="מספר" value={f.houseNum||""} onChange={v=>set("houseNum",v)} placeholder="20"/>
+      <Inp label="עיר" value={f.city||""} onChange={v=>set("city",v)} placeholder="תל אביב"/>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:3}}><Inp label="רחוב" value={f.street||""} onChange={v=>set("street",v)} placeholder="הרצל"/></div>
+        <div style={{flex:1,minWidth:70}}><Inp label="מספר" value={f.houseNum||""} onChange={v=>set("houseNum",v)} placeholder="20"/></div>
       </div>
       <Inp label="פרטים נוספים לכתובת (לא חובה)" value={f.addrMore||""} onChange={v=>set("addrMore",v)} placeholder="כניסה מהחצר, קומה 2, מתחם…"/>
       <label style={{fontSize:13,color:CLR.muted,display:"block",margin:"4px 0 6px"}}>סוג המקום</label>
@@ -10671,11 +10681,15 @@ function MaintenanceModal({onClose,onSave,customers,initial,knownTypes=[],worker
     </FieldCard>
     <FieldCard title="👤 אנשי קשר">
       {phoneHit&&!linkedCust&&<button type="button" onClick={()=>fromCust(phoneHit.c)} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"7px 10px",marginBottom:8}}>📞 המספר שייך ללקוח קיים: <b>{phoneHit.c.name}</b> — <u>לחץ למילוי כל הפרטים</u></button>}
-      {f.contacts.map((c,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr auto",gap:6,alignItems:"end",marginBottom:6}}>
-        <Inp label={i===0?"שם איש קשר":""} value={c.name} onChange={v=>setC(i,"name",v)}/>
-        <Inp label={i===0?"טלפון":""} value={c.phone} onChange={v=>setC(i,"phone",v)}/>
-        <Inp label={i===0?"תפקיד":""} value={c.role||""} onChange={v=>setC(i,"role",v)} placeholder="מנהל, אחזקה..."/>
-        <button type="button" onClick={()=>set("contacts",f.contacts.length>1?f.contacts.filter((_,j)=>j!==i):[{name:"",phone:"",role:""}])} style={{marginBottom:12,border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:8,width:34,height:36,cursor:"pointer"}}>✕</button>
+      {f.contacts.map((c,i)=><div key={i} style={{border:"1px solid #e2e8f0",borderRadius:12,padding:"8px 10px 0",marginBottom:8,background:"#fafafa"}}>
+        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+          <div style={{flex:1}}><Inp label="שם איש קשר" value={c.name} onChange={v=>setC(i,"name",v)}/></div>
+          <button type="button" onClick={()=>set("contacts",f.contacts.length>1?f.contacts.filter((_,j)=>j!==i):[{name:"",phone:"",role:""}])} style={{marginBottom:12,border:"none",background:"#fee2e2",color:CLR.danger,borderRadius:10,width:44,height:44,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 150px"}}><Inp label="טלפון" value={c.phone} onChange={v=>setC(i,"phone",v)}/></div>
+          <div style={{flex:"1 1 130px"}}><Inp label="תפקיד" value={c.role||""} onChange={v=>setC(i,"role",v)} placeholder="מנהל, אחזקה..."/></div>
+        </div>
       </div>)}
       <button type="button" onClick={()=>set("contacts",[...f.contacts,{name:"",phone:"",role:""}])} style={{width:"100%",padding:"8px",borderRadius:8,border:`1.5px dashed ${CLR.primary}66`,background:"transparent",color:CLR.primary,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>+ הוסף איש קשר</button>
     </FieldCard>
@@ -13612,7 +13626,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="204";
+const APP_BUILD="205";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
