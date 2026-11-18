@@ -13190,7 +13190,7 @@ function stockUsage(logs){ const dev={}, rod={stationsNew:0,stationsRefill:0,sew
     (l.materials||[]).forEach(m=>{ if(!m||!m.name) return; chem[m.name]=(chem[m.name]||0)+1; Object.keys(rod).forEach(k=>{ rod[k]+=parseInt(m[k])||0; }); }); });
   return {visits,dev,rod,chem}; }
 function StockPanel({w,execLogs,setWorkers,kit=[]}){
-  const [mo,setMo]=useState(todayStr().slice(0,7)); const [item,setItem]=useState(""); const [qty,setQty]=useState(""); const [open,setOpen]=useState(false);
+  const [mo,setMo]=useState(todayStr().slice(0,7)); const [item,setItem]=useState(""); const [qty,setQty]=useState(""); const [open,setOpen]=useState(false); const [openK,setOpenK]=useState(null);
   if(!w) return null;
   const mine=(execLogs||[]).filter(l=>!l.deleted&&!l.draft&&String(l.workerName||"").trim()===String(w.name||"").trim());
   const u=stockUsage(mine.filter(l=>String(l.date||"").slice(0,7)===mo));
@@ -13201,7 +13201,24 @@ function StockPanel({w,execLogs,setWorkers,kit=[]}){
   const addIn=()=>{ const it=item.trim(); const q=parseFloat(qty); if(!it||!q) return alert("בחר מוצר / חומר וכמות"); setWorkers(ws=>ws.map(x=>String(x.id)===String(w.id)?{...x,stockIn:[...(Array.isArray(x.stockIn)?x.stockIn:[]),{date:todayStr(),item:it,qty:q}]}:x)); setItem(""); setQty(""); showToast("📦 נוסף למלאי: "+q+" "+it); };
   const months=[...new Set([todayStr().slice(0,7),...mine.map(l=>String(l.date||"").slice(0,7)).filter(Boolean)])].sort().reverse().slice(0,12);
   const MN=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"]; const mLbl=m=>MN[parseInt(m.slice(5))-1]+" "+m.slice(0,4);
-  const row=(l,n,unit="")=><div style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0",borderBottom:"1px dashed #e2e8f0",fontSize:14}}><span>{l}</span><b>{n}{unit}</b></div>;
+  // 🔎 לחיצה על שורה — איפה זה יצא (לפי יומני הביצוע של החודש)
+  const monthLogs=mine.filter(l=>String(l.date||"").slice(0,7)===mo);
+  const whereOf=key=>{ const [kind,name]=key.split("::"); const out=[];
+    monthLogs.forEach(l=>{ let q=0;
+      if(kind==="rod") q=(l.materials||[]).reduce((t,m)=>t+(parseInt(m[name])||0),0);
+      else if(kind==="dev") q=(l.devices||[]).filter(d=>d.type===name).reduce((t,d)=>t+(parseInt(d.qty)||1),0);
+      else if(kind==="chem") q=(l.materials||[]).some(m=>m.name===name)?1:0;
+      if(q) out.push({l,q}); });
+    return out.sort((a,b)=>String(a.l.date).localeCompare(String(b.l.date))); };
+  const row=(l,n,unit="",key)=>{ const on=key&&openK===key; const W=on?whereOf(key):[];
+    return <div style={{borderBottom:"1px dashed #e2e8f0"}}>
+      <div onClick={()=>key&&setOpenK(on?null:key)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",fontSize:14,cursor:key?"pointer":"default"}}><span>{l}</span><span style={{display:"flex",alignItems:"center",gap:6}}><b>{n}{unit}</b>{key&&<span style={{color:"#94a3b8",fontSize:12}}>{on?"▲":"▼"}</span>}</span></div>
+      {on&&<div style={{background:"#f8fafc",borderRadius:10,padding:"4px 10px",margin:"0 0 8px"}}>
+        {W.map(({l:x,q},i)=><div key={i} onClick={()=>{ try{ printExecLog(x); }catch(_){} }} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderBottom:i<W.length-1?"1px solid #eef2f7":"none",fontSize:13.5,cursor:"pointer"}}>
+          <span style={{minWidth:0}}><b>{x.clientName||"—"}</b>{x.address?<span style={{color:"#64748b"}}> · {x.address}</span>:null}<div style={{fontSize:12,color:"#94a3b8"}}>{fmtDate(x.date)} · יומן ביצוע {x.docNum||""} — לחץ לצפייה</div></span>
+          <b style={{whiteSpace:"nowrap"}}>{q}{unit}</b></div>)}
+      </div>}
+    </div>; };
   const fld={padding:"10px 12px",borderRadius:10,border:"1px solid #cbd5e1",fontSize:16,fontFamily:"inherit",boxSizing:"border-box",background:"#fff"};
   const rodRows=[["stationsNew","🆕 תיבות האכלה חדשות שהבאתי"],["stationsRefill","🔄 מילוי תיבות קיימות"],["sewers","🕳️ פיתיון בבורות ביוב"],["burrows","🐀 פיתיון במחילות"],["otherQty","📍 פיתיון במקומות אחרים"]].filter(([k])=>u.rod[k]);
   const devRows=Object.entries(u.dev).filter(([t])=>!(t==="תיבת האכלה כולל רעלים"&&u.rod.stationsNew)).sort((a,b)=>b[1]-a[1]);
@@ -13211,15 +13228,24 @@ function StockPanel({w,execLogs,setWorkers,kit=[]}){
     <div style={{fontSize:12.5,color:"#64748b",marginBottom:6}}>{u.visits} יומני ביצוע ב{mLbl(mo)}{w?" · "+w.name:""}</div>
     {u.visits===0?<div style={{fontSize:13,color:"#94a3b8"}}>אין יומני ביצוע בחודש הזה</div>:<>
       {(rodRows.length>0||devRows.length>0)&&<div style={{fontWeight:700,color:"#0369a1",margin:"8px 0 2px"}}>🪤 מוצרים ותיבות</div>}
-      {rodRows.map(([k,l])=><React.Fragment key={k}>{row(l,u.rod[k])}</React.Fragment>)}
-      {devRows.map(([t,n])=><React.Fragment key={t}>{row(t,n)}</React.Fragment>)}
+      {rodRows.map(([k,l])=><React.Fragment key={k}>{row(l,u.rod[k],"","rod::"+k)}</React.Fragment>)}
+      {devRows.map(([t,n])=><React.Fragment key={t}>{row(t,n,"","dev::"+t)}</React.Fragment>)}
       {Object.keys(u.chem).length>0&&<div style={{fontWeight:700,color:"#0369a1",margin:"10px 0 2px"}}>🧪 חומרים (במספר ביקורים)</div>}
-      {Object.entries(u.chem).sort((a,b)=>b[1]-a[1]).map(([n,c])=><React.Fragment key={n}>{row(n,c," ביקורים")}</React.Fragment>)}
+      {Object.entries(u.chem).sort((a,b)=>b[1]-a[1]).map(([n,c])=><React.Fragment key={n}>{row(n,c," ביקורים","chem::"+n)}</React.Fragment>)}
     </>}
     <div style={{borderTop:"1px solid #e2e8f0",marginTop:12,paddingTop:10}}>
       <div style={{fontWeight:700,marginBottom:6}}>📥 מלאי — מה קיבלתי ומה נשאר</div>
       {bal.length===0?<div style={{fontSize:12.5,color:"#94a3b8",marginBottom:6}}>עוד לא נרשם מלאי. כשמגיעה סחורה — רושמים כאן, והמערכת מורידה לבד לפי יומני הביצוע.</div>:
-        bal.map(b=><div key={b.it} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:"1px dashed #e2e8f0",fontSize:14}}><span>{b.it}</span><span style={{whiteSpace:"nowrap"}}>קיבלתי {b.got} · השתמשתי {b.used} · <b style={{color:b.left<=0?"#dc2626":b.left<5?"#b45309":"#166534"}}>נשאר {b.left}</b></span></div>)}
+        bal.map(b=>{ const k="bal::"+b.it, on=openK===k; const from=stockIn.filter(x=>x.item===b.it).map(x=>x.date).sort()[0];
+          const W=on?mine.filter(l=>String(l.date||"")>=from).map(l=>({l,q:(l.devices||[]).filter(d=>d.type===b.it).reduce((a,d)=>a+(parseInt(d.qty)||1),0)+(l.materials||[]).filter(m=>m.name===b.it).length})).filter(x=>x.q).sort((x,y)=>String(y.l.date).localeCompare(String(x.l.date))):[];
+          return <div key={b.it} style={{borderBottom:"1px dashed #e2e8f0"}}>
+            <div onClick={()=>setOpenK(on?null:k)} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",fontSize:14,cursor:"pointer",flexWrap:"wrap"}}><span>{b.it} <span style={{color:"#94a3b8",fontSize:12}}>{on?"▲":"▼"}</span></span><span style={{whiteSpace:"nowrap"}}>קיבלתי {b.got} · השתמשתי {b.used} · <b style={{color:b.left<=0?"#dc2626":b.left<5?"#b45309":"#166534"}}>נשאר {b.left}</b></span></div>
+            {on&&<div style={{background:"#f8fafc",borderRadius:10,padding:"4px 10px",margin:"0 0 8px"}}>
+              {stockIn.filter(x=>x.item===b.it).map((x,i)=><div key={"in"+i} style={{fontSize:13,color:"#166534",padding:"5px 0"}}>📥 {fmtDate(x.date)} · קיבלתי {x.qty}</div>)}
+              {W.length===0?<div style={{fontSize:13,color:"#94a3b8",padding:"5px 0"}}>עוד לא השתמשת מאז</div>:W.map(({l:x,q},i)=><div key={i} onClick={()=>{ try{ printExecLog(x); }catch(_){} }} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"7px 0",borderTop:"1px solid #eef2f7",fontSize:13.5,cursor:"pointer"}}>
+                <span style={{minWidth:0}}><b>{x.clientName||"—"}</b>{x.address?<span style={{color:"#64748b"}}> · {x.address}</span>:null}<div style={{fontSize:12,color:"#94a3b8"}}>{fmtDate(x.date)} · יומן ביצוע {x.docNum||""} — לחץ לצפייה</div></span><b>−{q}</b></div>)}
+            </div>}
+          </div>; })}
       {!open?<button type="button" onClick={()=>setOpen(true)} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,border:"1.5px dashed #86efac",background:"#f0fdf4",color:"#166534",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>➕ קיבלתי סחורה למלאי</button>
       :<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
         <input list="h360-stock-items" value={item} onChange={e=>setItem(e.target.value)} placeholder="מה קיבלת? (תיבות האכלה, מלכודות דבק, חומר…)" style={fld}/>
@@ -13766,7 +13792,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="216";
+const APP_BUILD="217";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
