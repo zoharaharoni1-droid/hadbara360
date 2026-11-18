@@ -5222,6 +5222,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     setDetailAppt(a); if(openReq.mode==="log") setLogAppt(a);
   },[openReq&&openReq.n]);
   const backIfReq=()=>{ if(openReq&&onOpenDone) onOpenDone(); };
+  React.useEffect(()=>{ const d=window.__h360CalDate; if(!d) return; window.__h360CalDate=null; setCalMode("day"); setDayDate(new Date(d+"T12:00:00")); },[]);
   React.useEffect(()=>{ const id=window.__h360CalOpen; if(id==null) return; window.__h360CalOpen=null; const a=appointments.find(x=>String(x.id)===String(id)); if(!a) return;
     if(a.date){ setCalMode("day"); setDayDate(new Date(a.date+"T12:00:00")); } if(isPersonal(a)) setEditTask(a); else setDetailAppt(a); },[]);
   const handleDuplicate=appt=>{
@@ -6652,7 +6653,9 @@ function ClientIdentity({v,onChange,sharedHint=""}){
     </>}
   </div>;
 }
-function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="08:00",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null,initialAppt=null,onShowCal=null}){
+function localToday(){ const d=new Date(),p=x=>String(x).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+function nowHalfHour(){ const d=new Date(); let m=d.getHours()*60+d.getMinutes(); m=Math.round(m/30)*30; if(m>=24*60) m=24*60-30; return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
+function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showGuidance=false,recentOrders=[],initialDate="",initialTime="",initialWorker="",onSlotChange,pick,initialParsed,draftKey,mode="order",initialCustomer=null,initialAppt=null,onShowCal=null}){
   const custOnly=mode==="customer";
   // 📝 טיוטה: מה שמילאת נשמר לבד — אפשר לעבור ללשונית אחרת ולחזור להמשיך
   const DK=draftKey?"h360_draft_"+draftKey:null;
@@ -6666,7 +6669,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     status:"פעיל",notes:"",
     pests:[],customPest:"",price:"",source:"",
     buildingAreas:[],
-    prefDate:initialDate,timeFrom:initialTime||"08:00",timeTo:"",
+    prefDate:initialDate||(mode==="order"&&!initialAppt?localToday():""),timeFrom:initialTime||(mode==="order"&&!initialDate&&!initialAppt?nowHalfHour():"08:00"),timeTo:"",
     extraContacts:[],rawMsg:"",
   });
   const [f,setF]=useState(()=>draft0?{...blankF(),...draft0.f}:blankF());
@@ -7000,7 +7003,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
       {onShowCal&&<button type="button" onClick={onShowCal} style={{width:"100%",marginBottom:10,padding:"9px",borderRadius:10,border:"1px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>📅 הצג את יומני המדבירים</button>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,alignItems:"end"}}>
         <div style={{gridColumn:"1 / -1"}}><Inp label="תאריך" type="date" value={f.prefDate} onChange={v=>set("prefDate",v)}/></div>
-        {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS}/>}
+        {!f.allDay&&<Sel label="משעה" value={f.timeFrom} onChange={v=>set("timeFrom",v)} options={TIME_SLOTS.includes(f.timeFrom)||!f.timeFrom?TIME_SLOTS:[...TIME_SLOTS,f.timeFrom].sort()}/>}
         {!f.allDay&&<Sel label="עד שעה (לא חובה)" value={f.timeTo||""} onChange={v=>set("timeTo",v)} options={["",...TIME_SLOTS]}/>}
         <label style={{gridColumn:"1 / -1",display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",background:f.allDay?"#f0f9ff":"transparent",border:`1px solid ${f.allDay?"#bae6fd":"transparent"}`,borderRadius:8,padding:"4px 8px",marginTop:-6,width:"fit-content"}}>
           <input type="checkbox" checked={!!f.allDay} onChange={e=>set("allDay",e.target.checked)} style={{width:16,height:16}}/>
@@ -7445,7 +7448,8 @@ function NewOrderPage({customers,setCustomers,appointments,setAppointments,worke
         onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}
         onDone={(saved,schedInfo)=>{
           if(schedInfo){
-            alert(`✅ נשמר תיק הדברה: ${saved.name}\n\n📅 שובץ ליומן של ${schedInfo.workerName}\nבתאריך ${fmtDate(schedInfo.date)} (${schedInfo.timeWindow})`);
+            showToast(`✅ ${saved.name} שובץ ליומן של ${schedInfo.workerName} · ${fmtDate(schedInfo.date)} (${schedInfo.timeWindow})`);
+            window.__h360CalDate=schedInfo.date; window.__h360Nav&&window.__h360Nav("calendar"); return;
           } else {
             alert(`✅ נשמר תיק הדברה: ${saved.name}`);
           }
@@ -7706,19 +7710,25 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const displayCustomers=showArchive?archivedCustomers:activeCustomers;
 
   // לקוחות לפי פעילות אחרונה — מה שעבדת עליו עכשיו למעלה
-  const lastAct=React.useMemo(()=>{ const m={}; const bump=(id,d)=>{ if(id==null||!d) return; const k=String(id); if(!m[k]||d>m[k]) m[k]=d; };
+  const lastActX=React.useMemo(()=>{ const m={}; const bump=(id,d,src)=>{ if(id==null||!d) return; d=String(d); const k=String(id); if(!m[k]||d>m[k].t) m[k]={t:d,src}; };
     const stamp=id=>{ const n=Number(id); return n>1e8?new Date(((n/100)+1700000000)*1000).toISOString():""; };
     const today=todayStr();
-    (appointments||[]).forEach(a=>{ if(a.updatedAt&&(a.date||"")<=today) bump(a.customerId,String(a.updatedAt)); else if(a.date&&a.date<today) bump(a.customerId,a.date); });
-    (execLogs||[]).forEach(l=>{ if(l.deleted) return; bump(l.customerId,l.updatedAt||l.createdAt||stamp(l.id)||l.date); });
-    (customers||[]).forEach(c=>{ bump(c.id,stamp(c.id)); if(c.createdAt) bump(c.id,String(c.createdAt)); if(c.updatedAt) bump(c.id,String(c.updatedAt)); if(c.lastTreatment) bump(c.id,c.lastTreatment); });
-    return m; },[appointments,execLogs,customers]);
+    (appointments||[]).forEach(a=>{ if(isPersonal(a)) return; if(a.createdAt) bump(a.customerId,a.createdAt,"הזמנת עבודה"); if(a.updatedAt&&(a.date||"")<=today) bump(a.customerId,String(a.updatedAt),"יומן עבודה"); else if(a.date&&a.date<today) bump(a.customerId,a.date,"ביקור"); });
+    (execLogs||[]).forEach(l=>{ if(l.deleted) return; bump(l.customerId,l.updatedAt||l.createdAt||stamp(l.id)||l.date,"יומן ביצוע"); });
+    const byName={}; (customers||[]).forEach(c=>{ const n=String(c.name||"").trim(); if(n&&!c.deleted) byName[n]=c.id; });
+    (finance||[]).forEach(d=>{ if(d.deleted) return; const cid=d.customerId!=null?d.customerId:byName[String(d.customer||(d.cust&&d.cust.name)||"").trim()]; if(cid==null) return; bump(cid,d.updatedAt||d.createdAt||(d.sentAt)||d.date,d.docType||"חשבונית"); });
+    (customers||[]).forEach(c=>{ bump(c.id,stamp(c.id),"לקוח חדש"); if(c.createdAt) bump(c.id,String(c.createdAt),"לקוח חדש"); if(c.updatedAt) bump(c.id,String(c.updatedAt),c.openOrder?"הזמנת עבודה":"עדכון פרטים"); if(c.lastTreatment) bump(c.id,c.lastTreatment,"טיפול"); });
+    return m; },[appointments,execLogs,customers,finance]);
+  const lastAct=React.useMemo(()=>{ const o={}; Object.keys(lastActX).forEach(k=>o[k]=lastActX[k].t); return o; },[lastActX]);
+  const [sortMode,setSortMode]=useState(()=>{ try{ return localStorage.getItem("h360_cust_sort")||"history"; }catch(_){ return "history"; } });
+  const setSort=v=>{ setSortMode(v); try{ localStorage.setItem("h360_cust_sort",v); }catch(_){} };
+  const whenTxt=t=>{ if(!t) return ""; if(!/T/.test(t)) return fmtDate(t.slice(0,10)); const d=new Date(t); if(isNaN(d)) return ""; const p2=x=>String(x).padStart(2,"0"); const ld=d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); const n0=new Date(); const td=n0.getFullYear()+"-"+p2(n0.getMonth()+1)+"-"+p2(n0.getDate()); const y0=new Date(n0.getTime()-864e5); const yd=y0.getFullYear()+"-"+p2(y0.getMonth()+1)+"-"+p2(y0.getDate()); return (ld===td?"היום":ld===yd?"אתמול":fmtDate(ld))+" "+p2(d.getHours())+":"+p2(d.getMinutes()); };
   const filtered=displayCustomers.filter(c=>{
     const matchSrch=!srch||smartMatch(c,srch);
     const matchStatus=filterStatus==="הכל"||c.status===filterStatus;
     const matchType=filterType==="הכל"||(c.propertyType||"")===filterType;
     return matchSrch&&matchStatus&&matchType;
-  }).sort((a,b)=>String(lastAct[String(b.id)]||"").localeCompare(String(lastAct[String(a.id)]||""))||(Number(b.id)||0)-(Number(a.id)||0));
+  }).sort((a,b)=>sortMode==="abc"?String(a.name||"").trim().localeCompare(String(b.name||"").trim(),"he"):(String(lastAct[String(b.id)]||"").localeCompare(String(lastAct[String(a.id)]||""))||(Number(b.id)||0)-(Number(a.id)||0)));
   return <div>
     <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
       <input placeholder="🔍 חיפוש שם, טלפון, כתובת..." value={srch} onChange={e=>setSrch(e.target.value)} style={{flex:1,minWidth:160,padding:"9px 14px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,background:"#f9fafb",boxSizing:"border-box"}}/>
@@ -7731,7 +7741,9 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       <Btn sm onClick={()=>setShowNew(true)}>+ לקוח חדש</Btn>
     </div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"nowrap",overflowX:"auto",alignItems:"center",whiteSpace:"nowrap",paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
-      <span style={{fontSize:12,color:CLR.muted}}>סטטוס:</span>
+      <span style={{fontSize:12,color:CLR.muted}}>סדר:</span>
+      {[["history","🕘 היסטוריה"],["abc","א-ב"]].map(([k,l])=><button key={k} type="button" onClick={()=>setSort(k)} style={{padding:"4px 12px",borderRadius:20,border:"1px solid "+(sortMode===k?"#0284c7":CLR.border),background:sortMode===k?"#e0f2fe":"transparent",color:sortMode===k?"#0369a1":CLR.muted,cursor:"pointer",fontSize:12,fontWeight:sortMode===k?700:400}}>{l}</button>)}
+      <span style={{fontSize:12,color:CLR.muted,marginRight:8}}>סטטוס:</span>
       {["הכל","פעיל","חוב","לא פעיל"].map(st=>(
         <button key={st} type="button" onClick={()=>setFilterStatus(st)}
           style={{padding:"4px 12px",borderRadius:20,border:"1px solid "+(filterStatus===st?CLR.primary:CLR.border),background:filterStatus===st?CLR.primary:"transparent",color:filterStatus===st?"#fff":CLR.muted,cursor:"pointer",fontSize:12,fontWeight:filterStatus===st?600:400}}>
@@ -7762,6 +7774,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           <div style={{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}}>{st.lastDate?fmtDate(st.lastDate):"לקוח חדש"}</div>
         </div>
         <div style={{fontSize:12,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",margin:"2px 0 6px"}}>{[c.address,c.phone].filter(Boolean).join(" · ")||"—"}</div>
+        {sortMode==="history"&&lastActX[String(c.id)]&&<div style={{fontSize:11.5,color:"#0369a1",margin:"-3px 0 6px"}}>🕘 {whenTxt(lastActX[String(c.id)].t)} · {lastActX[String(c.id)].src}</div>}
         {st.steps?<JobSteps steps={st.steps}/>:st.nextAppt?<span style={{fontSize:12,fontWeight:700,color:"#0369a1",background:"#e0f2fe",borderRadius:20,padding:"2px 10px"}}>📅 תור ב-{fmtDate(st.nextAppt.date)}</span>:<span style={{fontSize:12,color:"#94a3b8"}}>{st.lastDate?"טופל — אין יומן ביצוע במערכת":"עוד לא בוצע טיפול"}</span>}
         <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8,paddingTop:8,borderTop:"1px solid #f1f5f9"}} onClick={e=>e.stopPropagation()}>
           {needBtn(c,st)}
@@ -13212,7 +13225,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="193";
+const APP_BUILD="194";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
