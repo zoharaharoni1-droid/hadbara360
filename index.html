@@ -13792,7 +13792,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="217";
+const APP_BUILD="218";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -13892,6 +13892,12 @@ function App(){
   const [openReq,setOpenReq]=useState(null); // פתיחת תור ישירות מ"המשימות שלי"
   const [showSearch,setShowSearch]=useState(false);
   const [isMobile,setIsMobile]=React.useState(()=>window.innerWidth<900);
+  // 🧑‍🔧 מצב שטח בתפריט הטלפון — רק הקיצורים שבחרת; "הכל" — כל התפריט
+  const [navMode,setNavModeS]=useState(()=>{ try{ return localStorage.getItem("h360_navmode")||"field"; }catch(_){ return "field"; } });
+  const setNavMode=v=>{ setNavModeS(v); try{ localStorage.setItem("h360_navmode",v); }catch(_){} };
+  const [navFieldIds,setNavFieldIdsS]=useState(()=>{ try{ const v=JSON.parse(localStorage.getItem("h360_navfield")||"null"); if(Array.isArray(v)&&v.length) return v; }catch(_){} return ["calendar","neworder","execlog","customers","fieldview","mychems"]; });
+  const setNavFieldIds=fn=>setNavFieldIdsS(prev=>{ const v=typeof fn==="function"?fn(prev):fn; try{ localStorage.setItem("h360_navfield",JSON.stringify(v)); }catch(_){} return v; });
+  const [navEdit,setNavEdit]=useState(false);
   const [drawerOpen,setDrawerOpen]=React.useState(false);
   React.useEffect(()=>{
     const check=()=>setIsMobile(window.innerWidth<900);
@@ -14282,23 +14288,38 @@ function App(){
             </div>
             {/* Nav items */}
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
-              {[
+              {(()=>{ const groups=[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
                 {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
-              ].map(group=>(
-                <div key={group.lbl} style={{marginBottom:16}}>
-                  <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
-                  {group.items.filter(t=>(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)&&!!permOf(authUser,t.id)).map(t=>(
-                    <button key={t.id} onClick={()=>{setTab(t.id);setDrawerOpen(false);}}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderRadius:8,cursor:"pointer",color:tab===t.id?"#fff":"#94a3b8",fontSize:14,fontWeight:tab===t.id?600:500,border:"none",background:tab===t.id?"#16a34a":"transparent",width:"100%",textAlign:"right",marginBottom:2,fontFamily:"inherit"}}>
-                      <span style={{fontSize:16,width:20,textAlign:"center"}}>{t.icon}</span>{t.name}
-                    </button>
-                  ))}
-                </div>
-              ))}
+              ];
+                const vis=t=>(!t.workerOnly||user.role==="מדביר"||isAlsoWorker)&&!!permOf(authUser,t.id);
+                const allItems=groups.flatMap(g=>g.items).filter(vis);
+                const chosen=(navFieldIds||[]).map(id=>allItems.find(t=>t.id===id)).filter(Boolean);
+                const navBtn=(t,big)=><button key={t.id} onClick={()=>{setTab(t.id);setDrawerOpen(false);}}
+                  style={{display:"flex",alignItems:"center",gap:12,padding:big?"15px 14px":"11px 12px",borderRadius:big?12:8,cursor:"pointer",color:tab===t.id?"#fff":big?"#e2e8f0":"#94a3b8",fontSize:big?17:14,fontWeight:tab===t.id||big?700:500,border:"none",background:tab===t.id?"#16a34a":big?"#1e293b":"transparent",width:"100%",textAlign:"right",marginBottom:big?8:2,fontFamily:"inherit"}}>
+                  <span style={{fontSize:big?21:16,width:big?26:20,textAlign:"center"}}>{t.icon}</span>{t.name}</button>;
+                return <>
+                  <div style={{display:"flex",background:"#1e293b",borderRadius:12,padding:3,marginBottom:12}}>
+                    {[["field","🧑‍🔧 מצב שטח"],["all","🗂️ הכל"]].map(([k,l])=><button key={k} type="button" onClick={()=>setNavMode(k)} style={{flex:1,border:"none",borderRadius:10,padding:"9px 6px",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",background:navMode===k?"#16a34a":"transparent",color:navMode===k?"#fff":"#94a3b8"}}>{l}</button>)}
+                  </div>
+                  {navMode==="field"?<>
+                    {!navEdit&&chosen.map(t=>navBtn(t,true))}
+                    {!navEdit&&<button type="button" onClick={()=>setNavEdit(true)} style={{width:"100%",marginTop:6,padding:"10px",borderRadius:10,border:"1px dashed #334155",background:"transparent",color:"#94a3b8",fontSize:13.5,cursor:"pointer",fontFamily:"inherit"}}>⚙️ בחר מה יופיע במצב שטח</button>}
+                    {navEdit&&<div>
+                      <div style={{fontSize:12.5,color:"#94a3b8",margin:"0 4px 8px"}}>סמן מה יופיע במצב שטח (הסדר לפי הלחיצה):</div>
+                      {allItems.map(t=>{ const on=(navFieldIds||[]).includes(t.id); return <button key={t.id} type="button" onClick={()=>setNavFieldIds(ids=>on?ids.filter(x=>x!==t.id):[...ids,t.id])} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:8,border:"none",background:on?"#14532d":"transparent",color:on?"#fff":"#94a3b8",fontSize:14,cursor:"pointer",fontFamily:"inherit",textAlign:"right",marginBottom:2}}>
+                        <span style={{width:20,textAlign:"center"}}>{on?"✅":"⬜"}</span><span style={{width:20,textAlign:"center"}}>{t.icon}</span>{t.name}</button>; })}
+                      <button type="button" onClick={()=>setNavEdit(false)} style={{width:"100%",marginTop:10,padding:"11px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ סיימתי</button>
+                    </div>}
+                  </>:groups.map(group=>(
+                    <div key={group.lbl} style={{marginBottom:16}}>
+                      <div style={{fontSize:"9.5px",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.9px",color:"#475569",padding:"0 10px",marginBottom:4}}>{group.lbl}</div>
+                      {group.items.filter(vis).map(t=>navBtn(t,false))}
+                    </div>))}
+                </>; })()}
             </nav>
             {/* User actions */}
             <div style={{padding:"12px 14px",borderTop:"1px solid #1e293b"}}>
