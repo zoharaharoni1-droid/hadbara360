@@ -786,6 +786,10 @@ const INSTR_BY_PEST = [
 const INSTR_SPRAY = INSTR_BASE.slice(0,5);
 const INSTR_TRAPS = ["לא להזיז ולא לגעת במלכודות ובתחנות","להרחיק ילדים וחיות מחמד מהמלכודות והתחנות"];
 const INSTR_RODENT_BAIT = ["אין צורך לצאת מהבית ואין הגבלה על שטיפת רצפה ומשטחים — הפיתיון נמצא בתיבות סגורות","לא לפתוח את התיבות ולא להוציא מהן את הפיתיון","פעילות המכרסמים אמורה לרדת בהדרגה תוך 7–14 ימים"];
+// 🐾👶 בעלי חיים / תינוקות זוחלים — במקום "לא לשטוף 24 שעות": לשטוף, לייבש ולאוורר לפני שהם נכנסים
+const INSTR_PETS = ["לפני שבעלי החיים חוזרים — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה והמשטחים יבשים לגמרי לפני שבעלי החיים חוזרים","לאוורר היטב את המקום לפני שבעלי החיים חוזרים","להוציא את קערות האוכל והמים של בעלי החיים מהאזור, ולשטוף אותן לפני השימוש"];
+const INSTR_BABY = ["לפני שהתינוק חוזר — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה יבשה לגמרי לפני שהתינוק זוחל עליה","לאוורר היטב את המקום לפני שהתינוק חוזר","לשטוף צעצועים ומשטחים שהתינוק נוגע בהם"];
+const INSTR_NO_WASH=[INSTR_BASE[0],INSTR_BASE[1]];
 const isRodent = pests => /עכבר|חולד|מכרסם/.test((pests||[]).join(" "));
 const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרסם|נחש|יונ/.test(p));
 const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
@@ -2870,7 +2874,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     freeText:      initialData?.freeText      || "",
     customerId:    initialData?.customerId    ?? prefillAppt?.customerId ?? null,
     maintenanceId: initialData?.maintenanceId ?? prefillAppt?.maintenanceId ?? null,
-    phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || ""),
+    phone:         normILPhone(initialData?.phone || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).phone || prefillAppt?.phone || (()=>{ try{ return (waParse(String(prefillAppt?.rawMsg||prefillAppt?.freeText||""),[])||{}).phone||""; }catch(_){ return ""; } })() || ""),
     address:       initialData?.address!=null&&initialData?.unit!=null ? initialData.address : navAddr(initialData?.address || prefillAppt?.address || ""),
     unit:          initialData?.unit ?? (prefillAppt?.unit || unitLine({floor:prefillAppt?.floor,aptNum:prefillAppt?.aptNum||(customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).aptNum,entrance:prefillAppt?.entrance}) || unitFromAddr(initialData?.address || prefillAppt?.address || "")),
     structureType: initialData?.structureType || prefillAppt?.structureType || prefillAppt?.propertyType || (customers.find(c=>String(c.id)===String(prefillAppt?.customerId))||{}).propertyType || "",
@@ -2898,6 +2902,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     reentry:       initialData?.reentry ? normReentry(initialData.reentry) : {},
     instructions:  initialData?.instructions  || [],
     terms:         initialData?.terms         || [],
+    hasPets:       !!initialData?.hasPets, hasBaby: !!initialData?.hasBaby,
     date:          initialData?.date          || prefillAppt?.date          || todayStr(),
     workerName:    initialData?.workerName    || defaultWorker.name || "",
     workerLicense: initialData?.workerLicense || defaultWorker.licenseNum || "",
@@ -2944,10 +2949,19 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       }
       setF(x=>({...x,reentry:r}));
     }
+    // רק הנחיות ששייכות למזיקים ולטיפול של היום (לא "סוחבים" הנחיות של מכרסמים מיומן קודם)
+    const allP=[...f.pest,f.customPest].filter(Boolean);
+    const relSet=new Set([...instrForPests(allP),...(hasSpray?[...INSTR_SPRAY,INSTR_BASE[5]]:[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])]);
+    const allKnown=new Set([...INSTR_BASE,...INSTR_BY_PEST.flatMap(x=>x.t),...INSTR_RODENT_BAIT,...INSTR_PETS,...INSTR_BABY]);
     if(!touched.current.instr){
-      let ins=prev&&(prev.instructions||[]).length?prev.instructions:null;
-      if(!ins){ ins=[...(hasSpray?INSTR_SPRAY.slice(0,2):[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&!hasSpray&&hasBait?[INSTR_RODENT_BAIT[0],"לדווח לנו על פגרים או ריח"]:[])]; }
+      let ins=prev&&(prev.instructions||[]).length?prev.instructions.filter(t=>relSet.has(t)):null;
+      if(!ins||!ins.length){ ins=[...(hasSpray?INSTR_SPRAY.slice(0,2):[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&!hasSpray&&hasBait?[INSTR_RODENT_BAIT[0],"לדווח לנו על פגרים או ריח"]:[])]; }
+      if(f.hasPets||f.hasBaby) ins=ins.filter(t=>!INSTR_NO_WASH.includes(t)).concat([...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])]);
+      ins=[...new Set(ins)];
       setF(x=>({...x,instructions:ins}));
+    } else {
+      // גם אחרי שסימנת ידנית — הנחיות של מזיק שהורד יוצאות
+      setF(x=>({...x,instructions:x.instructions.filter(t=>!allKnown.has(t)||relSet.has(t)||INSTR_BASE.includes(t))}));
     }
   },[matKey,pestKey]);
   // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
@@ -3184,9 +3198,16 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     {sec("instr","📋","הנחיות ללקוח",f.instructions.length?f.instructions.length+" הנחיות":"",f.instructions.length?"ok":"opt",<>
     <div>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        {[["hasPets","🐾 יש בעלי חיים",INSTR_PETS],["hasBaby","👶 יש תינוק זוחל",INSTR_BABY]].map(([k,l,L])=>{ const on=!!f[k]; return <button key={k} type="button" onClick={()=>{ touched.current.instr=true; setF(x=>{ const nv=!x[k]; const other=k==="hasPets"?x.hasBaby:x.hasPets;
+            let ins=x.instructions.filter(t=>!L.includes(t)); if(nv){ ins=ins.filter(t=>!INSTR_NO_WASH.includes(t)).concat(L); } else if(!other&&hasSpray){ ins=[INSTR_BASE[0],...ins]; }
+            return {...x,[k]:nv,instructions:[...new Set(ins)]}; }); }}
+          style={{flex:"1 1 150px",padding:"11px 10px",borderRadius:12,border:"2px solid "+(on?"#0284c7":"#cbd5e1"),background:on?"#e0f2fe":"#fff",color:on?"#0369a1":"#334155",fontSize:15,fontWeight:on?800:600,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{l}</button>; })}
+      </div>
+      {(f.hasPets||f.hasBaby)&&<div style={{fontSize:12.5,color:"#0369a1",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"7px 10px",marginBottom:8}}>הוחלף "לא לשטוף 24 שעות" בהנחיות לשטוף, לייבש ולאוורר לפני שהם נכנסים. אפשר לשנות כל הנחיה.</div>}
       <div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>מוצגות ההנחיות שמתאימות ל{allPests.length?allPests.join(", "):"טיפול"}{hasSpray?" · ריסוס":""}{hasBait?" · תיבות/מלכודות":""}. השאר — ב"עוד הנחיות".</div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
-        {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[])])];
+        {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])])].filter(t=>!((f.hasPets||f.hasBaby)&&INSTR_NO_WASH.includes(t)&&!f.instructions.includes(t)));
           const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t));
           return instrMore?[...rel,...rest]:rel;})().map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
         <button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות (כלליות)"}</button>
@@ -3513,7 +3534,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
     const fx=!savedLog&&fixRef.current; if(fx){ newLog.replacesId=fx.id; newLog.replaces=fx.docNum||""; fixRef.current=null; }
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls.map(l=>fx&&String(l.id)===String(fx.id)?{...l,replacedBy:newLog.docNum,replacedAt:new Date().toISOString()}:l)]);
@@ -5394,7 +5415,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
+    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt?.id||null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
     if(data.replacesId!=null&&!existing){ newLog.replacesId=data.replacesId; newLog.replaces=data.replaces||""; }
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls.map(l=>newLog.replacesId!=null&&String(l.id)===String(newLog.replacesId)?{...l,replacedBy:newLog.docNum,replacedAt:new Date().toISOString()}:l)]);
@@ -13792,7 +13813,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="218";
+const APP_BUILD="219";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
