@@ -13813,7 +13813,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD="219";
+const APP_BUILD="220";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -14097,6 +14097,30 @@ function App(){
   ]);
   const [execLogsAll,setExecLogs]=useLS("execLogs", []);
   const execLogs = React.useMemo(()=>activeOnly(execLogsAll),[execLogsAll]);
+  // 🔗 קישור אוטומטי: יומן ביצוע / חשבונית שנעשו בלי לפתוח מהתור — מתחברים לתור של אותו לקוח באותו יום
+  const _unlinkSig=(execLogs||[]).filter(l=>!l.deleted&&!l.apptId).map(l=>l.id).join(",")+"|"+(finance||[]).filter(f=>f&&!f.deleted&&f.category==="חשבונית"&&!f.apptId&&!f.execLogId).map(f=>f.id).join(",");
+  React.useEffect(()=>{ const t=setTimeout(()=>{ try{
+      const nN=x=>String(x||"").replace(/[״"׳']/g,"").replace(/\s+/g," ").trim();
+      const custOf=id=>id==null?null:(customers||[]).find(c=>String(c.id)===String(id));
+      const sameCust=(a,cid,name)=>{ if(a.customerId!=null&&cid!=null&&String(a.customerId)===String(cid)) return true; const c=custOf(a.customerId); const names=[a.customerName,c&&c.name,c&&c.placeName,c&&c.bizName].map(nN).filter(Boolean); const n=nN(name); return !!n&&names.includes(n); };
+      const near=(d1,d2)=>{ if(!d1||!d2) return false; const x=Math.abs(new Date(d1+"T12:00:00")-new Date(d2+"T12:00:00"))/864e5; return x<=1; };
+      const live=(appointments||[]).filter(a=>a&&!a.deleted&&!isPersonal(a)&&a.status!=="בוטל");
+      const taken=new Set((execLogs||[]).filter(l=>!l.deleted&&l.apptId!=null).map(l=>String(l.apptId)));
+      const logLinks={};
+      (execLogs||[]).forEach(l=>{ if(l.deleted||l.apptId!=null||l.draft) return;
+        const cands=live.filter(a=>!taken.has(String(a.id))&&sameCust(a,l.customerId,l.clientName)&&near(a.date,l.date)).sort((a,b)=>(a.date===l.date?-1:0)-(b.date===l.date?-1:0));
+        if(cands[0]){ logLinks[l.id]=cands[0].id; taken.add(String(cands[0].id)); } });
+      const allLogs=(execLogs||[]).map(l=>logLinks[l.id]!=null?{...l,apptId:logLinks[l.id]}:l);
+      const docLinks={};
+      (finance||[]).forEach(f=>{ if(!f||f.deleted||f.category!=="חשבונית"||f.apptId||f.execLogId) return;
+        const lg=allLogs.filter(l=>!l.deleted&&!l.draft&&(String(l.customerId)===String(f.customerId)||nN(l.clientName)===nN(f.customer))&&near(l.date,f.date)).sort((a,b)=>(a.date===f.date?-1:0)-(b.date===f.date?-1:0))[0];
+        const ap=lg&&lg.apptId?{id:lg.apptId}:live.filter(a=>sameCust(a,f.customerId,f.customer)&&near(a.date,f.date))[0];
+        if(lg||ap) docLinks[f.id]={...(lg?{execLogId:lg.id}:{}),...(ap?{apptId:ap.id}:{})}; });
+      const nl=Object.keys(logLinks).length, nd=Object.keys(docLinks).length; if(!nl&&!nd) return;
+      const now=new Date().toISOString();
+      if(nl) setExecLogs(ls=>ls.map(l=>logLinks[l.id]!=null&&l.apptId==null?{...l,apptId:logLinks[l.id],updatedAt:now}:l));
+      if(nd) setFinance(fs=>fs.map(f=>docLinks[f.id]&&!f.apptId&&!f.execLogId?{...f,...docLinks[f.id],updatedAt:now}:f));
+    }catch(e){ console.warn("auto-link",e); } },5000); return ()=>clearTimeout(t); },[_unlinkSig,appointments.length]);
   // 🔗 איחוד אוטומטי של כרטיסים כפולים בטוחים (אותו טלפון + אותו שם) — נשאר כרטיס אחד עם כל הפרטים
   React.useEffect(()=>{ const t=setTimeout(()=>{ try{
       const pairs=custSureDups(customers); if(!pairs.length) return;
