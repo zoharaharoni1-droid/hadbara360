@@ -2896,10 +2896,11 @@ function aiNorm(d,chems=[],text=""){
   if(d.reentry0){ out.reentry0=true; out.found.push("זמן מחוץ למקום"); } else if(/^\d+(\.\d+)?$/.test(String(d.reentryAdults||""))){ out.reentryAdults=String(d.reentryAdults); out.found.push("זמן מחוץ למקום"); }
   const pr=String(d.price||"").replace(/[^\d.]/g,""); if(pr){ out.price=pr; out.found.push("מחיר"); }
   if(d.payStatus==="paid"||d.payStatus==="debt") out.payStatus=d.payStatus;
-  const pm=String(d.payMethod||"")||(String(text||"").match(/מזומן|ביט|פייבוקס|paybox|העברה בנקאית|העברה|אשראי|צ'ק|צ׳ק/i)||[""])[0];
+  const PMRX=/מזומן|cash|ביט|\bbit\b|פייבוקס|paybox|העברה|transfer|אשראי|כרטיס|credit|צ'ק|צ׳ק|cheque|check/i;
+  const pm=[d.payMethod,d.payStatus].map(x=>String(x||"")).find(x=>PMRX.test(x))||(String(text||"").match(PMRX)||[""])[0];
   if(!d.payStatus&&/לא שילם|לא שילמה|ישלם|תשלם|חוב/.test(String(text||""))) d={...d,payStatus:"debt"};
   if(d.payStatus==="debt") out.payStatus="debt";
-  out.payMethod=/מזומן/.test(pm)?"מזומן":/ביט/i.test(pm)?"ביט":/פייבוקס|paybox/i.test(pm)?"PayBox":/העבר/.test(pm)?"העברה בנקאית":/אשראי|כרטיס/.test(pm)?"אשראי":/צ.?ק/.test(pm)?"צ'ק":"";
+  out.payMethod=/מזומן|cash/i.test(pm)?"מזומן":/ביט|\bbit\b/i.test(pm)?"ביט":/פייבוקס|paybox/i.test(pm)?"PayBox":/העבר|transfer/i.test(pm)?"העברה בנקאית":/אשראי|כרטיס|credit/i.test(pm)?"אשראי":/צ.?ק|cheque|check/i.test(pm)?"צ'ק":"";
   if(out.payMethod){ if(!out.payStatus) out.payStatus="paid"; if(!out.found.includes("מחיר")) out.found.push("תשלום"); }
   const w=String(d.warranty||"").replace(/\D/g,""); if(w&&w!=="0"&&/אחריות/.test(String(text||""))){ out.warranty=w; out.found.push("אחריות"); }
   if(d.hasPets){ out.hasPets=true; out.found.push("בעלי חיים"); } if(d.hasBaby){ out.hasBaby=true; out.found.push("תינוק"); }
@@ -2953,12 +2954,20 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
       {h.summary&&<div style={{fontSize:14,color:"#4c1d95",marginTop:3}}>🤖 {h.summary}</div>}
       <button type="button" onClick={()=>setOpenT(openT===h.id?null:h.id)} style={{border:"none",background:"none",padding:"4px 0",color:"#6d28d9",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>{openT===h.id?"▲ הסתר מה אמרתי":"▼ מה אמרתי"}</button>
       {openT===h.id&&<div style={{fontSize:13.5,color:"#334155",background:"#faf5ff",borderRadius:8,padding:"6px 10px",marginBottom:6,whiteSpace:"pre-wrap"}}>{h.text}</div>}
+      {(()=>{ const logOk=!h.wantLog||!!lg, docOk=!h.wantInvoice||!!doc; const st=logOk&&docOk?["✅ הושלם","#166534","#dcfce7"]:(lg||doc)?["🟡 הושלם חלקית","#92400e","#fef3c7"]:["⏸ לא הושלם — לא הופק כלום","#991b1b","#fee2e2"];
+        return <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",margin:"2px 0 4px"}}>
+          <span style={{fontSize:12.5,fontWeight:800,color:st[1],background:st[2],borderRadius:20,padding:"3px 10px"}}>{st[0]}</span>
+          {h.wantLog&&<span style={{fontSize:12.5,color:lg?"#1d4ed8":"#94a3b8"}}>📋 יומן: {lg?(lg.draft?"טיוטה":"נשמר #"+lg.docNum):"לא נשמר"}</span>}
+          {h.wantInvoice&&<span style={{fontSize:12.5,color:doc?"#0f766e":"#94a3b8"}}>🧾 חשבונית: {doc?(doc.official?"הופקה "+(doc.invoiceNum||""):"נשמרה כטיוטה"):"לא הופקה"}</span>}
+          {lg&&h.wantInvoice&&!doc&&<button type="button" onClick={()=>go("execlog",{type:"view",id:lg.id})} style={{border:"none",background:"#0f766e",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>🧾 המשך לחשבונית</button>}
+          {!lg&&!doc&&h.res&&<button type="button" onClick={()=>{ onNav&&onNav(); window.__h360Nav&&window.__h360Nav("calendar"); setTimeout(()=>{ try{ window.dispatchEvent(new CustomEvent("h360airesume",{detail:h})); }catch(e){} },350); }} style={{border:"none",background:"#7c3aed",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>↩ המשך מאיפה שעצרתי</button>}
+        </div>; })()}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
         {lg?<><button type="button" onClick={()=>go("execlog",{type:"edit",id:lg.id})} style={ib("#eff6ff","#1d4ed8")}>✏️ ערוך יומן {lg.docNum?"#"+lg.docNum:""}{lg.draft?" (טיוטה)":""}</button>
           <button type="button" onClick={()=>go("execlog",{type:"view",id:lg.id})} style={ib("#fff","#1d4ed8")}>👁 צפה</button></>
-          :<span style={{fontSize:13,color:"#94a3b8",padding:"8px 0"}}>{h.logId!=null?"היומן נמחק":"📋 יומן לא נשמר"}</span>}
+          :h.logId!=null?<span style={{fontSize:13,color:"#94a3b8",padding:"8px 0"}}>היומן נמחק</span>:null}
         {doc?<button type="button" onClick={()=>{ try{ printDoc(doc); }catch(e){ go("invoices"); } }} style={ib("#f0fdfa","#0f766e")}>🧾 {doc.docType||"חשבונית"} {doc.docSeq?"#"+doc.docSeq:""}{doc.draft?" (טיוטה)":""}</button>
-          :h.wantInvoice?<span style={{fontSize:13,color:"#94a3b8",padding:"8px 0"}}>🧾 חשבונית לא נשמרה</span>:null}
+:null}
       </div>
     </div>; })}</div>;
 }
@@ -2967,8 +2976,9 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
   const m0=(mem&&mem.current)||{};
   const [txt,setTxt]=useState(m0.txt||""); const [busy,setBusy]=useState(false); const [err,setErr]=useState(""); const [res,setRes]=useState(m0.res||null);
   const [apptSel,setApptSel]=useState(m0.apptSel||""); const [doLog,setDoLog]=useState(m0.doLog!=null?m0.doLog:true); const [doInv,setDoInv]=useState(!!m0.doInv);
-  React.useEffect(()=>{ if(mem) mem.current={txt,res,apptSel,doLog,doInv}; },[txt,res,apptSel,doLog,doInv]);
-  const reset=()=>{ setTxt(""); setRes(null); setErr(""); setApptSel(""); setDoLog(true); setDoInv(false); };
+  const hidRef=React.useRef(m0.hid||null);
+  React.useEffect(()=>{ if(mem) mem.current={txt,res,apptSel,doLog,doInv,hid:hidRef.current}; },[txt,res,apptSel,doLog,doInv]);
+  const reset=()=>{ setTxt(""); setRes(null); setErr(""); setApptSel(""); setDoLog(true); setDoInv(false); hidRef.current=null; if(mem) mem.current=null; };
   const today=isoLocal();
   const todays=React.useMemo(()=>appointments.filter(a=>a&&!a.deleted&&a.date===today&&a.kind!=="personal"&&a.status!=="בוטל"&&(currentUser.role!=="מדביר"||a.workerId===currentUser.id)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))),[appointments,today]);
   const chems=React.useMemo(()=>aiChemList([],chemMemory(execLogs)),[execLogs]);
@@ -2979,17 +2989,25 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       const r=aiAssist? await aiAssist(t,{appts,chems}) : null;
       let hit=todays.find(a=>String(a.id)===r.apptId);
       if(!hit&&r.customerName){ const k=elNorm(r.customerName); hit=todays.find(a=>{ const n=elNorm([a.customerName,a.contactName,(custOf(a)||{}).placeName].filter(Boolean).join(" ")); return k.length>=2&&n.includes(k); }); }
-      setRes(r); setApptSel(hit?String(hit.id):(todays.length===1?String(todays[0].id):"new")); setDoLog(r.wantLog||!r.wantInvoice); setDoInv(r.wantInvoice);
+      const sel=hit?String(hit.id):(todays.length===1?String(todays[0].id):"new"); const dl=r.wantLog||!r.wantInvoice, di=r.wantInvoice;
+      setRes(r); setApptSel(sel); setDoLog(dl); setDoInv(di);
+      if(hit){ setBusy(false); go({r,sel,dl,di,t}); return; }
     }catch(e){ setErr(e.message||"משהו השתבש"); }
     setBusy(false); };
-  const pickAppt=()=>{ if(apptSel&&apptSel!=="new") return todays.find(a=>String(a.id)===apptSel);
+  const pickAppt=(apptSel,res)=>{ if(apptSel&&apptSel!=="new") return todays.find(a=>String(a.id)===apptSel);
     const nm=res&&res.customerName||""; const k=elNorm(nm);
     const c=k.length>=2&&(customers||[]).find(c=>!c.deleted&&elNorm([c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).join(" ")).includes(k));
     const now=new Date(); return {id:"ai"+Date.now(),_ai:true,customerName:c?custDocName(c):nm,customerId:c?c.id:null,contactName:c&&c.contactName||"",phone:c&&c.phone||"",address:c&&c.address||"",date:today,time:String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0"),pestType:(res.pests||[]).join(", "),pests:res.pests||[],price:parseFloat(res.price)||0,workerId:currentUser.id,status:"ממתין"}; };
-  const go=()=>{ const a=pickAppt(); if(!a) return;
-    const hid=aiHistAdd({text:txt.trim(),summary:res.summary||"",customerName:a.customerName||res.customerName||"",apptId:a._ai?null:a.id,wantLog:doLog,wantInvoice:doInv});
+  function go(o){ const res=o&&o.r||resNow(), apptSel=o&&o.sel||apptSelNow(), doLog=o?o.dl:doLogNow(), doInv=o?o.di:doInvNow(), t=(o&&o.t||txt).trim();
+    const a=pickAppt(apptSel,res); if(!a) return;
+    const entry={text:t,summary:res.summary||"",customerName:a.customerName||res.customerName||"",apptId:a._ai?null:a.id,wantLog:doLog,wantInvoice:doInv,res,apptSel};
+    let hid=hidRef.current; const old=hid&&aiHistGet().find(x=>x.id===hid);
+    if(old&&old.logId==null&&old.docId==null) aiHistUpd(hid,{...entry,ts:new Date().toISOString()}); else hid=aiHistAdd(entry);
+    hidRef.current=hid; if(mem) mem.current={txt:t,res,apptSel,doLog,doInv,hid};
     if(doLog){ onOpenLog(a,{r:res,text:txt.trim(),wantInvoice:doInv,hid}); return; }
-    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_hid:hid}); };
+    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_hid:hid}); }
+  const stRef=React.useRef({}); stRef.current={res,apptSel,doLog,doInv};
+  const resNow=()=>stRef.current.res, apptSelNow=()=>stRef.current.apptSel, doLogNow=()=>stRef.current.doLog, doInvNow=()=>stRef.current.doInv;
   const chips=aiChips(res);
   const tb=(on,c)=>({flex:1,padding:"12px 8px",borderRadius:12,border:"2px solid "+(on?c:"#e2e8f0"),background:on?c+"18":"#fff",color:on?c:"#64748b",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"});
   const [showH,setShowH]=useState(false);
@@ -3003,13 +3021,14 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder="מה עשית ולמי…" style={{width:"100%",boxSizing:"border-box",padding:"12px",borderRadius:12,border:"1.5px solid #c4b5fd",fontSize:16,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,marginTop:8,alignItems:"flex-start",flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t)}/>
-      <button type="button" disabled={busy||!txt.trim()} onClick={run} style={{flex:1,minWidth:150,padding:"11px",borderRadius:12,border:"none",background:busy||!txt.trim()?"#c4b5fd":"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:busy?"wait":"pointer",fontFamily:"inherit"}}>{busy?"🤖 מבין…":"🤖 הבן ומלא"}</button>
+      <button type="button" disabled={busy||!txt.trim()} onClick={run} style={{flex:1,minWidth:150,padding:"11px",borderRadius:12,border:"none",background:busy||!txt.trim()?"#c4b5fd":"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:busy?"wait":"pointer",fontFamily:"inherit"}}>{busy?"🤖 מבין…":"🤖 מלא ופתח טיוטה"}</button>
     </div>
     {err&&<div style={{marginTop:10,fontSize:14,color:"#b45309",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px"}}>⚠️ {err}</div>}
     {res&&<div style={{marginTop:12,border:"1.5px solid #ddd6fe",background:"#faf5ff",borderRadius:12,padding:12}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}>{res.summary?<div style={{fontSize:14.5,color:"#4c1d95",fontWeight:700,marginBottom:8}}>🤖 {res.summary}</div>:<span/>}
         <button type="button" onClick={reset} style={{border:"none",background:"none",color:"#7c3aed",fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",padding:0}}>🧹 התחל מחדש</button></div>
-      {res.ai&&<div style={{fontSize:12.5,color:"#6d28d9",marginBottom:8}}>חסר משהו? תוסיף למעלה (למשל "שילם במזומן") ולחץ שוב "🤖 הבן ומלא".</div>}
+      {res.ai&&<div style={{fontSize:12.5,color:"#6d28d9",marginBottom:8}}>חסר משהו? תוסיף למעלה (למשל "שילם במזומן") ולחץ שוב "🤖 מלא ופתח טיוטה".</div>}
+      {apptSel==="new"&&<div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>👇 לא מצאתי תור היום ללקוח הזה — בחר מהרשימה או המשך בלי תור</div>}
       <div style={{fontSize:13,fontWeight:800,color:"#334155",marginBottom:4}}>👤 ללקוח:</div>
       <select value={apptSel} onChange={e=>setApptSel(e.target.value)} style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",background:"#fff",marginBottom:8}}>
         {todays.map(a=><option key={a.id} value={String(a.id)}>{[a.time,a.customerName,a.address].filter(Boolean).join(" · ")}</option>)}
@@ -3020,7 +3039,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
         <button type="button" onClick={()=>setDoLog(v=>!v)} style={tb(doLog,"#2563eb")}>{doLog?"✓ ":""}📋 יומן ביצוע</button>
         <button type="button" onClick={()=>setDoInv(v=>!v)} style={tb(doInv,"#0f766e")}>{doInv?"✓ ":""}🧾 חשבונית</button>
       </div>
-      <button type="button" disabled={!doLog&&!doInv} onClick={go} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:!doLog&&!doInv?"#94a3b8":"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ פתח טיוטה לבדיקה</button>
+      <button type="button" disabled={!doLog&&!doInv} onClick={()=>go()} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:!doLog&&!doInv?"#94a3b8":"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ פתח טיוטה לבדיקה</button>
       <div style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>שום דבר לא נשמר ולא נשלח עד שתבדוק ותאשר.{doLog&&doInv?" אחרי שמירת היומן — החשבונית נפתחת לבד.":""}</div>
     </div>}</>}
   </Modal>;
@@ -5569,6 +5588,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [invAppt,setInvAppt]=useState(null);
   const [detailAppt,setDetailAppt]=useState(null);
   const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false); const [aiOpen,setAiOpen]=useState(false); const [aiDraft,setAiDraft]=useState(null); const aiMem=React.useRef(null);
+  React.useEffect(()=>{ const f=e=>{ const h=e.detail||{}; aiMem.current={txt:h.text||"",res:h.res||null,apptSel:h.apptSel||"",doLog:h.wantLog!==false,doInv:!!h.wantInvoice,hid:h.id}; setLogAppt(null); setInvAppt(null); setAiOpen(true); }; window.addEventListener("h360airesume",f); return()=>window.removeEventListener("h360airesume",f); },[]);
   const aiBackTo=hid=>{ if(!hid) return; const h=aiHistGet().find(x=>x.id===hid); if(!h) return; const done=(!h.wantLog||h.logId!=null)&&(!h.wantInvoice||h.docId!=null); if(done){ aiMem.current=null; return; } setTimeout(()=>setAiOpen(true),60); };
   const [draggedId,setDraggedId]=useState(null);
   const [dropTarget,setDropTarget]=useState(null);
