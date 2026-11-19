@@ -730,6 +730,28 @@ function ScopeEditor({pests,scope,onChange}){
 }
 const PEST_TYPES_CRM = ["תיקן אמריקאי","תיקן גרמני","עכברים","חולדות","מכרסמים","נמלים","נמלת האש","חרקי מזון","דג הכסף","פשפש המיטה","יתושים","טרמיטים","זבובים","פרעושים","עכבישים","דבורים","צרעות","שלשולים"];
 // מזיקים עם רמת נגיעות לכל מזיק: "תיקן אמריקאי (בינונית), נמלים (קלה)"
+// 🔎 ממצאי ניטור — לכל מזיק הסימנים שלו (לחיצה אחת)
+const MON_RODENT=["גללים","סימני כרסום","שבילי מעבר / כתמי שומן","מחילות / חורים","קן","מכרסם חי נצפה","פגרים","ריח שתן","נזק לכבלים / צנרת"];
+const MON_ROACH=["בוגרים","נימפות (צעירים)","נרתיקי ביצים","צואה (נקודות שחורות)","נשלים","ריח אופייני"];
+const MONITOR_SIGNS={
+  "תיקן אמריקאי":MON_ROACH,"תיקן גרמני":MON_ROACH,
+  "עכברים":MON_RODENT,"חולדות":MON_RODENT,"מכרסמים":MON_RODENT,
+  "נמלים":["שבילי נמלים","קן","נמלים מעופפות","ערמות עפר ליד סדקים","נמלים במזון"],
+  "פרעושים":["פרעושים בוגרים","עקיצות","צואת פרעושים במצעים / שטיחים","בעל חיים נגוע"],
+  "פשפש מיטה":["פשפשים חיים","נשלים","ביצים","כתמי דם במצעים","נקודות צואה שחורות","עקיצות"],
+  "יתושים":["יתושים בוגרים","זחלים במים עומדים","מקווי מים / כלים עם מים"],
+  "זבובים":["זבובים בוגרים","רימות","מקור רקב / אשפה"],
+  "דבורים":["נחיל / קן","פעילות כניסה ויציאה","חלות דבש"],
+  "צרעות":["קן","פעילות כניסה ויציאה"],
+  "טרמיטים":["תעלות בוץ","עץ פגוע / חלול","כנפיים נשורות","טרמיטים חיים"],
+  "עכבישים":["קורים","עכבישים חיים","שקי ביצים"],
+  "קרציות":["קרציות על בעל החיים","קרציות בחצר / בבית"],
+  "חרקי מזון":["חרקים במזון","זחלים","קורים במזון","חורים באריזות","עש מעופף"],
+};
+const MON_DEFAULT=["בוגרים","צעירים","צואה","נשלים","נזק"];
+const MON_NONE="לא נמצאו סימנים";
+const monitorSigns=p=>[...(MONITOR_SIGNS[p]||Object.entries(MONITOR_SIGNS).find(([k])=>String(p||"").includes(k)||k.includes(String(p||"")))?.[1]||MON_DEFAULT),MON_NONE];
+const monitorText=l=>{ const m=(l&&l.monitor)||{}; const parts=Object.entries(m).filter(([,v])=>Array.isArray(v)&&v.length).map(([p,v])=>p+": "+v.join(", ")); if(l&&l.monitorNote) parts.push(String(l.monitorNote).trim()); return parts.join(" · "); };
 const pestsWithLevels=l=>{ const lv=(l&&l.pestLevels)||{}; return (l&&l.pest||[]).map(p=>lv[p]?p+" (נגיעות "+lv[p]+")":p).join(", ")+((!l||!l.pestLevels||!Object.keys(l.pestLevels).length)&&l&&l.pestLevel?" · נגיעות "+l.pestLevel:""); };
 const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
 const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["דבורים","צרעות"]:[p]);
@@ -1489,7 +1511,7 @@ function execLogHtml({company,docNum,log,chemicals}){
       <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔬 פרטי הטיפול</div>
       ${(log.scope||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>המקום המטופל:</b> ${log.scope.join(" · ")}</div>`:""}
       ${(log.services||[]).length?`<div style="font-size:13px;margin-bottom:4px;"><b>השירות שבוצע:</b> ${serviceLabel(log)}</div>`:""}
-      ${(log.pest||[]).length?`<div style="font-size:13px;"><b>מזיקים:</b> ${pestsWithLevels(log)}</div>`:""}${warrLines(log).length?`<div style="font-size:13px;"><b>אחריות:</b> ${warrLines(log).length>1?warrLines(log).map(x=>`<div style="padding-right:10px;">• ${x}</div>`).join(""):warrLines(log)[0]+(String(log.warranty)!=="0"?" מיום הטיפול":"")}</div>`:""}
+      ${(log.pest||[]).length?`<div style="font-size:13px;"><b>מזיקים:</b> ${pestsWithLevels(log)}</div>`:""}${monitorText(log)?`<div style="font-size:13px;"><b>ממצאי ניטור:</b> ${monitorText(log)}</div>`:""}${warrLines(log).length?`<div style="font-size:13px;"><b>אחריות:</b> ${warrLines(log).length>1?warrLines(log).map(x=>`<div style="padding-right:10px;">• ${x}</div>`).join(""):warrLines(log)[0]+(String(log.warranty)!=="0"?" מיום הטיפול":"")}</div>`:""}
       ${log.extermination_notes?`<div style="font-size:13px;margin-top:4px;"><b>הנחיות:</b> ${log.extermination_notes}</div>`:""}
     </div>
     <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a5c3a;">🧪 חומרי הדברה בשימוש</div>
@@ -1547,6 +1569,7 @@ function execLogWAText(log){
     (log.scope||[]).length?"🏠 המקום המטופל: "+log.scope.join(" · "):"",
     (log.services||[]).length?"🧾 השירות שבוצע: "+serviceLabel(log):"",
     pests?"🐛 מזיקים: "+pests:"",
+    monitorText(log)?"🔎 ממצאי ניטור: "+monitorText(log):"",
     log.findings?"🔎 ממצאים: "+log.findings:"",
     mats?"🧪 חומרים:"+mats:"",
     warrLines(log).length?"🛡️ אחריות: "+warrLines(log).join(", "):"",
@@ -2782,7 +2805,10 @@ function elParse(raw,{chemNames=[],memory={},treatMethod={}}={}){
   if(/ג.?וק|תיקנ|תיקן/.test(pt)) add(/גרמני/.test(pt)?"תיקן גרמני":"תיקן אמריקאי");
   if(/גרמני/.test(pt)&&/אמריקא/.test(pt)) { add("תיקן אמריקאי"); add("תיקן גרמני"); }
   [[/נמל/,"נמלים"],[/עכבר/,"עכברים"],[/חולד/,"חולדות"],[/מכרסמ/,"מכרסמים"],[/פרעוש|פרושים/,"פרעושים"],[/יתוש/,"יתושים"],[/זבוב/,"זבובים"],[/דבור/,"דבורים"],[/צרע/,"צרעות"],[/פשפש/,"פשפש מיטה"],[/טרמיט/,"טרמיטים"],[/עכביש/,"עכבישים"],[/קרצי/,"קרציות"]].forEach(([re,n])=>{ if(re.test(pt)) add(n); });
-  if(pests.length){ out.pests=pests; out.found.push("מזיקים"); }
+  if(pests.length){ out.pests=pests; out.found.push("מזיקים");
+    const mon={}; pests.forEach(p=>monitorSigns(p).forEach(sg=>{ const k=elNorm(sg.split(" (")[0].split(" / ")[0]); if(k.length>=3&&N.includes(k)) mon[p]=[...(mon[p]||[]),sg]; }));
+    if(/צואה|גללים/.test(pt)) pests.forEach(p=>{ const sg=monitorSigns(p).find(x=>/צואה|גללים/.test(x)); if(sg&&!(mon[p]||[]).includes(sg)) mon[p]=[...(mon[p]||[]),sg]; });
+    if(Object.keys(mon).length){ out.monitor=mon; out.found.push("ממצאי ניטור"); } }
   const lv=pt.match(/נגיעות\s*(?:ב?רמה\s*)?(קלה|קל|בינונית|גבוהה|חמורה|קשה|כבדה|חזקה)|(קלה|בינונית|גבוהה)\s*(?:של\s*)?נגיעות/);
   if(lv){ const w=lv[1]||lv[2]; out.level=/קל/.test(w)?"קלה":/בינונ/.test(w)?"בינונית":"גבוהה"; out.found.push("רמת נגיעות"); }
   // מקום
@@ -2861,6 +2887,9 @@ function aiNorm(d,chems=[],text=""){
   if(out.payMethod){ if(!out.payStatus) out.payStatus="paid"; if(!out.found.includes("מחיר")) out.found.push("תשלום"); }
   const w=String(d.warranty||"").replace(/\D/g,""); if(w&&w!=="0"&&/אחריות/.test(String(text||""))){ out.warranty=w; out.found.push("אחריות"); }
   if(d.hasPets){ out.hasPets=true; out.found.push("בעלי חיים"); } if(d.hasBaby){ out.hasBaby=true; out.found.push("תינוק"); }
+  if(Array.isArray(d.signs)&&d.signs.length){ const ps=out.pests||[]; const mon={};
+    d.signs.forEach(sg=>{ const t=String(sg||"").trim(); if(!t) return; const tgt=ps.find(p=>monitorSigns(p).includes(t))||ps[0]; if(!tgt) return; const opts=monitorSigns(tgt); const hit=opts.find(o=>o===t)||opts.find(o=>elNorm(o).includes(elNorm(t))||elNorm(t).includes(elNorm(o).split(" (")[0])); if(hit) mon[tgt]=[...new Set([...(mon[tgt]||[]),hit])]; });
+    if(Object.keys(mon).length){ out.monitor=mon; out.found.push("ממצאי ניטור"); } }
   out.notes=String(d.notes||"").trim();
   out.summary=String(d.summary||"").trim(); out.apptId=String(d.apptId||""); out.customerName=String(d.customerName||"").trim();
   out.wantLog=d.wantLog!==false; out.wantInvoice=!!d.wantInvoice; out.ai=true;
@@ -2868,7 +2897,7 @@ function aiNorm(d,chems=[],text=""){
 }
 async function aiAssist(text,{appts=[],chems=[]}={}){
   let tok=SUPA_KEY; try{ const {data}=await sb.auth.getSession(); if(data&&data.session) tok=data.session.access_token; }catch(e){}
-  const ctx={today:isoLocal(),appts,pests:PEST_TYPES_LOG,chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
+  const ctx={today:isoLocal(),appts,pests:PEST_TYPES_LOG,signs:[...new Set([...Object.values(MONITOR_SIGNS).flat(),...MON_DEFAULT,MON_NONE])],chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
   const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),30000);
   let r; try{ r=await fetch(ASSIST_URL,{method:"POST",signal:ctl.signal,headers:{"Content-Type":"application/json","Authorization":"Bearer "+tok,"apikey":SUPA_KEY},body:JSON.stringify({text,ctx})}); }
   catch(e){ clearTimeout(to); throw new Error(e&&e.name==="AbortError"?"לקח יותר מדי זמן":"אין חיבור לאינטרנט"); }
@@ -2883,7 +2912,7 @@ async function aiAssist(text,{appts=[],chems=[]}={}){
 }
 // מיזוג: מה שהעוזר הבין קובע; חומרים שהזיהוי הרגיל מצא בשם מדויק — נוספים
 function aiMerge(ai,loc){ if(!loc) return ai; const o={...ai}; if((loc.materials||[]).length){ o.materials=[...new Set([...(ai.materials||[]),...loc.materials])]; if(!o.found.includes("חומרים")) o.found=[...o.found,"חומרים"]; } return o; }
-function aiChips(r){ if(!r) return []; return [r.pests&&"🐛 "+r.pests.join(", ")+(r.level?" ("+r.level+")":""),r.placeType&&"🏠 "+r.placeType,(r.materials||[]).length&&"🧪 "+r.materials.join(", ")+(r.methodHint?" · "+r.methodHint:""),(r.areas||[]).length&&"📍 "+r.areas.join(", "),(r.boxesNew||r.boxesRefill)&&"🪤 "+[r.boxesNew?r.boxesNew+" חדשות":"",r.boxesRefill?"מילוי "+r.boxesRefill:""].filter(Boolean).join(" + "),r.reentry0?"🚪 אין צורך לצאת":r.reentryAdults&&"🚪 לצאת "+r.reentryAdults+" שעות",r.price&&"💰 "+r.price+" ₪"+(r.payStatus==="debt"?" · חוב":r.payMethod?" · "+r.payMethod:""),r.warranty&&"🛡️ אחריות "+r.warranty+" חודשים",r.hasPets&&"🐕 בעלי חיים",r.hasBaby&&"👶 תינוק"].filter(Boolean); }
+function aiChips(r){ if(!r) return []; return [r.pests&&"🐛 "+r.pests.join(", ")+(r.level?" ("+r.level+")":""),r.placeType&&"🏠 "+r.placeType,(r.materials||[]).length&&"🧪 "+r.materials.join(", ")+(r.methodHint?" · "+r.methodHint:""),(r.areas||[]).length&&"📍 "+r.areas.join(", "),(r.boxesNew||r.boxesRefill)&&"🪤 "+[r.boxesNew?r.boxesNew+" חדשות":"",r.boxesRefill?"מילוי "+r.boxesRefill:""].filter(Boolean).join(" + "),r.reentry0?"🚪 אין צורך לצאת":r.reentryAdults&&"🚪 לצאת "+r.reentryAdults+" שעות",r.price&&"💰 "+r.price+" ₪"+(r.payStatus==="debt"?" · חוב":r.payMethod?" · "+r.payMethod:""),r.warranty&&"🛡️ אחריות "+r.warranty+" חודשים",r.hasPets&&"🐕 בעלי חיים",r.hasBaby&&"👶 תינוק",r.monitor&&"🔎 "+Object.values(r.monitor).flat().join(", ")].filter(Boolean); }
 
 // 🕘 היסטוריית העוזר — נשמרת במכשיר: מה ביקשת, מה הוא הבין, ואיזה יומן / חשבונית נוצרו
 const AIH_KEY="h360_ai_hist";
@@ -3032,6 +3061,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     exterminate:   initialData?.exterminate ?? true,
     services:      initialData?.services      || [],
     findings:      initialData?.findings      || "",
+    monitor:       initialData?.monitor       || {},
+    monitorNote:   initialData?.monitorNote   || "",
     pestLevels:    initialData?.pestLevels    || (initialData?.pestLevel&&["קלה","בינונית","גבוהה"].includes(initialData.pestLevel)?Object.fromEntries((initialData.pest||[]).map(p=>[p,initialData.pestLevel])):{}),
     materials:     initialData?.materials_raw || initialData?.materials || [],
     extermination_notes: initialData?.extermination_notes || "",
@@ -3166,6 +3197,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       else if(r.payMethod){ nx.paymentMethod=r.payMethod; }
       if(r.warranty) nx.warranty=r.warranty;
       if(r.hasPets) nx.hasPets=true; if(r.hasBaby) nx.hasBaby=true;
+      if(r.monitor&&Object.keys(r.monitor).length){ const m={...(x.monitor||{})}; Object.entries(r.monitor).forEach(([p,v])=>{ m[p]=[...new Set([...(m[p]||[]),...v])]; }); nx.monitor=m; }
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
@@ -3261,7 +3293,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       {!f.exterminate&&<div className="h360-hint" style={{fontSize:12,color:"#475569",marginTop:8}}>ללא הדברה — מזיקים, חומרים וזמני יציאה אינם חובה. רשמו ממצאים והמלצות.</div>}
     </div>)}
     {sec("place","🏠","המקום המטופל",placeSum,placeSum?"ok":"opt",<PlaceEditor place={f.place} onChange={v=>set("place",v)}/>)}
-    {sec("pests","🐛","מזיקים ורמת נגיעות",levelPests.map(p=>f.pestLevels[p]?p+" ("+f.pestLevels[p]+")":p).join(", ")||allPests.join(", "),allPests.length&&!missingLevel.length?"ok":(f.exterminate?"req":"opt"),<>
+    {sec("pests","🐛","מזיקים, נגיעות וממצאי ניטור",(levelPests.map(p=>f.pestLevels[p]?p+" ("+f.pestLevels[p]+")":p).join(", ")||allPests.join(", "))+(monitorText(f)?" · 🔎 "+monitorText(f):""),allPests.length&&!missingLevel.length?"ok":(f.exterminate?"req":"opt"),<>
     <div style={{marginBottom:14}}>
       <PestPickerDk selected={f.pest} onChange={v=>set("pest",v)}/>
       <div style={{marginTop:8,display:"flex",gap:8,alignItems:"center"}}>
@@ -3280,6 +3312,15 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
             style={{padding:"6px 4px",borderRadius:8,border:"1.5px solid "+(on?"#2563eb":"#e2e8f0"),background:on?"#eff6ff":"#fff",color:on?"#1e3a8a":"#334155",fontSize:13,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{lv}</button>;})}
         </div>
       </div>)}
+    </div>}
+    {allPests.length>0&&<div style={{marginTop:12,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"8px 10px"}}>
+      <div style={{fontSize:12.5,color:"#166534",fontWeight:800,marginBottom:4}}>🔎 ממצאי ניטור — מה ראית?</div>
+      {allPests.map(p=>{ const sel=(f.monitor||{})[p]||[]; return <div key={p} style={{padding:"6px 0",borderTop:"1px dashed #bbf7d0"}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:5}}>{p}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{monitorSigns(p).map(t=>{ const on=sel.includes(t); return <button key={t} type="button" onClick={()=>setF(x=>{ const cur=(x.monitor||{})[p]||[]; let nv=on?cur.filter(y=>y!==t):(t===MON_NONE?[MON_NONE]:[...cur.filter(y=>y!==MON_NONE),t]); return {...x,monitor:{...(x.monitor||{}),[p]:nv}}; })}
+          style={{padding:"7px 11px",borderRadius:20,border:"1.5px solid "+(on?"#16a34a":"#d1d5db"),background:on?"#dcfce7":"#fff",color:on?"#14532d":"#334155",fontSize:13.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{t}</button>; })}</div>
+      </div>; })}
+      <input value={f.monitorNote||""} onChange={e=>set("monitorNote",e.target.value)} placeholder="ממצא נוסף (חופשי)…" style={{width:"100%",boxSizing:"border-box",marginTop:8,padding:"9px 10px",borderRadius:8,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit"}}/>
     </div>}
     </>)}
     {f.services.length>0&&sec("findings","🔎","ממצאים והמלצות",f.findings?f.findings.slice(0,50)+(f.findings.length>50?"…":""):"",f.findings?"ok":"opt",<div>
@@ -3685,7 +3726,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     const wName = data.workerName || aptWorker?.name || workerObj.name;
     const wLicense = data.workerLicense || selW?.licenseNum || aptWorker?.licenseNum || workerObj.licenseNum || "";
     const wId = selW?.id || aptWorker?.id || workerObj.id || null;
-    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
+    const newLog={id:savedLog?savedLog.id:nextId(execLogs),docNum:savedLog?savedLog.docNum:nextExecNum(execLogs),apptId:prefillAppt?.id||savedLog?.apptId||null,customerId:data.customerId||prefillAppt?.customerId||savedLog?.customerId||null,phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:wId,workerName:wName,workerDocName:docNameOf(selW||aptWorker||workerObj)||wName,workerLicense:wLicense,safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},monitor:data.monitor||{},monitorNote:data.monitorNote||"",exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
     const fx=!savedLog&&fixRef.current; if(fx){ newLog.replacesId=fx.id; newLog.replaces=fx.docNum||""; fixRef.current=null; }
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>savedLog?ls.map(l=>l.id===newLog.id?newLog:l):[newLog,...ls.map(l=>fx&&String(l.id)===String(fx.id)?{...l,replacedBy:newLog.docNum,replacedAt:new Date().toISOString()}:l)]);
@@ -5074,11 +5115,12 @@ function myWorkerFor(currentUser,workers){
   return ws.find(w=>String(w.crmUserId)===String(currentUser&&currentUser.id))||ws.find(w=>String(w.name||"").trim()===String(currentUser&&currentUser.name||"").trim())||null;
 }
 // ═══ ✍️ רישום מהיר ביומן: מלל חופשי בשעה שבחרת (כמו ביומן גוגל) — בלי טופס. אפשר להשלים להזמנה מסודרת אחר כך ═══
-function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConvert}){
+function FreeNoteForm({prefill={},workers=[],customers=[],currentUser,onSave,onCancel,onConvert,text,setText}){
   const me=myWorkerFor(currentUser,workers);
   const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
   const addHour=t=>{const [h,m]=String(t||"09:00").split(":").map(n=>parseInt(n)||0);return String(Math.min(h+2,23)).padStart(2,"0")+":"+String(m).padStart(2,"0");};
-  const [txt,setTxt]=useState("");
+  const [txtL,setTxtL]=useState(""); const txt=text!=null?text:txtL; const setTxt=v=>{ const nv=typeof v==="function"?v(txt):v; if(setText) setText(nv); else setTxtL(nv); };
+  const ilC=useIlCities(); const cityNames=React.useMemo(()=>ilC.map(c=>c.name),[ilC.length]);
   const [date,setDate]=useState(prefill.date||todayStr());
   const [from,setFrom]=useState(prefill.time||"08:00");
   const [to,setTo]=useState("");
@@ -5086,7 +5128,9 @@ function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConve
   const [kind,setKind]=useState("job");
   const [wid,setWid]=useState(String(prefill.workerId??(me?me.id:(techs[0]||{}).id??"")));
   const ta=React.useRef(null); React.useEffect(()=>{ setTimeout(()=>{ try{ ta.current&&ta.current.focus(); }catch(e){} },150); },[]);
-  const r=React.useMemo(()=>txt.trim()?waParse(txt,[]):null,[txt]);
+  const r=React.useMemo(()=>txt.trim()?waParse(txt,cityNames):null,[txt,cityNames.length]);
+  const known=React.useMemo(()=>{ if(!r) return null; const byPh=r.phone?custFindByPhone(customers,r.phone):null; if(byPh) return byPh;
+    const k=elNorm(r.name||""); return k.length>=3?(customers||[]).find(c=>!c.deleted&&elNorm(custDocName(c))===k)||null:null; },[r&&r.phone,r&&r.name,customers.length]);
   const fld={width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid #d1d5db",fontSize:15,boxSizing:"border-box",background:"#fff",fontFamily:"inherit"};
   const lbl={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
   const add=t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t);
@@ -5099,10 +5143,10 @@ function FreeNoteForm({prefill={},workers=[],currentUser,onSave,onCancel,onConve
     if(kind==="personal"){ onSave({...base,kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,blockDay:false,notes:text}); return; }
     const p=r||{}; const street=[p.street,p.buildingNum].filter(Boolean).join(" "); const addr=[street,p.city].filter(Boolean).join(", ");
     const PK=(p.pests||[]).filter(x=>PEST_TYPES_CRM.includes(x));
-    onSave({...base,kind:"free",freeText:text,rawMsg:text,customerName:p.name||title,customerId:null,phone:p.phone||"",address:addr,pestType:(p.pests||[]).join(", "),pests:PK,price:parseInt(p.price)||0,
+    onSave({...base,kind:"free",freeText:text,rawMsg:text,customerName:(known?custDocName(known):"")||p.bizName||p.name||title,contactName:(known&&known.contactName)||(p.bizName&&p.name?p.name:""),customerId:known?known.id:null,phone:p.phone||(known&&known.phone)||"",address:addr||(known&&known.address)||"",pestType:(p.pests||[]).join(", "),pests:PK,price:parseInt(p.price)||0,
       notes:"",aptNum:p.aptNum||"",entrance:p.entrance||"",floor:p.floor||"",propertyType:p.propertyType||"",executionLog:null});
   };
-  const chips=r?[r.name&&"👤 "+r.name,r.phone&&"📞 "+r.phone,(r.street||r.city)&&"📍 "+[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", "),(r.pests||[]).length&&"🐛 "+r.pests.join(", "),r.price&&"₪"+r.price].filter(Boolean):[];
+  const chips=r?[known&&"✅ לקוח קיים: "+custDocName(known),r.bizName&&"🏪 "+r.bizName,r.name&&"👤 "+r.name,r.phone&&"📞 "+r.phone,(r.street||r.city)&&"📍 "+[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", "),(r.pests||[]).length&&"🐛 "+r.pests.join(", "),r.price&&"₪"+r.price].filter(Boolean):[];
   return <div>
     <div className="h360-hint" style={{fontSize:12,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 12px",marginBottom:10}}>✍️ כתוב או הקלט חופשי — כמו ביומן גוגל. נכנס ליומן בשעה שבחרת. אפשר להשלים להזמנה מסודרת אחר כך מתוך התור.</div>
     <textarea ref={ta} value={txt} onChange={e=>setTxt(e.target.value)} rows={6} placeholder={"למשל: דיברתי עם רונית, הרצל 12 רמת גן, ג'וקים, 350, 0521234567, לחייג חצי שעה לפני"} style={{...fld,fontSize:16,resize:"vertical",marginBottom:6}}/>
@@ -5394,14 +5438,15 @@ function qaTitle(text){
   if(t.length>70) t=t.slice(0,68).replace(/\s+\S*$/,"")+"…";
   return t||"משימה";
 }
-function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTask,onUndo,onOpenFull,cityNames}){
+function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTask,onUndo,onOpenFull,cityNames:cityNames0}){
+  const _ilc=useIlCities(); const cityNames=cityNames0&&cityNames0.length?cityNames0:_ilc.map(c=>c.name);
   const me=myWorkerFor(currentUser,workers);
   const techs=(workers||[]).filter(w=>!w.deleted&&w.status!=="לא פעיל");
   const [txt,setTxt]=useState(""); const [kind,setKind]=useState(null); const [wid,setWid]=useState(me?String(me.id):(techs[0]?String(techs[0].id):""));
   const [done,setDone]=useState(null); const voice=React.useRef(false); const fired=React.useRef(false);
   const clean=txt.replace(QA_TRIGGER,"").trim();
   const trig=txt.trim().match(QA_TRIGGER);
-  const r0=React.useMemo(()=>clean?waParse(clean,cityNames):null,[clean]);
+  const r0=React.useMemo(()=>clean?waParse(clean,cityNames):null,[clean,cityNames.length]);
   const [ov,setOv]=useState({}); const r=r0?sfMerge(r0,ov):null;
   const autoKind=r?qaKind(clean,r0):"job"; const k=kind||autoKind;
   React.useEffect(()=>{ if(trig&&trig[1]){ const w=qaWorker(trig[1],workers,me); if(w) setWid(String(w.id)); } },[trig&&trig[1]]);
@@ -5421,13 +5466,14 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       const PK=r.pests||[]; const known=PK.filter(p=>PEST_TYPES_CRM.includes(p));
       const street=[r.street,r.buildingNum].filter(Boolean).join(" "); const addr=[street,r.city].filter(Boolean).join(", ");
       const pt=r.propertyType||"דירה";
-      const shared=r.propertyType==="בניין משותף"; const cust={name:shared?("ועד הבית"+(street?" "+street:"")+(r.city&&!street?" "+r.city:"")):(r.name||"לא צוין"),contactName:shared?(r.name||""):"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
+      const shared=r.propertyType==="בניין משותף"; const cust={name:shared?("ועד הבית"+(street?" "+street:"")+(r.city&&!street?" "+r.city:"")):(r.bizName||r.name||"לא צוין"),contactName:shared||r.bizName?(r.name||""):"",phone:r.phone||"",email:"",address:addr||r.city||"—",city:r.city||"",street,buildingNum:"",aptNum:r.aptNum||"",entrance:r.entrance||"",
         propertyType:pt,rooms:pt==="בניין משותף"?"":(r.rooms||""),levels:"1",floors:"",sewers:"",floor:r.floor||"",hasYard:!!r.hasYard,buildingAreas:[],underground:"0",propertyNotes:"",
         status:"פעיל",notes:[r.boxesNote,r.sewerNote,...(r.notes||[])].filter(Boolean).join("\n"),pestType:PK.join(", "),pests:PK,lastPrice:r.price||"",source:r.brand||"",totalPaid:0,lastTreatment:""};
       const appt={contactName:cust.contactName,propertyNotes:"",underground:"0",workerId:w?w.id:null,workerName:w?w.name:"",date,time:hasTime?r.timeFrom:"07:00",timeWindow:hasTime?r.timeFrom+(r.timeTo?"–"+r.timeTo:""):ALL_DAY_TW,
         pestType:PK.join(", ")||"הדברה",pests:PK,price:parseInt(r.price)||0,address:addr,notes:cust.notes,aptNum:r.aptNum||"",entrance:r.entrance||"",unit:unitLine({floor:r.floor||"",aptNum:r.aptNum||"",entrance:r.entrance||""}),
         buildingAreas:[],propertyType:pt,rooms:cust.rooms,levels:"1",floor:r.floor||"",floors:"",hasYard:!!r.hasYard,sewers:"",status:"ממתין",executionLog:null,source:r.brand||"",rawMsg:clean,extraContacts:(r.contacts||[]).filter((c,i)=>i>0||c.role).map(c=>({role:c.role||"",name:c.name||"",phone:c.phone}))};
-      const saved=onSaveJob(cust,appt); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
+      const ex=r.phone?custFindByPhone(customers||[],r.phone):null;
+      const saved=ex?onSaveJob({...ex,_existing:true},{...appt,contactName:appt.contactName||ex.contactName||"",address:appt.address&&appt.address!=="—"?appt.address:(ex.address||appt.address)}):onSaveJob(cust,appt); if(ex) cust.name=custDocName(ex); setDone({kind:"job",label:cust.name+" · "+(appt.pestType),date,ref:saved});
     }
     try{navigator.vibrate&&navigator.vibrate([30,40,30]);}catch(e){}
   };
@@ -5483,7 +5529,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [wk,setWk]=useState(0);
   const [showNew,setShowNew]=useState(false);
   const [newKind,setNewKind]=useState("job");
-  const [showQuick,setShowQuick]=useState(false);
+  const [showQuick,setShowQuick]=useState(false); const [freeDraft,setFreeDraft]=useState("");
   const [fullText,setFullText]=useState(null);
   const [convertId,setConvertId]=useState(null);
   const [fullEdit,setFullEdit]=useState(null); // תור לעריכה מלאה (כמו הזמנת עבודה)
@@ -5566,7 +5612,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const saveLog=(data,existing)=>{
     const aptWorker=workers.find(w=>w.name===data.workerName)||workers.find(w=>w.id===logAppt?.workerId)||{};
     const id=existing?existing.id:nextId(execLogs);
-    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt&&!logAppt._ai?logAppt.id:null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
+    const newLog={...(existing?Object.fromEntries(["sentAt","reviewRequestedAt","invoiceNum","createdAt"].filter(k=>existing[k]!=null).map(k=>[k,existing[k]])):{}),id,docNum:existing?existing.docNum:nextExecNum(execLogs),phone:data.phone||"",workerLicenseType:data.workerLicenseType||"",extraWorkers:data.extraWorkers||[],scope:data.scope||[],maintenanceId:data.maintenanceId||null,stationChecks:data.stationChecks||[],apptId:logAppt&&!logAppt._ai?logAppt.id:null,customerId:data.customerId||logAppt?.customerId||null,date:data.date,clientName:data.clientName,contactName:data.contactName||"",address:data.address,structureType:data.structureType,pest:data.pest,pestLevel:data.pestLevel,materials:data.materials,extermination_notes:data.extermination_notes,warranty:data.warranty,warrantyByPest:data.warrantyByPest||{},warrantyMode:data.warrantyMode||"",notes:data.notes,workerId:aptWorker.id||logAppt?.workerId||null,workerName:data.workerName||aptWorker.name||workerObj.name,workerDocName:docNameOf(aptWorker.name?aptWorker:workerObj)||data.workerName||aptWorker.name||workerObj.name,workerLicense:data.workerLicense||aptWorker.licenseNum||workerObj.licenseNum||"",safetyText:data.safety,paymentDone:data.paymentDone,paymentNote:data.paymentNote,paymentMethod:data.paymentDone?(data.paymentMethod||""):"",paymentAmount:data.paymentDone?(data.paymentAmount||""):"",paymentStatus:data.paymentStatus||(data.paymentDone?"paid":"debt"),agreedPrice:data.agreedPrice||"",paymentDebt:data.paymentDebt||"",devices:(data.devices||[]).filter(d=>d.type),reentry:data.reentry||{},instructions:data.instructions||[],hasPets:!!data.hasPets,hasBaby:!!data.hasBaby,terms:(data.terms||[]).filter(t=>t&&(t.title||t.text)),place:data.place||null,pestLevels:data.pestLevels||{},monitor:data.monitor||{},monitorNote:data.monitorNote||"",exterminate:data.exterminate!==false,services:data.services||[],findings:data.findings||"",unit:data.unit||"",placePhone:data.placePhone||"",draft:!!data.draft,placeName:data.placeName||"",taxId:data.taxId||"",freeText:data.freeText||""};
     if(data.replacesId!=null&&!existing){ newLog.replacesId=data.replacesId; newLog.replaces=data.replaces||""; }
     ensureLogCustomer(newLog,customers,setCustomers);
     setExecLogs(ls=>existing?ls.map(l=>l.id===id?newLog:l):[newLog,...ls.map(l=>newLog.replacesId!=null&&String(l.id)===String(newLog.replacesId)?{...l,replacedBy:newLog.docNum,replacedAt:new Date().toISOString()}:l)]);
@@ -5759,12 +5805,12 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         </tr>)}</tbody>
       </table>
     </div>}
-    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":newKind==="free"?"✍️ רישום מהיר — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>{setShowNew(false);setFullText(null);setConvertId(null);}} width={newKind==="job"?860:540}>
+    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":newKind==="free"?"✍️ רישום מהיר — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>{setShowNew(false);setFullText(null);setConvertId(null);setFreeDraft("");}} width={newKind==="job"?860:540}>
       <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:12}}>
-        {[["free","✍️ רישום מהיר"],["job","🐜 הזמנת עבודה"],["personal","📌 משימה"]].map(([k,l])=><button key={k} type="button" onClick={()=>setNewKind(k)} style={{flex:1,padding:"9px 6px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:newKind===k?800:500,background:newKind===k?"#fff":"transparent",color:newKind===k?(k==="personal"?PERSONAL_CLR:CLR.primary):"#64748b",boxShadow:newKind===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
+        {[["free","✍️ רישום מהיר"],["job","🐜 הזמנת עבודה"],["personal","📌 משימה"]].map(([k,l])=><button key={k} type="button" onClick={()=>{ if(k==="job"&&newKind==="free"&&freeDraft.trim()&&(!fullText||fullText.text!==freeDraft)) setFullText({text:freeDraft,n:Date.now()}); setNewKind(k); }} style={{flex:1,padding:"9px 6px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:newKind===k?800:500,background:newKind===k?"#fff":"transparent",color:newKind===k?(k==="personal"?PERSONAL_CLR:CLR.primary):"#64748b",boxShadow:newKind===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
       </div>
-      {newKind==="free"?<FreeNoteForm prefill={prefill} workers={workers} currentUser={currentUser} onCancel={()=>setShowNew(false)}
-        onSave={t=>{setAppointments(as=>[...as,{...t,id:nextId(as)}]);setShowNew(false);showToast("✅ נרשם ביומן");}}
+      {newKind==="free"?<FreeNoteForm prefill={prefill} workers={workers} customers={customers} currentUser={currentUser} text={freeDraft} setText={setFreeDraft} onCancel={()=>{setShowNew(false);setFreeDraft("");}}
+        onSave={t=>{setAppointments(as=>[...as,{...t,id:nextId(as)}]);setShowNew(false);setFreeDraft("");showToast("✅ נרשם ביומן");}}
         onConvert={(text,pf)=>{setPrefill(x=>({...x,...pf}));setFullText({text,n:Date.now()});setNewKind("job");}}/>
       :newKind==="personal"?<PersonalTaskForm prefill={prefill} workers={workers} currentUser={currentUser} onCancel={()=>setShowNew(false)} onSave={t=>{setAppointments(as=>[...as,{...t,id:nextId(as)}]);setShowNew(false);}}/>:<>
       <div style={{fontSize:12,color:CLR.muted,marginBottom:12,background:CLR.primaryLight,borderRadius:8,padding:"8px 12px"}}>
@@ -5786,7 +5832,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {showQuick&&<QuickAddModal workers={workers} currentUser={currentUser} customers={customers} cityNames={[]}
       onClose={()=>{setShowQuick(false);backIfReq();}}
       onSaveTask={t=>{let id;setAppointments(as=>{id=nextId(as);return [...as,{...t,id}];});setDayDate(new Date(t.date+"T12:00:00"));return {apptId:()=>id};}}
-      onSaveJob={(c,a)=>{const cid=nextId(customers);let aid;setCustomers(cs=>[...cs,{...c,id:cid}]);setAppointments(as=>{aid=nextId(as);return [...as,{...a,customerId:cid,customerName:c.name,id:aid}];});setDayDate(new Date(a.date+"T12:00:00"));return {apptId:()=>aid,custId:()=>cid};}}
+      onSaveJob={(c,a)=>{ if(c._existing){ let aid; setAppointments(as=>{aid=nextId(as);return [...as,{...a,customerId:c.id,customerName:custDocName(c),id:aid}];}); setDayDate(new Date(a.date+"T12:00:00")); return {apptId:()=>aid}; } const cid=nextId(customers);let aid;setCustomers(cs=>[...cs,{...c,id:cid}]);setAppointments(as=>{aid=nextId(as);return [...as,{...a,customerId:cid,customerName:c.name,id:aid}];});setDayDate(new Date(a.date+"T12:00:00"));return {apptId:()=>aid,custId:()=>cid};}}
       onUndo={d=>{const r=d.ref||{}; const aid=r.apptId&&r.apptId(); if(aid!=null) setAppointments(as=>as.filter(x=>x.id!==aid)); const cid=r.custId&&r.custId(); if(cid!=null) setCustomers(cs=>cs.filter(x=>x.id!==cid)); showToast("↩ בוטל");}}
       onOpenFull={txt=>{setShowQuick(false);setFullText({text:txt,n:Date.now()});setPrefill({});setNewKind("job");setShowNew(true);}}/>}
     {editTask&&<Modal title={"📌 "+personalTitle(editTask)} onClose={()=>{setEditTask(null);backIfReq();}} width={520}>
