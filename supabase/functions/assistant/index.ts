@@ -110,6 +110,7 @@ Deno.serve(async (req) => {
       "Re-entry times: split by group. 'שעה מחוץ לדירה' = adults 1. 'בעלי חיים ונשים בהריון 4 שעות' = reentryAnimals 4 and reentryBabies 4.",
       "Place: 'דירת סטודיו' / 'דירה' = placeType דירה; 'שני חדרים' = rooms 2.",
       "Address: split into city / street / houseNum / floor / apt (e.g. 'רחוב הקשת 31, תל אביב קומה שנייה דירה 3' = street הקשת, houseNum 31, city תל אביב, floor 2, apt 3).",
+      "Templates: when he says 'תבנית ...' (a saved template name, or 'תבנית 2 של תיקן אמריקאי'), the app fills everything from the template. Return ONLY what he explicitly said besides the template; never treat the template number as hours, price, rooms or floor.",
       "Numbered instructions: when he says 'הנחיה/הנחיות' followed by numbers (e.g. 'הנחיות 1, 3 ו-7', 'הנחיות 1 עד 4'), the app maps those numbers itself. Do NOT return instructions for them, and NEVER use those numbers as hours, rooms, price, floor or warranty.",
       "Warranty by date: 'אחריות עד 1/4' or 'עד אפריל' is handled by the app; leave warranty empty unless he said a number of months/years.",
       "Instructions: when he mentions an instruction briefly (e.g. 'לא לשטוף 24 שעות', 'לאוורר', 'לא לגעת בתחנות'), return the matching full text(s) from the instructions list. Only ones he said.",

@@ -910,6 +910,37 @@ function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect
 const termsAuto=(tpl,pests,hasSpray,place)=>{ const pt=String((place&&place.type)||""), ex=JSON.stringify((place&&place.extras)||[]); const out=/בניין|עסק|מחסן|מסעדה|משרד|גן/.test(pt)||/חצר|גינה/.test(ex);
   return termsRelevant(tpl,pests,hasSpray).filter(t=>t.id==="p_rodent_in"?!out:t.id==="p_rodent_out"?out:true); };
 const termsRelevant=(tpl,pests,hasSpray)=>{ const P=hebFin((pests||[]).join(" ")); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(hebFin(k)))&&!(t.not||[]).some(k=>P.includes(hebFin(k)))); };
+
+// ── 📌 תבניות יומן ביצוע: "מתכון" שמור (מזיק, מקום, חומרים, זמני יציאה, הנחיות, מהות הטיפול, אחריות). נשמר בענן, מספור לפי מזיק ──
+const LOGTPL_KEY="h360_log_tpl";
+const logTplGet=()=>{ try{ const a=JSON.parse(localStorage.getItem(LOGTPL_KEY)||"[]"); return Array.isArray(a)?a:[]; }catch(e){ return []; } };
+async function logTplLoad(){ if(!sb) return logTplGet(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const f=(data||[]).filter(x=>/^logtpl-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return logTplGet();
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return logTplGet(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)){ localStorage.setItem(LOGTPL_KEY,JSON.stringify(v)); return v; } }catch(e){} return logTplGet(); }
+async function logTplSave(list){ localStorage.setItem(LOGTPL_KEY,JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-logtpl")); }catch(e){} if(!sb) return; const n="company/logtpl-"+String(Date.now()).padStart(15,"0")+".json"; await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
+function useLogTpl(){ const [l,setL]=useState(()=>logTplGet()); React.useEffect(()=>{ let on=true; logTplLoad().then(v=>on&&setL(v)); const h=()=>setL(logTplGet()); window.addEventListener("h360-logtpl",h); return ()=>{on=false;window.removeEventListener("h360-logtpl",h);}; },[]); return l; }
+const logTplLive=l=>(l||[]).filter(t=>t&&!t.deleted);
+const logTplPest=t=>(t&&t.data&&((t.data.pest||[])[0]||t.data.customPest))||"כללי";
+const logTplNum=(list,t)=>logTplLive(list).filter(x=>logTplPest(x)===logTplPest(t)).findIndex(x=>x.id===t.id)+1;
+const logTplTag=(list,t)=>logTplPest(t)+" "+logTplNum(list,t);
+// אחריות עם תאריך נשמרת יחסית ("@04-01") — בכל יומן הופכת לשנה שאחרי תאריך היומן
+const logTplRelW=v=>isWarrDate(v)?"@"+String(v).slice(5):v;
+const logTplSnap=f=>{ const c=o=>JSON.parse(JSON.stringify(o==null?null:o)); const pl=f.place||{};
+  return {pest:c(f.pest||[]),customPest:f.customPest||"",place:{type:pl.type||"",extras:c(pl.extras||[])},materials:c(f.materials||[]),devices:c(f.devices||[]),reentry:c(f.reentry||{}),hasPets:!!f.hasPets,hasBaby:!!f.hasBaby,
+    instructions:c(f.instructions||[]),terms:c(f.terms||[]),warranty:logTplRelW(f.warranty||""),warrantyMode:f.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(f.warrantyByPest||{}).map(([k,v])=>[k,logTplRelW(v)]))}; };
+const logTplApply=(t,x)=>{ const d=JSON.parse(JSON.stringify((t&&t.data)||{})); const y=(parseInt(String(x.date||"").slice(0,4))||new Date().getFullYear())+1; const wd=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?y+"-"+String(v).slice(1):(v||"");
+  return {...x,exterminate:true,pest:[...new Set([...(x.pest||[]),...(d.pest||[])])],customPest:x.customPest||d.customPest||"",place:{...(x.place||{}),...(d.place&&d.place.type?{type:d.place.type}:{}),extras:[...new Set([...((x.place||{}).extras||[]),...((d.place||{}).extras||[])])]},
+    materials:d.materials||x.materials,devices:d.devices||x.devices,reentry:d.reentry||x.reentry,hasPets:!!(d.hasPets||x.hasPets),hasBaby:!!(d.hasBaby||x.hasBaby),instructions:d.instructions||x.instructions,terms:d.terms||x.terms,
+    warranty:wd(d.warranty),warrantyMode:d.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(d.warrantyByPest||{}).map(([k,v])=>[k,wd(v)])),tplName:t.name}; };
+const logTplWarrTxt=d=>{ const f=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?"עד "+parseInt(String(v).slice(4,6))+"/"+parseInt(String(v).slice(1,3))+" בשנה שאחרי":warrLabel(v); const bp=Object.entries(d.warrantyByPest||{}).filter(([,v])=>String(v||"").trim()); return bp.length?bp.map(([k,v])=>k+": "+f(v)).join(" · "):f(d.warranty); };
+// העוזר: "תבנית אמריקאי דירה" (לפי שם) או "תבנית 2 של תיקן אמריקאי" / "תבנית תיקן אמריקאי 2" (לפי מזיק ומספר)
+const TPL_ORD={"ראשונה":1,"ראשון":1,"שנייה":2,"שניה":2,"שלישית":3,"רביעית":4,"חמישית":5};
+function aiTplFind(T,list){ T=String(T||""); if(!/תבני/.test(T)) return null; const L=logTplLive(list); if(!L.length) return null;
+  const tp=aiPh(T); const byName=L.filter(t=>String(t.name||"").trim().length>=3&&tp.includes(aiPh(t.name))).sort((a,b)=>String(b.name).length-String(a.name).length)[0]; if(byName) return byName;
+  const i=T.search(/תבני/); let win=T.slice(i,i+45); const cut=win.slice(6).search(/[,.\n]/); if(cut>=0) win=win.slice(0,6+cut);
+  let n=0; win.replace(/^\S+\s*/,"").split(/[\s\-]+/).some(w=>{ w=w.replace(/^[ו]/,""); const m=w.match(/^(\d{1,2})$/); n=m?parseInt(m[1]):(HEB_NUM[w]||TPL_ORD[w]||0); return !!n; }); if(!n) return null;
+  const W=hebFin(win); const pests=[...new Set(L.map(logTplPest))]; const sc=p=>String(p).split(/\s+/).filter(w=>w.length>=3&&W.includes(hebFin(w).slice(0,Math.max(3,hebFin(w).length-2)))).length;
+  const ranked=pests.map(p=>[p,sc(p)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]); if(!ranked.length||(ranked[1]&&ranked[1][1]===ranked[0][1])) return null;
+  return L.filter(t=>logTplPest(t)===ranked[0][0])[n-1]||null; }
 // עריכת הנוסחים בהגדרות
 async function shareText(text){ try{ if(navigator.share){ await navigator.share({text}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
   try{ await navigator.clipboard.writeText(text); alert("✅ הועתק — אפשר להדביק בווטסאפ"); }catch(e){ window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank"); } }
@@ -2937,7 +2968,7 @@ function instrNumsSaid(T){ const out=[]; const toks=String(T||"").replace(/[,.;:
   return [...new Set(out)]; }
 const AI_WEEKDAY=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 // מוחקים "הנחיות 1, 3, 5" מהטקסט לפני בדיקת שעות/מחיר — כדי שמספר הנחיה לא ייחשב שעה או מחיר
-const instrNumStrip=T=>{ const W=Object.keys(HEB_NUM).join("|"); return String(T||"").replace(new RegExp("ו?ה?הנחי(?:ה|ות)(?:[\\s,]*(?:ו-?|מספר|מס['׳]?|עד|-)?[\\s]*(?:\\d{1,2}(?:-\\d{1,2})?|(?:ו)?(?:"+W+"))(?![\\dא-ת]))+","g")," "); };
+const instrNumStrip=T=>{ const W=Object.keys(HEB_NUM).join("|"); return String(T||"").replace(/תבני[תו]?[^,.\n]{0,30}/g," ").replace(new RegExp("ו?ה?הנחי(?:ה|ות)(?:[\\s,]*(?:ו-?|מספר|מס['׳]?|עד|-)?[\\s]*(?:\\d{1,2}(?:-\\d{1,2})?|(?:ו)?(?:"+W+"))(?![\\dא-ת]))+","g")," "); };
 function aiNorm(d,chems=[],text=""){
   const out={found:[],skipped:[]}; if(!d) return out; const T0=String(text||""); const T=instrNumStrip(T0);
   const arr=x=>Array.isArray(x)?x.map(s=>String(s||"").trim()).filter(Boolean):[];
@@ -2989,6 +3020,7 @@ function aiNorm(d,chems=[],text=""){
   if(out.notes) out.found.push("הערות");
   const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
   const iN=instrNumsSaid(T0).map(n=>allI[n-1]).filter(Boolean); if(iN.length) out.instructions=[...new Set([...iN,...out.instructions])];
+  { const tp=aiTplFind(T0,logTplGet()); if(tp){ out.tplId=tp.id; out.tplName=tp.name; out.found.push("תבנית: "+tp.name); } }
   out.noTerms=/(בלי|ללא|לא צריך|אין)\s+(את\s+)?מהות\s+(ה)?טיפול/.test(T); if(out.noTerms) out.found.push("בלי מהות הטיפול");
   out.instrGeneric=/הנחיות\s+(ל|של|רגילות|כרגיל)/.test(T);
   if(out.instructions.length) out.found.push("הנחיות");
@@ -3094,12 +3126,15 @@ const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }ca
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
-    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית אמריקאי דירה' / 'תבנית 2 של תיקן אמריקאי' — ממלא הכול, ומה שתגיד בנוסף גובר"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
   invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
     s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
     s:[["👤","לקוח","שם / עסק / טלפון — לקוח חדש: גם טלפון וכתובת"],["📅","מתי","'מחר בעשר' / 'יום שלישי ב-14:00'"],["🐛","מזיק","'תיקנים', 'עכברים'"],["💰","מחיר שסוכם","אם יש"],["📝","הערות","אם יש"]]},
 };
+function AiTplList(){ const [open,setOpen]=useState(false); const all=useLogTpl(); const L=logTplLive(all); if(!L.length) return null;
+  return <div style={{marginTop:8}}><button type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"1.5px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>{open?"▲":"▼"} 📌 התבניות שלי ({L.length})</button>
+    {open&&<div style={{background:"#fff",borderRadius:12,padding:"6px 10px",marginTop:6,maxHeight:300,overflowY:"auto"}}>{L.map(t=><div key={t.id} style={{padding:"6px 0",borderBottom:"1px solid #f1f5f9",lineHeight:1.35}}><b style={{fontSize:14}}>{t.name}</b> <span style={{fontSize:12,color:"#0369a1"}}>({logTplTag(all,t)})</span>{t.desc?<div style={{fontSize:12.5,color:"#64748b"}}>{t.desc}</div>:null}</div>)}</div>}</div>; }
 function AiInstrList(){ const [open,setOpen]=useState(false); const hid=instrHiddenGet(); const L=AI_INSTR_ALL().map((t,i)=>[i+1,t]).filter(([,t])=>!hid.includes(t));
   return <div style={{marginTop:8}}><button type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"1.5px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>{open?"▲":"▼"} 🔢 רשימת ההנחיות לפי מספר</button>
     {open&&<div style={{background:"#fff",borderRadius:12,padding:"6px 10px",marginTop:6,maxHeight:300,overflowY:"auto"}}>{L.map(([n,t])=><div key={n} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:"1px solid #f1f5f9",fontSize:13.5,lineHeight:1.4}}><b style={{color:"#0369a1",minWidth:22}}>{n}.</b><span>{t}</span></div>)}
@@ -3111,6 +3146,7 @@ function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); c
     <div style={{display:"flex",flexDirection:"column",gap:6}}>{S.s.map(([ic,h,d],i)=><div key={i} style={{background:"#fff",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
       <span style={{minWidth:22,height:22,borderRadius:11,background:"#ede9fe",color:"#6d28d9",fontSize:12,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{i+1}</span>
       <span style={{fontSize:18}}>{ic}</span><div style={{lineHeight:1.3}}><div style={{fontSize:14.5,fontWeight:800,color:"#0f172a"}}>{h}</div><div style={{fontSize:12.5,color:"#64748b"}}>{d}</div></div></div>)}</div>
+    {mode==="log"&&<AiTplList/>}
     {mode==="log"&&<AiInstrList/>}
     <div style={{fontSize:12.5,color:"#475569",margin:"8px 4px 0"}}>💡 דוגמה: <i>"{S.ex}"</i></div>
     <div style={{fontSize:12,color:"#94a3b8",margin:"4px 4px 0"}}>רישיון, פרטי העסק, התאריך והמספור — נכנסים לבד.</div>
@@ -3119,9 +3155,11 @@ function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); c
 function AiFillSummary({r,kind="log",said=""}){ const [showSaid,setShowSaid]=useState(false); if(!r||!r.ai) return null;
   const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["רמת נגיעות",r.level],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults||r.reentryBabies||r.reentryAnimals],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
     :[["סכום",r.price],["סוג מסמך",r.docType],["אמצעי תשלום",r.payMethod],["פירוט",r.invoiceDesc]];
-  const ok=rows.filter(x=>x[1]).map(x=>x[0]), no=rows.filter(x=>!x[1]).map(x=>x[0]);
+  const FROM_TPL=["מזיקים","חומרים","זמן מחוץ לבית","הנחיות","אחריות"]; const tplRows=r.tplId?rows.filter(x=>!x[1]&&FROM_TPL.includes(x[0])).map(x=>x[0]):[];
+  const ok=rows.filter(x=>x[1]).map(x=>x[0]), no=rows.filter(x=>!x[1]&&!tplRows.includes(x[0])).map(x=>x[0]);
   return <div style={{background:"#faf5ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"8px 12px",marginBottom:10,fontSize:13.5,lineHeight:1.6}}>
     <div style={{fontWeight:800,color:"#4c1d95"}}>🤖 העוזר מילא — בדוק לפני שמירה</div>
+    {r.tplId&&<div>📌 <b>מהתבנית "{r.tplName}":</b> {[...tplRows,"מהות הטיפול"].join(", ")}</div>}
     {ok.length>0&&<div>✅ <b>מילאתי:</b> {ok.join(", ")}</div>}
     {no.length>0&&<div style={{color:"#64748b"}}>⬜ <b>לא נאמר (נשאר ריק):</b> {no.join(", ")}</div>}
     {(r.skipped||[]).length>0&&<div style={{color:"#b45309"}}>🚫 <b>לא מילאתי כי לא נאמר במפורש:</b> {r.skipped.join(" · ")}</div>}
@@ -3242,6 +3280,78 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     </>}</div>}</>}
   </Modal>;
 }
+
+// 📌 שורת התבניות בראש יומן הביצוע: לחיצה ממלאת · "שמור כתבנית" עם שם ו"למה מתאימה"
+function LogTplBar({f,onApply,pests}){
+  const all=useLogTpl(); const list=logTplLive(all); const wide=useWide(); const [open,setOpen]=useState(false); const [save,setSave]=useState(false); const [name,setName]=useState(""); const [desc,setDesc]=useState(""); const [busy,setBusy]=useState(false);
+  const rel=(pests||[]).length?list.filter(t=>((t.data||{}).pest||[]).some(p=>pests.includes(p))):[]; const shown=open?[...rel,...list.filter(t=>!rel.includes(t))]:rel;
+  const pest0=(f.pest||[])[0]||f.customPest||""; const nextNum=list.filter(x=>logTplPest(x)===pest0).length+1;
+  const doSave=async()=>{ const nm=name.trim(); if(!nm) return alert("תן לתבנית שם שתזכור"); if(!pest0) return alert("בחר קודם מזיק ביומן");
+    const same=list.find(t=>String(t.name).trim()===nm); if(same&&!confirm('כבר יש תבנית בשם "'+nm+'". להחליף אותה בתוכן של היומן הזה?')) return;
+    const t={id:same?same.id:"t"+Date.now(),name:nm,desc:desc.trim(),data:logTplSnap(f),updatedAt:new Date().toISOString(),createdAt:same?same.createdAt:new Date().toISOString()};
+    setBusy(true); try{ await logTplSave(same?all.map(x=>x.id===same.id?t:x):[...all,t]); setSave(false); setName(""); setDesc(""); showToast("📌 נשמרה תבנית: "+logTplTag([...all,t],t)+" — "+nm); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
+  const chip=t=><button key={t.id} type="button" onClick={()=>onApply(t)} title={t.desc||""} style={{textAlign:"right",padding:"7px 11px",borderRadius:12,border:"1.5px solid "+(f.tplName===t.name?"#16a34a":"#bae6fd"),background:f.tplName===t.name?"#dcfce7":"#fff",cursor:"pointer",fontFamily:"inherit",lineHeight:1.25}}>
+    <div style={{fontSize:14,fontWeight:800,color:"#0f172a"}}>{t.name}</div><div style={{fontSize:11.5,color:"#64748b"}}>{logTplTag(all,t)}{t.desc?" · "+t.desc.slice(0,40):""}</div></button>;
+  return <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:14,padding:"8px 10px",marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <b style={{fontSize:14.5,color:"#0369a1",flex:1}}>📌 תבניות{f.tplName?<span style={{fontWeight:600,color:"#166534",fontSize:13}}> · מולא מ"{f.tplName}"</span>:null}</b>
+      {list.length>rel.length&&<button type="button" onClick={()=>setOpen(o=>!o)} style={{border:"none",background:"none",color:"#0369a1",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{open?"פחות ▲":"כל התבניות ("+list.length+") ▼"}</button>}
+      <button type="button" onClick={()=>setSave(v=>!v)} style={{padding:"6px 10px",borderRadius:10,border:"1.5px solid #0284c7",background:save?"#0284c7":"#fff",color:save?"#fff":"#0369a1",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>💾 שמור כתבנית</button>
+    </div>
+    {shown.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{shown.map(chip)}</div>}
+    {!list.length&&!save&&<div className="h360-hint" style={{fontSize:12.5,color:"#64748b",marginTop:6}}>עוד אין תבניות. כשיומן יוצא לך "בול" — לחץ "שמור כתבנית" ותן לו שם.</div>}
+    {save&&<div style={{background:"#fff",borderRadius:12,padding:10,marginTop:8,display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:8}}>
+      <div><div style={{fontSize:12.5,fontWeight:700,color:"#334155",marginBottom:3}}>שם התבנית (מה שתגיד לעוזר)</div>
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="למשל: אמריקאי דירה" style={{width:"100%",boxSizing:"border-box",padding:"9px 10px",borderRadius:10,border:"1.5px solid #bae6fd",fontSize:15,fontFamily:"inherit",fontWeight:700}}/>
+        <div style={{fontSize:12,color:"#64748b",marginTop:3}}>{pest0?"תקבל מספר: "+pest0+" "+nextNum:"בחר קודם מזיק ביומן"}</div></div>
+      <div><div style={{fontSize:12.5,fontWeight:700,color:"#334155",marginBottom:3}}>למה התבנית מתאימה?</div>
+        <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={2} placeholder="למשל: דירה עם בעלי חיים, ריסוס פנים וניקוזים" style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:10,border:"1.5px solid #bae6fd",fontSize:14,fontFamily:"inherit"}}/></div>
+      <div className="h360-hint" style={{fontSize:12,color:"#64748b",gridColumn:"1/-1"}}>נשמר: מזיק, סוג מקום, חומרים ואזורים, זמני יציאה, בעלי חיים/תינוק, הנחיות, מהות הטיפול ואחריות. לא נשמר: לקוח, נגיעות, ממצאי ניטור, הערות ותשלום.</div>
+      <div style={{display:"flex",gap:8,gridColumn:"1/-1"}}><button type="button" disabled={busy} onClick={doSave} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:"#0284c7",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{busy?"שומר…":"💾 שמור תבנית"}</button>
+        <button type="button" onClick={()=>setSave(false)} style={{padding:"10px 14px",borderRadius:10,border:"1px solid #cbd5e1",background:"#fff",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>ביטול</button></div>
+    </div>}
+  </div>; }
+// 📌 מסך התבניות — לעבור בלילה ולזכור את השמות
+function LogTplScreen(){
+  const all=useLogTpl(); const list=logTplLive(all); const wide=useWide(); const [edit,setEdit]=useState(null); const [openI,setOpenI]=useState(null);
+  const pests=[...new Set(list.map(logTplPest))];
+  const upd=async(id,patch)=>{ try{ await logTplSave(all.map(t=>t.id===id?{...t,...patch,updatedAt:new Date().toISOString()}:t)); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } };
+  const move=async(t,dir)=>{ const same=list.filter(x=>logTplPest(x)===logTplPest(t)); const i=same.findIndex(x=>x.id===t.id), j=i+dir; if(j<0||j>=same.length) return; const a=[...all]; const ia=a.findIndex(x=>x.id===same[i].id), ib=a.findIndex(x=>x.id===same[j].id); [a[ia],a[ib]]=[a[ib],a[ia]]; await logTplSave(a); };
+  const sb2={border:"1px solid #cbd5e1",background:"#fff",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:12.5};
+  return <div style={{maxWidth:wide?1100:640,margin:"0 auto",padding:"4px 2px"}}>
+    <h2 style={{margin:"0 0 4px",fontSize:20}}>📌 תבניות יומן ביצוע</h2>
+    <div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:10}}>יוצרים תבנית מתוך יומן ביצוע: "📌 תבניות" ← "💾 שמור כתבנית". לעוזר אומרים את השם ("תבנית אמריקאי דירה") או מזיק ומספר ("תבנית 2 של תיקן אמריקאי"). מה שאומרים בנוסף — גובר על התבנית.</div>
+    {!list.length&&<div style={{background:"#fff",border:"1px dashed #cbd5e1",borderRadius:14,padding:20,textAlign:"center",color:"#64748b"}}>עוד אין תבניות. פתח יומן ביצוע שיצא לך טוב ולחץ "📌 תבניות" ← "💾 שמור כתבנית".</div>}
+    {pests.map(p=><div key={p} style={{marginBottom:14}}>
+      <div style={{fontSize:16,fontWeight:800,color:"#0369a1",margin:"6px 2px"}}>🐛 {p}</div>
+      <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:8}}>
+      {list.filter(t=>logTplPest(t)===p).map((t,k)=>{ const d=t.data||{}; const ed=edit&&edit.id===t.id; const re=reentryLines(d.reentry||{}).join(" · ");
+        return <div key={t.id} style={{background:"#fff",border:"1.5px solid #bae6fd",borderRadius:14,padding:"10px 12px"}}>
+          {ed?<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <input value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})} style={{padding:"8px 10px",borderRadius:10,border:"1.5px solid #bae6fd",fontSize:15,fontWeight:700,fontFamily:"inherit"}}/>
+            <textarea value={edit.desc} onChange={e=>setEdit({...edit,desc:e.target.value})} rows={2} placeholder="למה התבנית מתאימה?" style={{padding:"8px 10px",borderRadius:10,border:"1.5px solid #bae6fd",fontSize:14,fontFamily:"inherit"}}/>
+            <div style={{display:"flex",gap:6}}><button type="button" onClick={async()=>{ if(!edit.name.trim()) return; await upd(t.id,{name:edit.name.trim(),desc:edit.desc.trim()}); setEdit(null); }} style={{...sb2,background:"#0284c7",color:"#fff",border:"none",fontWeight:700}}>💾 שמור</button><button type="button" onClick={()=>setEdit(null)} style={sb2}>ביטול</button></div></div>
+          :<><div style={{display:"flex",alignItems:"baseline",gap:8}}><span style={{minWidth:26,height:26,borderRadius:13,background:"#e0f2fe",color:"#0369a1",fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{k+1}</span><b style={{fontSize:16,flex:1}}>{t.name}</b></div>
+            {t.desc&&<div style={{fontSize:13.5,color:"#334155",margin:"4px 0 2px"}}>{t.desc}</div>}</>}
+          <div style={{fontSize:12.5,color:"#475569",lineHeight:1.6,marginTop:6}}>
+            {d.place&&d.place.type&&<div>🏠 {d.place.type}{(d.place.extras||[]).length?" · "+d.place.extras.join(", "):""}{d.hasPets?" · 🐾 בעלי חיים":""}{d.hasBaby?" · 👶 תינוק":""}</div>}
+            {(d.materials||[]).length>0&&<div>🧪 {d.materials.map(m=>m.name+(m.method?" ("+m.method+")":"")+((m.areas||[]).length?" — "+m.areas.join(", "):"")).join(" · ")}</div>}
+            {(d.devices||[]).length>0&&<div>📦 {d.devices.map(x=>x.type+" × "+(x.qty||1)).join(" · ")}</div>}
+            {re&&<div>⏱️ {re}</div>}
+            {(d.terms||[]).length>0&&<div>📜 {d.terms.map(x=>x.title).join(" · ")}</div>}
+            {logTplWarrTxt(d)&&<div>🛡️ {logTplWarrTxt(d)}</div>}
+            {(d.instructions||[]).length>0&&<div><button type="button" onClick={()=>setOpenI(openI===t.id?null:t.id)} style={{border:"none",background:"none",padding:0,color:"#0369a1",cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:700}}>📋 {d.instructions.length} הנחיות {openI===t.id?"▲":"▼"}</button>
+              {openI===t.id&&<div style={{marginTop:4}}>{d.instructions.map(x=><div key={x}>{instrNum(x)?<b>{instrNum(x)}. </b>:"• "}{x}</div>)}</div>}</div>}
+          </div>
+          {!ed&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+            <button type="button" onClick={()=>setEdit({id:t.id,name:t.name,desc:t.desc||""})} style={sb2}>✏️ שם / תיאור</button>
+            <button type="button" disabled={k===0} onClick={()=>move(t,-1)} style={sb2}>⬆️</button>
+            <button type="button" onClick={()=>move(t,1)} style={sb2}>⬇️</button>
+            <button type="button" onClick={async()=>{ if(confirm('להסיר את התבנית "'+t.name+'"?')) await upd(t.id,{deleted:true}); }} style={{...sb2,border:"1px solid #fecaca",color:"#dc2626"}}>🗑️ הסר</button>
+          </div>}
+        </div>; })}
+      </div></div>)}
+  </div>; }
 function ExecSmartFill({onApply,chemNames,memory,value,onChange,startClosed=false}){
   const [open,setOpen]=useState(!startClosed); const txt=value||""; const setTxt=v=>onChange(typeof v==="function"?v(txt):v);
   const r=React.useMemo(()=>txt.trim()?elParse(txt,{chemNames,memory}):null,[txt,chemNames]);
@@ -3423,7 +3533,9 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   },[devKey,f.materials.map(m=>m.name+(rodentSpotsOn(m)?"r":"")).join("|")]);
   const elRef=React.useRef(null);
   const [aiSum,setAiSum]=useState(null);
+  const applyTpl=t=>{ touched.current.reentry=true; touched.current.instr=true; touched.current.terms=true; setF(x=>logTplApply(t,x)); };
   const applySmart=r=>{ if(r&&r.ai) setAiSum(r);
+    const tplT=r&&r.tplId?logTplLive(logTplGet()).find(t=>t.id===r.tplId):null; if(tplT) applyTpl(tplT);
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
     if(r.reentry0) touched.current.reentry=true; else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) touched.current.reAi=true;
     if(r.noTerms) touched.current.terms=true;
@@ -3458,11 +3570,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.warranty) nx.warranty=r.warranty;
       if(r.noTerms) nx.terms=(x.terms||[]).filter(t=>t.id==="nowarr");
       if(r.hasPets) nx.hasPets=true; if(r.hasBaby) nx.hasBaby=true;
+      if(tplT&&(r.hasPets||r.hasBaby)) nx.instructions=[...new Set([...(x.instructions||[]).filter(t=>!INSTR_NO_WASH.includes(t)),...(r.hasPets?INSTR_PETS:[]),...(r.hasBaby?INSTR_BABY:[])])];
       if(r.monitor&&Object.keys(r.monitor).length){ const m={...(x.monitor||{})}; Object.entries(r.monitor).forEach(([p,v])=>{ m[p]=[...new Set([...(m[p]||[]),...v])]; }); nx.monitor=m; }
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
     // הנחיות שנאמרו לעוזר — רק הן (בלי ברירות מחדל), כדי שלא ייכנס מה שלא ביקשת
-    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai&&!r.instrGeneric?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
+    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai&&!r.instrGeneric&&!tplT?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
   };
   // טיוטה מהעוזר החכם — ממלאים פעם אחת כשהיומן נפתח
@@ -3513,6 +3626,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       };
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
     <AiFillSummary r={aiSum} said={(aiSum&&aiSum._said)||""}/>
+    <LogTplBar f={f} pests={allPests} onApply={t=>fillWithHighlight(elRef,()=>{ applyTpl(t); setTimeout(()=>showToast("📌 מולא מהתבנית \""+t.name+"\" — בדוק ועדכן אם צריך"),30); })}/>
     <ExecSmartFill startClosed={!!aiR} onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן ביצוע לפי שלבים"],["flat","📄 יומן ביצוע רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
@@ -8239,7 +8353,7 @@ function permOf(u,id){
   if(!u||!u.role) return true;
   if(u.role==="מנהל"||id==="settings") return true;
   if(id==="debts") return permOf(u,"invoices")===true;
-  if(id==="aihist") return permOf(u,"execlog")===true;
+  if(id==="aihist"||id==="logtpl") return permOf(u,"execlog")===true;
   const p=u.permissions||{};
   if(p[id]!==undefined&&p[id]!==null) return p[id];
   return (ROLE_PERMS[u.role]||ROLE_PERMS["פקידה"])[id]||false;
@@ -14360,7 +14474,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "239";
+const APP_BUILD = "240";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -14740,6 +14854,7 @@ function App(){
     {id:"calendar",label:"📅 יומן עבודה",short:"📅"},
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
     {id:"aihist",label:"🤖 היסטוריית עוזר",short:"🤖"},
+    {id:"logtpl",label:"📌 תבניות יומן",short:"📌"},
     {id:"mychems",label:"🧪 החומרים שלי",short:"🧪"},
     {id:"invoices",label:"🧾 חשבוניות",short:"🧾",hideFor:"מדביר"},
     {id:"debts",label:"💳 חובות",short:"💳",hideFor:"מדביר"},
@@ -14778,7 +14893,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",aihist:"היסטוריית עוזר",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים",mychems:"החומרים שלי",trash:"סל מחזור"};
+  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",aihist:"היסטוריית עוזר",logtpl:"תבניות יומן",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים",mychems:"החומרים שלי",trash:"סל מחזור"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -14800,7 +14915,7 @@ function App(){
         <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"logtpl",icon:"📌",name:"תבניות יומן",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות",hide:null}]},
@@ -14904,7 +15019,7 @@ function App(){
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {(()=>{ const groups=[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"logtpl",icon:"📌",name:"תבניות יומן"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
@@ -14973,6 +15088,7 @@ function App(){
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {aiOpenG&&user&&<AssistantModal mem={AI_MEM} appointments={appointments} customers={customers} execLogs={execLogs} finance={activeFinance} currentUser={user} onClose={()=>setAiOpenG(false)}
               onOpenLog={(a,d)=>aiAct("log",{a,d})} onOpenInvoice={a=>aiAct("inv",{a})} onOpenAppt={p=>aiAct("appt",p)}/>}
+            {tab==="logtpl"&&<LogTplScreen/>}
             {tab==="aihist"&&<div style={{maxWidth:isMobile?640:1100,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}

@@ -17,6 +17,7 @@ Phone (<900px) = clean, minimal (extra actions behind +, explanations only with 
 | Work order / new appointment | `function OrderForm(`, `waParse`, `IntakeTextBox`, `window.__h360PendingOrder` |
 | Quick entry / task | `FreeNoteForm`, `QuickAddModal`, `PersonalTaskForm`, `parseTask` |
 | Exec log (יומן ביצוע) | `function ExecLogForm(`, `applySmart`, `ExecSmartFill`, `elParse`, `ExecLogModalInline`, `execLogHtml` |
+| Exec log templates (📌) | `logTplSnap`, `logTplApply`, `LogTplBar`, `LogTplScreen` (tab `logtpl`), `aiTplFind`; cloud file `contracts/company/logtpl-*.json` |
 | Instructions presets | `INSTR_BASE`, `INSTR_BY_PEST`, `INSTR_PETS`, `INSTR_BABY`, `INSTR_RODENT_BAIT` |
 | Monitoring findings | `MONITOR_SIGNS`, `monitorSigns`, `monitorText` |
 | Invoices / receipts | `function DocModal(`, `printDoc`, `docPrefillFromLog`, `LOG_PAY_TO_DOC`, `PAY_METHODS_DOC` |
