@@ -9737,7 +9737,21 @@ function closeDebt(d,ref,{setFinance,setExecLogs}){ const at=new Date().toISOStr
   else setFinance&&setFinance(fs=>fs.map(x=>String(x.id)===String(d.rec.id)?{...x,status:"שולם",paidAt:at,...(ref&&/^[^\s]+-\d/.test(ref)?{paidByDocId:ref}:{paidNote:ref||"סומן כשולם"})}:x)); }
 const debtReminderText=(name,items)=>{ const tot=items.reduce((t,d)=>t+d.amount,0); const b=COMPANY.bank;
   return ["שלום "+name+",","תזכורת ידידותית מ"+COMPANY.name+" — נשארה יתרה לתשלום של "+money(tot)+":",...items.map(d=>"• "+d.label+(d.date?" מ-"+fmtDate(d.date):"")+" — "+money(d.amount)),"",...(b?["אפשר לשלם בהעברה בנקאית:",b.name+" ("+b.code+") · סניף "+b.branch+" · חשבון "+b.account+" · על שם "+b.holder,"או בביט / אשראי — מוזמנים לחזור אלינו.",""]:[]),"תודה רבה! 🙏",COMPANY.name+" · "+(COMPANY.phone||"")].join("\n"); };
-function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
+// 📊 גרפים פשוטים לצד המסך במחשב
+function SideCard({title,children}){ return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:"12px 14px",marginBottom:12}}><div style={{fontSize:14,fontWeight:800,color:"#0f172a",marginBottom:10}}>{title}</div>{children}</div>; }
+function HBars({rows,color="#0ea5e9",fmt=money,onClick}){ const mx=Math.max(1,...rows.map(r=>r[1]||0));
+  if(!rows.length) return <div style={{fontSize:13,color:"#94a3b8"}}>אין נתונים</div>;
+  return <div style={{display:"flex",flexDirection:"column",gap:7}}>{rows.map(([l,v,c],i)=><div key={i} onClick={onClick?()=>onClick(l):undefined} style={{cursor:onClick?"pointer":"default"}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12.5,color:"#334155",marginBottom:3}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</span><b style={{whiteSpace:"nowrap"}}>{fmt(v)}</b></div>
+    <div style={{height:8,background:"#f1f5f9",borderRadius:6,overflow:"hidden"}}><div style={{width:Math.max(2,Math.round((v||0)/mx*100))+"%",height:"100%",background:c||color,borderRadius:6}}/></div></div>)}</div>; }
+function VBars({rows,color="#16a34a",fmt=money}){ const mx=Math.max(1,...rows.map(r=>r[1]||0));
+  return <div style={{display:"flex",alignItems:"flex-end",gap:6,height:150,paddingTop:16}}>{rows.map(([l,v],i)=><div key={i} title={l+": "+fmt(v)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%",minWidth:0}}>
+    <div style={{fontSize:10.5,color:"#475569",marginBottom:2,whiteSpace:"nowrap"}}>{v?fmt(v).replace("₪",""):""}</div>
+    <div style={{width:"70%",height:Math.max(v?3:0,Math.round((v||0)/mx*110)),background:color,borderRadius:"5px 5px 0 0"}}/>
+    <div style={{fontSize:11,color:"#64748b",marginTop:4,whiteSpace:"nowrap"}}>{l}</div></div>)}</div>; }
+const H_MONTHS=["ינו׳","פבר׳","מרץ","אפר׳","מאי","יוני","יולי","אוג׳","ספט׳","אוק׳","נוב׳","דצמ׳"];
+const lastMonths=n=>{ const out=[]; const d=new Date(); d.setDate(1); for(let i=n-1;i>=0;i--){ const x=new Date(d.getFullYear(),d.getMonth()-i,1); out.push([x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0"),H_MONTHS[x.getMonth()]]); } return out; };
+function Debts({finance,setFinance,execLogs,setExecLogs,customers}){ const wideX=useWide();
   const [view,setView]=useState("open"); const [q,setQ]=useState(""); const [openC,setOpenC]=useState({}); const [add,setAdd]=useState(null); const [kindF,setKindF]=useState("all"); const [ageF,setAgeF]=useState(-1);
   const all=computeDebts(finance,execLogs,customers);
   const kindOf=d=>d.kind==="doc"?"doc":d.kind==="log"?"log":"manual";
@@ -9770,7 +9784,17 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
   const saveManual=()=>{ const a=add; const amt=parseFloat(a.amount); if(!a.name.trim()||!amt) return alert("שם לקוח וסכום");
     const c=(customers||[]).find(x=>x.name===a.name.trim());
     setFinance(fs=>[...fs,{id:nextId(fs),category:"חוב",type:"חוב",customer:a.name.trim(),customerId:c?c.id:null,phone:a.phone||(c&&c.phone)||"",amount:amt,desc:a.desc,date:a.date||todayStr(),source:a.source||"חוב",status:"פתוח",createdAt:new Date().toISOString()}]); setAdd(null); };
-  return <div style={{maxWidth:1150,margin:"0 auto"}}>
+  const _side=wideX&&(()=>{ const byC={}; openAll.forEach(d=>{ const k=d.cust?d.cust.name:d.name; byC[k]=(byC[k]||0)+d.amount; });
+    const top=Object.entries(byC).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const src=[["📋 מיומני ביצוע","log","#f59e0b"],["🧾 חשבוניות פתוחות","doc","#6366f1"],["✍️ חובות ידניים","manual","#64748b"]].map(([l,k,c])=>[l,openAll.filter(d=>kindOf(d)===k).reduce((t,d)=>t+d.amount,0),c]);
+    const paid30=all.filter(d=>d.paid&&d.rec&&(d.rec.paidAt||(d.rec.debtClosed&&d.rec.debtClosed.at))&&(Date.now()-new Date(d.rec.paidAt||d.rec.debtClosed.at).getTime())<30*864e5).reduce((t,d)=>t+d.amount,0);
+    return <div style={{position:"sticky",top:70}}>
+      <SideCard title="👥 מי חייב הכי הרבה"><HBars rows={top} color="#ef4444" onClick={l=>{ setView("open"); setQ(l); }}/></SideCard>
+      <SideCard title="⏳ לפי גיל החוב"><HBars rows={buckets.map(([l,v],i)=>[l,v,["#fca5a5","#f87171","#b91c1c"][i]])}/></SideCard>
+      <SideCard title="🔎 מאיפה החובות"><HBars rows={src}/></SideCard>
+      <SideCard title="✅ נגבה ב-30 הימים האחרונים"><div style={{fontSize:24,fontWeight:800,color:"#166534"}}>{money(paid30)}</div></SideCard>
+    </div>; })();
+  const _main=(<div style={{maxWidth:wideX?"none":1150,margin:"0 auto"}}>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
       <div onClick={()=>setAgeF(-1)} style={{background:"#fef2f2",borderRadius:12,padding:"10px 14px",cursor:"pointer",outline:ageF<0?"2px solid #fecaca":"none"}}><div style={{fontSize:12,color:"#64748b"}}>סה״כ חובות פתוחים</div><div style={{fontSize:22,fontWeight:800,color:"#b91c1c"}}>{money(totOpen)}</div><div style={{fontSize:12,color:"#64748b"}}>{new Set(openAll.map(d=>d.cust?"c"+d.cust.id:"n"+d.name)).size} לקוחות · {openAll.length} פריטים</div></div>
       {buckets.map(([l,v],i)=><div key={l} onClick={()=>{ setView("open"); setAgeF(ageF===i?-1:i); }} title="לחץ כדי לסנן" style={{background:["#f8fafc","#f0f9ff","#fff1f2"][i],borderRadius:12,padding:"10px 14px",cursor:"pointer",outline:ageF===i?"2px solid "+["#94a3b8","#7dd3fc","#fda4af"][i]:"none"}}><div style={{fontSize:12,color:"#64748b"}}>{l}</div><div style={{fontSize:18,fontWeight:800,color:["#334155","#0369a1","#be123c"][i]}}>{money(v)}</div></div>)}
@@ -9837,7 +9861,8 @@ function Debts({finance,setFinance,execLogs,setExecLogs,customers}){
       <Inp label="טלפון (לתזכורת)" value={add.phone} onChange={v=>setAdd(a=>({...a,phone:v}))}/>
       <div style={{display:"flex",gap:8}}><Btn full onClick={saveManual}>💾 הוסף חוב</Btn><Btn v="ghost" onClick={()=>setAdd(null)}>ביטול</Btn></div>
     </Modal>}
-  </div>;
+  </div>);
+  return wideX?<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 340px",gap:18,alignItems:"start",maxWidth:1600,margin:"0 auto"}}>{_main}{_side}</div>:_main;
 }
 // 💬 שליחת מסמך — ללקוח או למספר אחר (למשל הנהלת החשבונות שלו)
 function SendDocModal({doc,saved,phone,customers=[],onClose}){ return <SendModal doc={doc} saved={saved} phone={phone} customers={customers} onClose={onClose}/>; }
@@ -9882,7 +9907,7 @@ function GoLiveModal({finance,onClose}){
     <div style={{display:"flex",gap:8}}><Btn full disabled={busy} onClick={activate}>🚀 הפעל מצב רשמי</Btn><Btn v="ghost" onClick={onClose}>ביטול</Btn></div>
   </Modal>;
 }
-function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs,mineOnly=null}){
+function Invoices({finance,setFinance,customers,setCustomers,appointments,execLogs=[],setExecLogs,mineOnly=null}){ const wideX=useWide();
   const isMine=f=>!mineOnly||String(f.createdById)===String(mineOnly.id)||(!!mineOnly.workerName&&f.workerName===mineOnly.workerName);
   const [docReq,setDocReq]=useState(null); // {type,prefill}
   const [acctRep,setAcctRep]=useState(false);
@@ -9966,7 +9991,17 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       lines:logs.map(l=>({desc:docPrefillFromLog(l,customers).prefill.lines[0].desc+" — "+fmtDate(l.date)+" (יומן ביצוע "+(l.docNum||"")+")",qty:"1",unit:"ביקור",price:String(l.agreedPrice||l.paymentAmount||"")}))}});
   };
   const tb={border:"1px solid #e2e8f0",background:"#fff",color:"#334155",borderRadius:10,padding:"9px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"};
-  return <div style={{maxWidth:1150,margin:"0 auto"}}>
+  const _side=wideX&&(()=>{ const ms=lastMonths(6); const sumM=ms.map(([k,l])=>[l,r2(invs.filter(f=>String(f.date||"").startsWith(k)).reduce((t,f)=>t+totalOf(f),0)-credits.filter(f=>String(f.date||"").startsWith(k)).reduce((t,f)=>t+totalOf(f),0))]);
+    const types=["חשבונית מס/קבלה","חשבונית מס","קבלה","חשבון עסקה","חשבונית זיכוי"].map((t,i)=>[t,docs.filter(f=>docTypeOf(f)===t).length,["#0ea5e9","#6366f1","#14b8a6","#94a3b8","#ef4444"][i]]).filter(x=>x[1]);
+    const byC={}; invs.forEach(f=>{ const k=f.customer||"—"; byC[k]=(byC[k]||0)+totalOf(f); }); const topC=Object.entries(byC).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const thisM=sumM[sumM.length-1][1], prevM=sumM[sumM.length-2][1];
+    return <div style={{position:"sticky",top:70}}>
+      <SideCard title="📈 הכנסות לפי חודש (חצי שנה)"><VBars rows={sumM}/>
+        <div style={{fontSize:12.5,color:"#475569",marginTop:8}}>החודש: <b>{money(thisM)}</b>{prevM?<> · חודש שעבר: <b>{money(prevM)}</b></>:null}</div></SideCard>
+      <SideCard title="🧾 מסמכים לפי סוג"><HBars rows={types} fmt={v=>String(v)}/></SideCard>
+      <SideCard title="⭐ לקוחות מובילים"><HBars rows={topC} color="#16a34a"/></SideCard>
+    </div>; })();
+  const _main=(<div style={{maxWidth:wideX?"none":1150,margin:"0 auto"}}>
     <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12,padding:"8px 12px",borderRadius:10,fontSize:13,background:dset.official?"#f0fdf4":"#f0f9ff",border:"1px solid "+(dset.official?"#bbf7d0":"#bae6fd"),color:dset.official?"#166534":"#075985"}}>
       <span style={{flex:1,minWidth:200}}>{dset.official?<>✅ <b>מצב רשמי</b>{dset.since?" מ-"+fmtDate(dset.since):""} — מסמכים אמיתיים, מספור רציף.</>:<>🧪 <b>מצב טיוטה</b> — לבדיקה. החשבוניות האמיתיות עדיין ב"יש חשבונית".</>}</span>
       <button type="button" onClick={()=>setSetup(v=>!v)} style={{...tb,padding:"6px 12px",fontSize:13}}>⚙️ הגדרות {setup?"▲":"▼"}</button>
@@ -10104,7 +10139,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
       {Object.keys(openLogsByCust).length===0&&<div style={{textAlign:"center",color:CLR.muted,padding:16}}>אין ביקורים פתוחים לחיוב</div>}
       <div style={{display:"flex",gap:8}}><Btn full onClick={startConsol} disabled={!consol.custKey}>המשך לחשבונית →</Btn><Btn v="ghost" onClick={()=>setConsol(null)}>ביטול</Btn></div>
     </Modal>}
-  </div>;
+  </div>);
+  return wideX?<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 340px",gap:18,alignItems:"start",maxWidth:1600,margin:"0 auto"}}>{_main}{_side}</div>:_main;
 }
 
 
