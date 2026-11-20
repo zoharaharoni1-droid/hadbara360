@@ -2877,24 +2877,34 @@ const isoLocal=(d=new Date())=>d.getFullYear()+"-"+String(d.getMonth()+1).padSta
 const AI_PLACES=["דירה","בית פרטי","בניין משותף","מסעדה","משרד","גן ילדים","מחסן","עסק"];
 const AI_METHODS=["ריסוס","ג'ל","תחנת האכלה","ערפול","אבקה","פיזור גרגירים"];
 function aiChemList(names=[],memory={}){ const pri=[...Object.keys(memory||{}),...CHEMICALS.map(c=>c.name)]; return [...new Set([...pri,...names].filter(Boolean))].slice(0,400); }
+// 🚫 בלי ניחושים — בודקים שמשהו מהשם באמת נאמר בטקסט
+const aiPh=s=>elNorm(s).replace(/ט/g,"ת").replace(/ק/g,"כ").replace(/[ךםןףץ]/g,c=>({ך:"כ",ם:"מ",ן:"נ",ף:"פ",ץ:"צ"}[c])).replace(/[וי]/g,"");
+const aiSaid=(name,T)=>{ const heb=String(name||"").split(/[\s\-–,()\/]+/).filter(w=>/[א-ת]/.test(w)&&w.length>=3); if(!heb.length) return true; const t=aiPh(T); return heb.map(aiPh).filter(w=>w.length>=2).some(w=>t.includes(w.length>=3?w.slice(0,3):w)); };
+const aiNumSaid=(n,T)=>{ const d=String(n||"").replace(/[^\d]/g,""); if(!d) return false; return String(T||"").replace(/[,\s](?=\d{3}\b)/g,"").replace(/[^\d]+/g," ").split(" ").includes(d); };
+const AI_INSTR_ALL=()=>[...new Set([...INSTR_BASE,...INSTR_BY_PEST.flatMap(x=>x.t),...INSTR_RODENT_BAIT,...INSTR_PETS,...INSTR_BABY])];
+const AI_WEEKDAY=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 function aiNorm(d,chems=[],text=""){
-  const out={found:[]}; if(!d) return out;
+  const out={found:[],skipped:[]}; if(!d) return out; const T=String(text||"");
   const arr=x=>Array.isArray(x)?x.map(s=>String(s||"").trim()).filter(Boolean):[];
   const pests=arr(d.pests); if(pests.length){ out.pests=[...new Set(pests)]; out.found.push("מזיקים"); }
   if(/קל/.test(d.level||"")) out.level="קלה"; else if(/בינונ/.test(d.level||"")) out.level="בינונית"; else if(/גבוה|חמור|קשה/.test(d.level||"")) out.level="גבוהה";
+  if(out.level&&!/קל|בינונ|גבוה|חמור|קשה|הרבה|מעט|נגיע/.test(T)){ out.skipped.push("רמת נגיעות"); delete out.level; }
   if(out.level) out.found.push("רמת נגיעות");
   if(d.placeType&&AI_PLACES.includes(d.placeType)){ out.placeType=d.placeType; out.found.push("מקום"); }
-  if(/^\d+(\.\d)?$/.test(String(d.rooms||""))) out.rooms=String(d.rooms);
+  if(/^\d+(\.\d)?$/.test(String(d.rooms||""))&&/חדר/.test(T)) out.rooms=String(d.rooms);
   if(d.floor) out.floor=String(d.floor);
   out.extras=arr(d.extras);
   const byN={}; chems.forEach(n=>{ byN[elNorm(n)]=n; });
   const mats=[]; arr(d.materials).forEach(m=>{ const k=elNorm(m); const hit=byN[k]||chems.find(n=>{ const kn=elNorm(n); return kn.length>=3&&(kn.includes(k)||k.includes(kn)); })||m; if(!mats.includes(hit)) mats.push(hit); });
-  if(mats.length){ out.materials=mats; out.found.push("חומרים"); }
+  const matsOk=mats.filter(m=>aiSaid(m,T)); if(matsOk.length<mats.length) out.skipped.push("חומר שלא נאמר: "+mats.filter(m=>!matsOk.includes(m)).join(", "));
+  if(matsOk.length){ out.materials=matsOk; out.found.push("חומרים"); }
   out.methodHint=AI_METHODS.includes(d.methodHint)?d.methodHint:"";
   out.areas=arr(d.areas); out.spots=arr(d.spots);
   const bn=parseInt(d.boxesNew)||0, br=parseInt(d.boxesRefill)||0; if(bn||br){ out.boxesNew=bn; out.boxesRefill=br; out.found.push("תיבות"); }
+  if(d.reentry0&&!/לצאת|יציאה|להישאר|להשאר|בבית|לחזור/.test(T)) d={...d,reentry0:false};
+  if(d.reentryAdults&&!aiNumSaid(d.reentryAdults,T)&&!/שעה|שעתיים|שעות/.test(T)) d={...d,reentryAdults:""};
   if(d.reentry0){ out.reentry0=true; out.found.push("זמן מחוץ למקום"); } else if(/^\d+(\.\d+)?$/.test(String(d.reentryAdults||""))){ out.reentryAdults=String(d.reentryAdults); out.found.push("זמן מחוץ למקום"); }
-  const pr=String(d.price||"").replace(/[^\d.]/g,""); if(pr){ out.price=pr; out.found.push("מחיר"); }
+  const pr=String(d.price||"").replace(/[^\d.]/g,""); if(pr&&aiNumSaid(pr,T)){ out.price=pr; out.found.push("מחיר"); } else if(pr) out.skipped.push("מחיר שלא נאמר");
   if(d.payStatus==="paid"||d.payStatus==="debt") out.payStatus=d.payStatus;
   const PMRX=/מזומן|cash|ביט|\bbit\b|פייבוקס|paybox|העברה|transfer|אשראי|כרטיס|credit|צ'ק|צ׳ק|cheque|check/i;
   const pm=[d.payMethod,d.payStatus].map(x=>String(x||"")).find(x=>PMRX.test(x))||(String(text||"").match(PMRX)||[""])[0];
@@ -2903,20 +2913,30 @@ function aiNorm(d,chems=[],text=""){
   out.payMethod=/מזומן|cash/i.test(pm)?"מזומן":/ביט|\bbit\b/i.test(pm)?"ביט":/פייבוקס|paybox/i.test(pm)?"PayBox":/העבר|transfer/i.test(pm)?"העברה בנקאית":/אשראי|כרטיס|credit/i.test(pm)?"אשראי":/צ.?ק|cheque|check/i.test(pm)?"צ'ק":"";
   if(out.payMethod){ if(!out.payStatus) out.payStatus="paid"; if(!out.found.includes("מחיר")) out.found.push("תשלום"); }
   const w=String(d.warranty||"").replace(/\D/g,""); if(w&&w!=="0"&&/אחריות/.test(String(text||""))){ out.warranty=w; out.found.push("אחריות"); }
+  if(d.hasPets&&!/כלב|חתול|בעל.?י? חיים|חיות|ציפור|תוכי|ארנב|אוגר|דגים/.test(T)) d={...d,hasPets:false};
+  if(d.hasBaby&&!/תינוק|פעוט|זוחל|ילד קטן/.test(T)) d={...d,hasBaby:false};
   if(d.hasPets){ out.hasPets=true; out.found.push("בעלי חיים"); } if(d.hasBaby){ out.hasBaby=true; out.found.push("תינוק"); }
   if(Array.isArray(d.signs)&&d.signs.length){ const ps=out.pests||[]; const mon={};
     d.signs.forEach(sg=>{ const t=String(sg||"").trim(); if(!t) return; const tgt=ps.find(p=>monitorSigns(p).includes(t))||ps[0]; if(!tgt) return; const opts=monitorSigns(tgt); const hit=opts.find(o=>o===t)||opts.find(o=>elNorm(o).includes(elNorm(t))||elNorm(t).includes(elNorm(o).split(" (")[0])); if(hit) mon[tgt]=[...new Set([...(mon[tgt]||[]),hit])]; });
     if(Object.keys(mon).length){ out.monitor=mon; out.found.push("ממצאי ניטור"); } }
-  out.notes=String(d.notes||"").trim();
+  out.notes=/הער|תרשום|תכתוב|לרשום/.test(T)?String(d.notes||"").trim():"";
+  if(out.notes) out.found.push("הערות");
+  const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
+  if(out.instructions.length) out.found.push("הנחיות");
+  out.wantAppt=!!d.wantAppt;
+  out.apptDate=/^\d{4}-\d{2}-\d{2}$/.test(String(d.apptDate||""))?String(d.apptDate):"";
+  out.apptTime=/^\d{1,2}:\d{2}$/.test(String(d.apptTime||""))?String(d.apptTime).padStart(5,"0"):"";
+  out.newName=String(d.newName||"").trim(); out.newPhone=String(d.newPhone||"").replace(/\D/g,""); out.newAddress=String(d.newAddress||"").trim();
+  if(out.newPhone&&!T.replace(/\D/g,"").includes(out.newPhone.slice(-7))) out.newPhone="";
   out.summary=String(d.summary||"").trim(); out.apptId=String(d.apptId||""); out.customerName=String(d.customerName||"").trim();
   out.wantLog=d.wantLog!==false; out.wantInvoice=!!d.wantInvoice; out.ai=true;
   out.customerId=String(d.customerId||""); out.invoiceDesc=String(d.invoiceDesc||"").trim();
   out.docType=aiDocType(out,text); out.inclVat=aiInclVat(text);
   return out;
 }
-async function aiAssist(text,{appts=[],chems=[],custs=[]}={}){
+async function aiAssist(text,{appts=[],chems=[],custs=[],mode=""}={}){
   let tok=SUPA_KEY; try{ const {data}=await sb.auth.getSession(); if(data&&data.session) tok=data.session.access_token; }catch(e){}
-  const ctx={today:isoLocal(),appts,customers:custs,pests:PEST_TYPES_LOG,signs:[...new Set([...Object.values(MONITOR_SIGNS).flat(),...MON_DEFAULT,MON_NONE])],chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
+  const ctx={today:isoLocal()+" (יום "+AI_WEEKDAY[new Date().getDay()]+")",mode,instr:AI_INSTR_ALL(),appts,customers:custs,pests:PEST_TYPES_LOG,signs:[...new Set([...Object.values(MONITOR_SIGNS).flat(),...MON_DEFAULT,MON_NONE])],chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
   const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),30000);
   let r; try{ r=await fetch(ASSIST_URL,{method:"POST",signal:ctl.signal,headers:{"Content-Type":"application/json","Authorization":"Bearer "+tok,"apikey":SUPA_KEY},body:JSON.stringify({text,ctx})}); }
   catch(e){ clearTimeout(to); throw new Error(e&&e.name==="AbortError"?"לקח יותר מדי זמן":"אין חיבור לאינטרנט"); }
@@ -2965,9 +2985,10 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
       {h.summary&&<div style={{fontSize:14,color:"#4c1d95",marginTop:3}}>🤖 {h.summary}</div>}
       <button type="button" onClick={()=>setOpenT(openT===h.id?null:h.id)} style={{border:"none",background:"none",padding:"4px 0",color:"#6d28d9",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>{openT===h.id?"▲ הסתר מה אמרתי":"▼ מה אמרתי"}</button>
       {openT===h.id&&<div style={{fontSize:13.5,color:"#334155",background:"#faf5ff",borderRadius:8,padding:"6px 10px",marginBottom:6,whiteSpace:"pre-wrap"}}>{h.text}</div>}
-      {(()=>{ const logOk=!h.wantLog||!!lg, docOk=!h.wantInvoice||!!doc; const st=logOk&&docOk?["✅ הושלם","#166534","#dcfce7"]:(lg||doc)?["🟡 הושלם חלקית","#92400e","#fef3c7"]:["⏸ לא הושלם — לא הופק כלום","#991b1b","#fee2e2"];
+      {(()=>{ const logOk=(!h.wantLog||!!lg)&&(!h.wantAppt||!!h.apptDone), docOk=!h.wantInvoice||!!doc; const st=logOk&&docOk?["✅ הושלם","#166534","#dcfce7"]:(lg||doc)?["🟡 הושלם חלקית","#92400e","#fef3c7"]:["⏸ לא הושלם — לא הופק כלום","#991b1b","#fee2e2"];
         return <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",margin:"2px 0 4px"}}>
           <span style={{fontSize:12.5,fontWeight:800,color:st[1],background:st[2],borderRadius:20,padding:"3px 10px"}}>{st[0]}</span>
+          {h.wantAppt&&<span style={{fontSize:12.5,color:h.apptDone?"#166534":"#94a3b8"}}>📅 תור: {h.apptDone?"נקבע":"לא נקבע"}</span>}
           {h.wantLog&&<span style={{fontSize:12.5,color:lg?"#1d4ed8":"#94a3b8"}}>📋 יומן: {lg?(lg.draft?"טיוטה":"נשמר #"+lg.docNum):"לא נשמר"}</span>}
           {h.wantInvoice&&<span style={{fontSize:12.5,color:doc?"#0f766e":"#94a3b8"}}>🧾 חשבונית: {doc?(doc.official?"הופקה "+(doc.invoiceNum||""):"נשמרה כטיוטה"):"לא הופקה"}</span>}
           {lg&&h.wantInvoice&&!doc&&<button type="button" onClick={()=>go("execlog",{type:"view",id:lg.id})} style={{border:"none",background:"#0f766e",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>🧾 המשך לחשבונית</button>}
@@ -2982,14 +3003,46 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
       </div>
     </div>; })}</div>;
 }
+// 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
+const AI_SCRIPTS={
+  log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'לא לשטוף 24 שעות', 'לאוורר' — ייבחר הנוסח המלא"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים'"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+  invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
+    s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
+  appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
+    s:[["👤","לקוח","שם / עסק / טלפון — לקוח חדש: גם טלפון וכתובת"],["📅","מתי","'מחר בעשר' / 'יום שלישי ב-14:00'"],["🐛","מזיק","'תיקנים', 'עכברים'"],["💰","מחיר שסוכם","אם יש"],["📝","הערות","אם יש"]]},
+};
+function AiScript({mode}){ const S=AI_SCRIPTS[mode]; if(!S) return null;
+  return <div style={{background:"#f1f5f9",borderRadius:14,padding:"10px",marginBottom:10}}>
+    <div style={{fontSize:13,fontWeight:800,color:"#334155",margin:"0 4px 8px"}}>מה להגיד — לפי הסדר (מה שלא נאמר נשאר ריק):</div>
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>{S.s.map(([ic,h,d],i)=><div key={i} style={{background:"#fff",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
+      <span style={{minWidth:22,height:22,borderRadius:11,background:"#ede9fe",color:"#6d28d9",fontSize:12,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{i+1}</span>
+      <span style={{fontSize:18}}>{ic}</span><div style={{lineHeight:1.3}}><div style={{fontSize:14.5,fontWeight:800,color:"#0f172a"}}>{h}</div><div style={{fontSize:12.5,color:"#64748b"}}>{d}</div></div></div>)}</div>
+    <div style={{fontSize:12.5,color:"#475569",margin:"8px 4px 0"}}>💡 דוגמה: <i>"{S.ex}"</i></div>
+    <div style={{fontSize:12,color:"#94a3b8",margin:"4px 4px 0"}}>רישיון, פרטי העסק, התאריך והמספור — נכנסים לבד.</div>
+  </div>; }
+// ✅/⬜ מה העוזר מילא ומה לא נאמר — בראש הטיוטה
+function AiFillSummary({r,kind="log"}){ if(!r||!r.ai) return null;
+  const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
+    :[["סכום",r.price],["סוג מסמך",r.docType],["אמצעי תשלום",r.payMethod],["פירוט",r.invoiceDesc]];
+  const ok=rows.filter(x=>x[1]).map(x=>x[0]), no=rows.filter(x=>!x[1]).map(x=>x[0]);
+  return <div style={{background:"#faf5ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"8px 12px",marginBottom:10,fontSize:13.5,lineHeight:1.6}}>
+    <div style={{fontWeight:800,color:"#4c1d95"}}>🤖 העוזר מילא — בדוק לפני שמירה</div>
+    {ok.length>0&&<div>✅ <b>מילאתי:</b> {ok.join(", ")}</div>}
+    {no.length>0&&<div style={{color:"#64748b"}}>⬜ <b>לא נאמר (נשאר ריק):</b> {no.join(", ")}</div>}
+    {(r.skipped||[]).length>0&&<div style={{color:"#b45309"}}>🚫 <b>לא מילאתי כי לא נאמר במפורש:</b> {r.skipped.join(" · ")}</div>}
+  </div>; }
 // 🎙️ העוזר מהיומן: "תוציא לשירי יומן ביצוע וחשבונית…" → מוצא את התור של היום ופותח טיוטה ממולאת
-function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],currentUser={},onClose,onOpenLog,onOpenInvoice,mem}){
+function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],currentUser={},onClose,onOpenLog,onOpenInvoice,onOpenAppt,mem}){
   const m0=(mem&&mem.current)||{};
   const [txt,setTxt]=useState(m0.txt||""); const [busy,setBusy]=useState(false); const [err,setErr]=useState(""); const [res,setRes]=useState(m0.res||null);
   const [apptSel,setApptSel]=useState(m0.apptSel||""); const [doLog,setDoLog]=useState(m0.doLog!=null?m0.doLog:true); const [doInv,setDoInv]=useState(!!m0.doInv);
-  const hidRef=React.useRef(m0.hid||null);
-  React.useEffect(()=>{ if(mem) mem.current={txt,res,apptSel,doLog,doInv,hid:hidRef.current}; },[txt,res,apptSel,doLog,doInv]);
-  const reset=()=>{ setTxt(""); setRes(null); setErr(""); setApptSel(""); setDoLog(true); setDoInv(false); hidRef.current=null; if(mem) mem.current=null; };
+  const hidRef=React.useRef(m0.hid||null); const [mode,setMode]=useState(m0.mode||"");
+  React.useEffect(()=>{ if(mem) mem.current={txt,res,apptSel,doLog,doInv,mode,hid:hidRef.current}; },[txt,res,apptSel,doLog,doInv,mode]);
+  const reset=()=>{ setTxt(""); setRes(null); setErr(""); setApptSel(""); setDoLog(true); setDoInv(false); setMode(""); hidRef.current=null; if(mem) mem.current=null; };
+  // 📅 תורים חופפים (שעה לפני / אחרי) לאותו מדביר
+  const conflictsOf=(date,time)=>{ if(!date||!time) return []; const mm=t=>{ const [h,m]=String(t||"").split(":").map(Number); return (h||0)*60+(m||0); }; const T0=mm(time);
+    return appointments.filter(a=>a&&!a.deleted&&a.date===date&&a.time&&a.status!=="בוטל"&&a.kind!=="free"&&(currentUser.role!=="מדביר"||a.workerId==null||String(a.workerId)===String(currentUser.id))&&Math.abs(mm(a.time)-T0)<60); };
   const today=isoLocal();
   const todays=React.useMemo(()=>appointments.filter(a=>a&&!a.deleted&&a.date===today&&a.kind!=="personal"&&a.status!=="בוטל"&&(currentUser.role!=="מדביר"||a.workerId===currentUser.id)).sort((a,b)=>String(a.time||"").localeCompare(String(b.time||""))),[appointments,today]);
   const chems=React.useMemo(()=>aiChemList([],chemMemory(execLogs)),[execLogs]);
@@ -3000,7 +3053,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       const digits=t.replace(/\D/g,""); const nT=elNorm(t);
       const scored=(customers||[]).filter(c=>c&&!c.deleted).map(c=>[c,aiCustScore(c,nT,digits)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,15);
       const custs=scored.map(([c])=>({id:String(c.id),name:custDocName(c),contact:c.contactName||"",place:c.placeName||"",addr:c.address||"",phone:c.phone||""}));
-      const r=await aiAssist(t,{appts,chems,custs});
+      const r=await aiAssist(t,{appts,chems,custs,mode});
       const nT2=elNorm(t+" "+(r.customerName||"")); const sc=c=>aiCustScore(c,nT2,digits);
       const apptCust=a=>custOf(a)||{name:a.customerName,contactName:a.contactName,phone:a.phone};
       // לקוח: מה שהעוזר בחר (אם באמת מתאים לטקסט) או ההתאמה הכי טובה
@@ -3012,7 +3065,13 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       if(!hit&&cust) hit=todays.find(a=>String(a.customerId)===String(cust.id))||null;
       if(!hit){ const tb=todays.map(a=>[a,sc(apptCust(a))]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]); if(tb.length&&(!cust||sc(apptCust(tb[0][0]))>=sc(cust))) hit=tb[0][0]; }
       if(hit&&cust&&String(hit.customerId)!==String(cust.id)&&sc(cust)>sc(apptCust(hit))) hit=null;
-      const sel=hit?String(hit.id):cust?"c:"+cust.id:"new"; const dl=r.wantLog||!r.wantInvoice, di=r.wantInvoice;
+      // 📅 קביעת תור
+      if(mode==="appt"||(r.wantAppt&&!r.wantLog&&!r.wantInvoice)){ const conf=conflictsOf(r.apptDate,r.apptTime); const rr={...r,_appt:true,_custId:cust?String(cust.id):"",_conf:conf.map(a=>a.id)};
+        setRes(rr); setApptSel(cust?"c:"+cust.id:"new");
+        if(conf.length===0&&r.apptDate&&(cust||r.newName)){ setBusy(false); goAppt(rr,cust?"c:"+cust.id:"new",t); return; }
+        setBusy(false); return; }
+      if(mode==="log"){ r.wantLog=true; } if(mode==="invoice"){ r.wantInvoice=true; }
+      const sel=hit?String(hit.id):cust?"c:"+cust.id:"new"; const dl=mode==="invoice"?!!r.wantLog&&/יומן/.test(t):(r.wantLog||!r.wantInvoice), di=r.wantInvoice;
       setRes({...r,_custId:cust?String(cust.id):""}); setApptSel(sel); setDoLog(dl); setDoInv(di);
       if(hit||cust){ setBusy(false); go({r:{...r,_custId:cust?String(cust.id):""},sel,dl,di,t}); return; }
     }catch(e){ setErr(e.message||"משהו השתבש"); }
@@ -3029,7 +3088,11 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     if(old&&old.logId==null&&old.docId==null) aiHistUpd(hid,{...entry,ts:new Date().toISOString()}); else hid=aiHistAdd(entry);
     hidRef.current=hid; if(mem) mem.current={txt:t,res,apptSel,doLog,doInv,hid};
     if(doLog){ onOpenLog(a,{r:res,text:txt.trim(),wantInvoice:doInv,hid}); return; }
-    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_aiDocType:res.docType||"",_aiInclVat:res.inclVat!==false,_aiDesc:res.invoiceDesc||"",_hid:hid}); }
+    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_aiDocType:res.docType||"",_aiInclVat:res.inclVat!==false,_aiDesc:res.invoiceDesc||"",_aiR:res,_hid:hid}); }
+  function goAppt(r,sel,t){ const cid=String(sel||"").startsWith("c:")?String(sel).slice(2):""; const cust=cid?(customers||[]).find(c=>String(c.id)===cid):null;
+    const entry={text:(t||txt).trim(),summary:r.summary||"",customerName:cust?custDocName(cust):(r.newName||r.customerName||""),wantAppt:true,wantLog:false,wantInvoice:false,res:r,apptSel:sel};
+    let hid=hidRef.current; const old=hid&&aiHistGet().find(x=>x.id===hid); if(old&&!old.apptDone&&old.logId==null&&old.docId==null) aiHistUpd(hid,{...entry,ts:new Date().toISOString()}); else hid=aiHistAdd(entry);
+    hidRef.current=hid; onOpenAppt&&onOpenAppt({cust,r,hid}); }
   const stRef=React.useRef({}); stRef.current={res,apptSel,doLog,doInv};
   const resNow=()=>stRef.current.res, apptSelNow=()=>stRef.current.apptSel, doLogNow=()=>stRef.current.doLog, doInvNow=()=>stRef.current.doInv;
   const chips=aiChips(res);
@@ -3041,7 +3104,8 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     </div>
     {showH?<><AssistantHistory execLogs={execLogs} finance={finance} onNav={onClose}/>
       <button type="button" onClick={()=>{ onClose(); window.__h360Nav&&window.__h360Nav("aihist"); }} style={{width:"100%",marginTop:10,padding:"10px",borderRadius:10,border:"1.5px dashed #c4b5fd",background:"#fff",color:"#6d28d9",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>פתח את כל ההיסטוריה בעמוד מלא</button></>:<>
-    <div style={{fontSize:13.5,color:"#475569",marginBottom:8,lineHeight:1.5}}>תגיד או תכתוב מה עשית ולמי. למשל: <i>"תוציא לשירי יומן ביצוע וחשבונית, תיקנים, ריססתי דלתא סופר במטבח, אין צורך לצאת, 400 בביט"</i></div>
+    <div style={{display:"flex",gap:6,marginBottom:8}}>{[["log","📋 יומן ביצוע"],["invoice","🧾 חשבונית"],["appt","📅 קביעת תור"]].map(([k,l])=><button key={k} type="button" onClick={()=>setMode(m=>m===k?"":k)} style={{flex:1,padding:"10px 4px",borderRadius:12,border:"2px solid "+(mode===k?"#7c3aed":"#e2e8f0"),background:mode===k?"#ede9fe":"#fff",color:mode===k?"#5b21b6":"#475569",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>)}</div>
+    {mode?<AiScript mode={mode}/>:<div style={{fontSize:13.5,color:"#475569",marginBottom:8,lineHeight:1.5}}>בחר למעלה מה לעשות כדי לראות מה להגיד — או פשוט תגיד מה עשית ולמי.</div>}
     <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder="מה עשית ולמי…" style={{width:"100%",boxSizing:"border-box",padding:"12px",borderRadius:12,border:"1.5px solid #c4b5fd",fontSize:16,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,marginTop:8,alignItems:"flex-start",flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t)}/>
@@ -3052,6 +3116,17 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}>{res.summary?<div style={{fontSize:14.5,color:"#4c1d95",fontWeight:700,marginBottom:8}}>🤖 {res.summary}</div>:<span/>}
         <button type="button" onClick={reset} style={{border:"none",background:"none",color:"#7c3aed",fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",padding:0}}>🧹 התחל מחדש</button></div>
       {res.ai&&<div style={{fontSize:12.5,color:"#6d28d9",marginBottom:8}}>חסר משהו? תוסיף למעלה (למשל "שילם במזומן") ולחץ שוב "🤖 מלא ופתח טיוטה".</div>}
+      {res._appt?<div>
+        <div style={{fontSize:15,fontWeight:800,marginBottom:6}}>📅 {res.apptDate?fmtDate(res.apptDate):<span style={{color:"#b45309"}}>לא נאמר תאריך</span>}{" · "}{res.apptTime||<span style={{color:"#b45309"}}>לא נאמרה שעה</span>}</div>
+        {(res._conf||[]).length>0&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 10px",fontSize:13.5,marginBottom:8}}>⚠️ <b>יש כבר תור קרוב באותה שעה:</b> {appointments.filter(a=>(res._conf||[]).includes(a.id)).map(a=>a.time+" "+(a.customerName||"")).join(" · ")}</div>}
+        <select value={apptSel} onChange={e=>setApptSel(e.target.value)} style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",background:"#fff",marginBottom:8}}>
+          {(()=>{ const c=res._custId&&(customers||[]).find(x=>String(x.id)===res._custId); return c?<option value={"c:"+c.id}>👤 {custDocName(c)}{c.contactName?" ("+c.contactName+")":""} — לקוח קיים</option>:null; })()}
+          <option value="new">➕ לקוח חדש{res.newName||res.customerName?" — "+(res.newName||res.customerName):""}</option>
+        </select>
+        {apptSel==="new"&&<div style={{fontSize:13,color:"#475569",marginBottom:8}}>לקוח חדש: {[res.newName||res.customerName,res.newPhone,res.newAddress].filter(Boolean).join(" · ")||"—"}{(!res.newPhone||!res.newAddress)&&<span style={{color:"#b45309"}}> · חסר {[!res.newPhone&&"טלפון",!res.newAddress&&"כתובת"].filter(Boolean).join(" ו")} — תשלים בטופס</span>}</div>}
+        <button type="button" onClick={()=>goAppt(res,apptSel)} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{(res._conf||[]).length?"📅 קבע בכל זאת — פתח טיוטה":"📅 פתח טיוטת תור"}</button>
+        <div style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>התור נקבע רק אחרי שתלחץ "שמור ושגר" בטופס.</div>
+      </div>:<>
       {apptSel==="new"&&<div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>👇 לא מצאתי תור היום ללקוח הזה — בחר מהרשימה או המשך בלי תור</div>}
       <div style={{fontSize:13,fontWeight:800,color:"#334155",marginBottom:4}}>👤 ללקוח:</div>
       <select value={apptSel} onChange={e=>setApptSel(e.target.value)} style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",background:"#fff",marginBottom:8}}>
@@ -3066,7 +3141,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       </div>
       <button type="button" disabled={!doLog&&!doInv} onClick={()=>go()} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:!doLog&&!doInv?"#94a3b8":"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ פתח טיוטה לבדיקה</button>
       <div style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>שום דבר לא נשמר ולא נשלח עד שתבדוק ותאשר.{doLog&&doInv?" אחרי שמירת היומן — החשבונית נפתחת לבד.":""}</div>
-    </div>}</>}
+    </>}</div>}</>}
   </Modal>;
 }
 function ExecSmartFill({onApply,chemNames,memory,value,onChange}){
@@ -3232,7 +3307,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       return ch?{...x,materials:mats}:x; });
   },[devKey,f.materials.map(m=>m.name+(rodentSpotsOn(m)?"r":"")).join("|")]);
   const elRef=React.useRef(null);
-  const applySmart=r=>{
+  const [aiSum,setAiSum]=useState(null);
+  const applySmart=r=>{ if(r&&r.ai) setAiSum(r);
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
     if(r.reentry0||r.reentryAdults) touched.current.reentry=true;
     setF(x=>{ const nx={...x,exterminate:true};
@@ -3265,6 +3341,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.monitor&&Object.keys(r.monitor).length){ const m={...(x.monitor||{})}; Object.entries(r.monitor).forEach(([p,v])=>{ m[p]=[...new Set([...(m[p]||[]),...v])]; }); nx.monitor=m; }
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
+    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
   };
   // טיוטה מהעוזר החכם — ממלאים פעם אחת כשהיומן נפתח
@@ -3308,6 +3385,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const placeSum=placeToScope(f.place).join(" · ");
   const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
+    <AiFillSummary r={aiSum}/>
     <ExecSmartFill onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן ביצוע לפי שלבים"],["flat","📄 יומן ביצוע רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
@@ -5612,7 +5690,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [monthYear,setMonthYear]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [invAppt,setInvAppt]=useState(null);
   const [detailAppt,setDetailAppt]=useState(null);
-  const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false); const [aiOpen,setAiOpen]=useState(false); const [aiDraft,setAiDraft]=useState(null); const aiMem=React.useRef(null);
+  const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false); const [aiOpen,setAiOpen]=useState(false); const [aiDraft,setAiDraft]=useState(null); const aiMem=React.useRef(null); const aiApptHid=React.useRef(null);
   React.useEffect(()=>{ const f=e=>{ const h=e.detail||{}; aiMem.current={txt:h.text||"",res:h.res||null,apptSel:h.apptSel||"",doLog:h.wantLog!==false,doInv:!!h.wantInvoice,hid:h.id}; setLogAppt(null); setInvAppt(null); setAiOpen(true); }; window.addEventListener("h360airesume",f); return()=>window.removeEventListener("h360airesume",f); },[]);
   const aiBackTo=hid=>{ if(!hid) return; const h=aiHistGet().find(x=>x.id===hid); if(!h) return; const done=(!h.wantLog||h.logId!=null)&&(!h.wantInvoice||h.docId!=null); if(done){ aiMem.current=null; return; } setTimeout(()=>setAiOpen(true),60); };
   const [draggedId,setDraggedId]=useState(null);
@@ -5872,7 +5950,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         </tr>)}</tbody>
       </table>
     </div>}
-    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":newKind==="free"?"✍️ רישום מהיר — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>{setShowNew(false);setFullText(null);setConvertId(null);setFreeDraft("");}} width={newKind==="job"?860:540}>
+    {showNew&&<Modal title={(newKind==="personal"?"📌 משימה חדשה ביומן — ":newKind==="free"?"✍️ רישום מהיר — ":"📝 הזמנת עבודה חדשה — ")+(prefill.date?fmtDate(prefill.date):"")+" "+(prefill.time||"")} onClose={()=>{setShowNew(false);setFullText(null);setConvertId(null);setFreeDraft(""); if(aiApptHid.current){ aiApptHid.current=null; setTimeout(()=>setAiOpen(true),60); } }} width={newKind==="job"?860:540}>
       <div style={{display:"flex",gap:4,background:"#f1f5f9",borderRadius:10,padding:4,marginBottom:12}}>
         {[["free","✍️ רישום מהיר"],["job","🐜 הזמנת עבודה"],["personal","📌 משימה"]].map(([k,l])=><button key={k} type="button" onClick={()=>{ if(k==="job"&&newKind==="free"&&freeDraft.trim()&&(!fullText||fullText.text!==freeDraft)) setFullText({text:freeDraft,n:Date.now()}); setNewKind(k); }} style={{flex:1,padding:"9px 6px",borderRadius:8,border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:14,fontWeight:newKind===k?800:500,background:newKind===k?"#fff":"transparent",color:newKind===k?(k==="personal"?PERSONAL_CLR:CLR.primary):"#64748b",boxShadow:newKind===k?"0 1px 3px rgba(0,0,0,.12)":"none"}}>{l}</button>)}
       </div>
@@ -5886,7 +5964,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       <OrderForm workers={workers} customers={customers} showGuidance={false} initialParsed={fullText}
         initialDate={prefill.date} initialTime={prefill.time} initialWorker={prefill.workerId}
         onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
-        onSchedule={appt=>setAppointments(as=>{ if(convertId!=null&&as.some(x=>x.id===convertId)){ const old=as.find(x=>x.id===convertId); return as.map(x=>x.id===convertId?{...appt,id:convertId,convertedFromFree:true,freeText:old.freeText||old.rawMsg||"",kind:undefined,updatedAt:new Date().toISOString()}:x); } return [...as,{...appt,id:nextId(as)}]; })}
+        onSchedule={appt=>{ if(aiApptHid.current){ aiHistUpd(aiApptHid.current,{apptDone:true}); aiApptHid.current=null; aiMem.current=null; } setAppointments(as=>{ if(convertId!=null&&as.some(x=>x.id===convertId)){ const old=as.find(x=>x.id===convertId); return as.map(x=>x.id===convertId?{...appt,id:convertId,convertedFromFree:true,freeText:old.freeText||old.rawMsg||"",kind:undefined,updatedAt:new Date().toISOString()}:x); } return [...as,{...appt,id:nextId(as)}]; }); }}
         onDone={(saved,schedInfo)=>{
           setConvertId(null);
           if(schedInfo) alert(`✅ הזמנה נשמרה וקבוצה ל-${schedInfo.workerName} ב-${fmtDate(schedInfo.date)}`);
@@ -5907,7 +5985,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
-    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _ai=!!invAppt._hid; const _paid=_ai?!!invAppt._aiPaid:(_lg&&_lg.paymentDone); const _pm=_ai?invAppt._aiPayMethod:(_lg&&_lg.paymentMethod); const _amt=_ai?(invAppt.price||""):((_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""); return <DocModal type={_ai&&invAppt._aiDocType?invAppt._aiDocType:(_paid?"חשבונית מס/קבלה":"חשבונית מס")} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:_ai?invAppt._aiInclVat!==false:true,lines:[{desc:(_ai&&invAppt._aiDesc)||(invAppt.pestType?"הדברת "+invAppt.pestType:"שירותי הדברה")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&_pm&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{ const _hid=invAppt&&invAppt._hid; setInvAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={rec=>{ if(invAppt&&invAppt._hid){ const _id=nextId(finance); setFinance(fs=>[...fs,{...rec,id:fs.some(x=>x.id===_id)?nextId(fs):_id}]); aiHistUpd(invAppt._hid,{docId:_id}); return; } setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _ai=!!invAppt._hid; const _paid=_ai?!!invAppt._aiPaid:(_lg&&_lg.paymentDone); const _pm=_ai?invAppt._aiPayMethod:(_lg&&_lg.paymentMethod); const _amt=_ai?(invAppt.price||""):((_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""); return <DocModal type={_ai&&invAppt._aiDocType?invAppt._aiDocType:(_paid?"חשבונית מס/קבלה":"חשבונית מס")} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,aiR:_ai?invAppt._aiR:null,execDocNum:_lg?_lg.docNum:"",inclVat:_ai?invAppt._aiInclVat!==false:true,lines:[{desc:(_ai&&invAppt._aiDesc)||(invAppt.pestType?"הדברת "+invAppt.pestType:"שירותי הדברה")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&_pm&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{ const _hid=invAppt&&invAppt._hid; setInvAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={rec=>{ if(invAppt&&invAppt._hid){ const _id=nextId(finance); setFinance(fs=>[...fs,{...rec,id:fs.some(x=>x.id===_id)?nextId(fs):_id}]); aiHistUpd(invAppt._hid,{docId:_id}); return; } setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {repeatFrom&&<Modal title={"🔁 ביקור חוזר — "+(repeatFrom.orig.customerName||"")} onClose={()=>setRepeatFrom(null)} width={860}>
       <div className="h360-hint" style={{fontSize:13,color:"#166534",marginBottom:12,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}>🔁 כל הפרטים מולאו מהביקור הקודם (הזמנה, יומן ביצוע וכרטיס הלקוח). בחר <b>תאריך ושעה</b> — ואפשר לשנות כל דבר אחר.</div>
       <OrderForm workers={workers} customers={customers} showGuidance={false}
@@ -5970,7 +6048,11 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
     {!logAppt&&!invAppt&&!aiOpen&&<button type="button" onClick={()=>setAiOpen(true)} title="העוזר החכם — יומן ביצוע / חשבונית מדיבור" style={{position:"fixed",left:14,bottom:"calc(84px + env(safe-area-inset-bottom))",zIndex:60,height:52,padding:"0 18px",borderRadius:26,border:"none",background:"linear-gradient(135deg,#7c3aed,#2563eb)",color:"#fff",fontSize:16,fontWeight:800,boxShadow:"0 6px 18px rgba(79,70,229,.4)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>🎙️ עוזר</button>}
     {aiOpen&&<AssistantModal mem={aiMem} appointments={appointments} customers={customers} execLogs={execLogs} finance={finance} currentUser={currentUser} onClose={()=>setAiOpen(false)}
-      onOpenLog={(a,d)=>{setAiOpen(false);setAiDraft(d);setLogEdit(false);setLogAppt(a);}} onOpenInvoice={a=>{setAiOpen(false);setInvAppt(a);}}/>}
+      onOpenLog={(a,d)=>{setAiOpen(false);setAiDraft(d);setLogEdit(false);setLogAppt(a);}} onOpenInvoice={a=>{setAiOpen(false);setInvAppt(a);}}
+      onOpenAppt={({cust,r,hid})=>{ setAiOpen(false); aiApptHid.current=hid; window.__h360PendingOrder=cust?{...cust}:null;
+        setPrefill({date:r.apptDate||"",time:r.apptTime||"",workerId:currentUser.id});
+        const lines=[!cust&&(r.newName||r.customerName),!cust&&r.newPhone,!cust&&r.newAddress,(r.pests||[]).join(", "),r.price?r.price+" ₪":"",r.notes].filter(Boolean).join("\n");
+        setFullText(lines?{text:lines,n:Date.now()}:null); setConvertId(null); setNewKind("job"); setShowNew(true); }}/>}
     {logAppt&&<ExecLogModalInline aiDraft={aiDraft} key={logAppt.id+(logEdit?"e":"v")} startEdit={logEdit} appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
       currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance} finance={finance} appointments={appointments}
       onClose={()=>{ const _hid=aiDraft&&aiDraft.hid; setLogAppt(null);setAiDraft(null);setDetailAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog} onOpenInvoice={a=>{setLogAppt(null);setInvAppt(a);}}/>}
@@ -9363,6 +9445,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     if(r.notes) setNotes(n=>mergeNotes(n,r.notes));
   };
   return <Modal title={"🧾 "+(P.refund?"קבלה על החזר כספי ללקוח":type)+(official&&T.accounting?"":" (טיוטה)")} onClose={onClose} width={720}>
+    {P.aiR&&<AiFillSummary r={P.aiR} kind="invoice"/>}
     {P.refund&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>↩ <b>החזר כספי:</b> הסכום בקבלה הזו במינוס — הוא מתעד שהחזרת ללקוח כסף בעקבות {P.refText||"חשבונית הזיכוי"}. בחר איך החזרת (מזומן, העברה, ביט…) והקלד את הסכום עם מינוס.</div>}
     <SmartBox color="#2563eb" bg="#eff6ff" border="#93c5fd" contacts parse={t=>parseDoc(t,{customers})} onApply={applyDoc}
       hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת תיקנים 350 שקל, שילם במזומן".'
