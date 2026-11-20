@@ -3313,7 +3313,7 @@ function LogTplBar({f,onApply,pests}){
   </div>; }
 // 📌 מסך התבניות — לעבור בלילה ולזכור את השמות
 function LogTplScreen(){
-  const all=useLogTpl(); const list=logTplLive(all); const wide=useWide(); const [edit,setEdit]=useState(null); const [openI,setOpenI]=useState(null);
+  const all=useLogTpl(); const list=logTplLive(all); const wide=useWide(); const [edit,setEdit]=useState(null); const [openI,setOpenI]=useState(null); const [edI,setEdI]=useState(null);
   const pests=[...new Set(list.map(logTplPest))];
   const upd=async(id,patch)=>{ try{ await logTplSave(all.map(t=>t.id===id?{...t,...patch,updatedAt:new Date().toISOString()}:t)); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } };
   const move=async(t,dir)=>{ const same=list.filter(x=>logTplPest(x)===logTplPest(t)); const i=same.findIndex(x=>x.id===t.id), j=i+dir; if(j<0||j>=same.length) return; const a=[...all]; const ia=a.findIndex(x=>x.id===same[i].id), ib=a.findIndex(x=>x.id===same[j].id); [a[ia],a[ib]]=[a[ib],a[ia]]; await logTplSave(a); };
@@ -3341,7 +3341,13 @@ function LogTplScreen(){
             {(d.terms||[]).length>0&&<div>📜 {d.terms.map(x=>x.title).join(" · ")}</div>}
             {logTplWarrTxt(d)&&<div>🛡️ {logTplWarrTxt(d)}</div>}
             {(d.instructions||[]).length>0&&<div><button type="button" onClick={()=>setOpenI(openI===t.id?null:t.id)} style={{border:"none",background:"none",padding:0,color:"#0369a1",cursor:"pointer",fontFamily:"inherit",fontSize:12.5,fontWeight:700}}>📋 {d.instructions.length} הנחיות {openI===t.id?"▲":"▼"}</button>
-              {openI===t.id&&<div style={{marginTop:4}}>{d.instructions.map(x=><div key={x}>{instrNum(x)?<b>{instrNum(x)}. </b>:"• "}{x}</div>)}</div>}</div>}
+              {openI===t.id&&<div style={{marginTop:4}}>{d.instructions.map((x,xi)=>edI&&edI.id===t.id&&edI.i===xi?<div key={xi} style={{margin:"4px 0"}}>
+                <textarea autoFocus value={edI.text} onChange={e=>setEdI({...edI,text:e.target.value})} rows={3} style={{width:"100%",boxSizing:"border-box",padding:"7px 9px",borderRadius:8,border:"1.5px solid #0284c7",fontSize:14,fontFamily:"inherit",lineHeight:1.5}}/>
+                <div style={{display:"flex",gap:6,marginTop:4}}><button type="button" onClick={async()=>{ const n=String(edI.text||"").replace(/\s+/g," ").trim(); if(n){ const L=[...d.instructions]; L[xi]=n; await upd(t.id,{data:{...d,instructions:[...new Set(L)]}}); } setEdI(null); }} style={{...sb2,background:"#0284c7",color:"#fff",border:"none",fontWeight:700}}>💾 שמור</button>
+                  <button type="button" onClick={()=>setEdI(null)} style={sb2}>ביטול</button></div></div>
+              :<div key={xi} style={{display:"flex",gap:6,alignItems:"flex-start",padding:"3px 0",borderBottom:"1px solid #f1f5f9"}}><span style={{flex:1,userSelect:"text"}}>{instrNum(x)?<b>{instrNum(x)}. </b>:"• "}{x}</span>
+                <button type="button" title="ערוך" onClick={()=>setEdI({id:t.id,i:xi,text:x})} style={{...sb2,padding:"2px 7px"}}>✏️</button>
+                <button type="button" title="הורד מהתבנית" onClick={async()=>{ if(confirm("להוריד את ההנחיה מהתבנית?")) await upd(t.id,{data:{...d,instructions:d.instructions.filter((_,k2)=>k2!==xi)}}); }} style={{...sb2,padding:"2px 7px",color:"#dc2626"}}>✕</button></div>)}</div>}</div>}
           </div>
           {!ed&&<div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
             <button type="button" onClick={()=>setEdit({id:t.id,name:t.name,desc:t.desc||""})} style={sb2}>✏️ שם / תיאור</button>
@@ -3584,6 +3590,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const toggleInstr=t=>{touched.current.instr=true;setF(x=>({...x,instructions:x.instructions.includes(t)?x.instructions.filter(y=>y!==t):[...x.instructions,t]}));};
   const [instrAdd,setInstrAdd]=useState("");
   const [instrMore,setInstrMore]=useState(false);
+  // ✏️ עריכת נוסח הנחיה ביומן הזה. הנחיה שכתבת בעצמך — הנוסח הישן (עם הטעות) מוסתר כדי שלא יחזור
+  const [instrEd,setInstrEd]=useState(null);
+  const saveInstrEd=()=>{ const o=instrEd.orig, n=String(instrEd.text||"").replace(/\s+/g," ").trim(); setInstrEd(null); if(!n||n===o) return; touched.current.instr=true;
+    setF(x=>({...x,instructions:x.instructions.includes(o)?[...new Set(x.instructions.map(y=>y===o?n:y))]:[...new Set([...x.instructions,n])]}));
+    if(!AI_INSTR_ALL().includes(o)){ const nh=[...new Set([...instrHidden,o])]; instrHiddenSet(nh); setInstrHidden(nh); }
+    showToast("✏️ ההנחיה עודכנה"); };
   const [payMore,setPayMore]=useState(false);
   const [svcOpen,setSvcOpen]=useState(false);
   const addDevice=type=>setF(x=>({...x,devices:x.devices.some(d=>d.type===type)?x.devices:[...x.devices,{type,qty:1,location:""}]}));
@@ -3782,7 +3794,14 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           const used=Object.keys(instrUsed).filter(t=>!rel.includes(t));
           const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t)&&!used.includes(t));
           const all=[...rel,...used].filter(t=>!instrHidden.includes(t)||f.instructions.includes(t)).sort((a,b)=>(f.instructions.includes(b)?1:0)-(f.instructions.includes(a)?1:0)||(instrUsed[b]||0)-(instrUsed[a]||0));
-          return instrMore?[...all,...rest.filter(t=>!instrHidden.includes(t))]:all;})().map(t=>{const on=f.instructions.includes(t);return <div key={t} style={{display:"flex",gap:4,alignItems:"stretch"}}><button type="button" onClick={()=>toggleInstr(t)} style={{flex:1,display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{instrNum(t)?<b style={{color:"#0369a1",marginLeft:4}}>{instrNum(t)}.</b>:null}{instrUsed[t]?"⭐ ":""}{t}</span></button>
+          return instrMore?[...all,...rest.filter(t=>!instrHidden.includes(t))]:all;})().map(t=>{const on=f.instructions.includes(t);
+            if(instrEd&&instrEd.orig===t) return <div key={t} style={{border:"1.5px solid #0284c7",borderRadius:10,padding:8,background:"#f0f9ff"}}>
+              <textarea autoFocus value={instrEd.text} onChange={e=>setInstrEd({...instrEd,text:e.target.value})} rows={3} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid #bae6fd",fontSize:14.5,fontFamily:"inherit",lineHeight:1.5}}/>
+              {AI_INSTR_ALL().includes(t)&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",margin:"2px 0"}}>זו הנחיה מוכנה — השינוי נכנס ליומן הזה (ולתבנית אם תשמור אותו כתבנית).</div>}
+              <div style={{display:"flex",gap:6,marginTop:6}}><button type="button" onClick={saveInstrEd} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#0284c7",color:"#fff",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>💾 שמור נוסח</button>
+                <button type="button" onClick={()=>setInstrEd(null)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontSize:13.5,cursor:"pointer",fontFamily:"inherit"}}>ביטול</button></div></div>;
+            return <div key={t} style={{display:"flex",gap:4,alignItems:"stretch"}}><button type="button" onClick={()=>toggleInstr(t)} style={{flex:1,display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{instrNum(t)?<b style={{color:"#0369a1",marginLeft:4}}>{instrNum(t)}.</b>:null}{instrUsed[t]?"⭐ ":""}{t}</span></button>
+            <button type="button" title="ערוך את הנוסח" onClick={()=>setInstrEd({orig:t,text:t})} style={{flexShrink:0,width:34,border:"1px solid #e2e8f0",background:"#fff",color:"#0369a1",borderRadius:10,cursor:"pointer",fontSize:14}}>✏️</button>
             <button type="button" title="הסתר את ההנחיה הזו (לא רלוונטית)" onClick={()=>{ const nh=[...new Set([...instrHidden,t])]; instrHiddenSet(nh); setInstrHidden(nh); touched.current.instr=true; setF(x=>({...x,instructions:x.instructions.filter(y=>y!==t)})); showToast("ההנחיה הוסתרה — אפשר להחזיר ב'הנחיות שהסתרתי'"); }} style={{flexShrink:0,width:34,border:"1px solid #e2e8f0",background:"#fff",color:"#94a3b8",borderRadius:10,cursor:"pointer",fontSize:14}}>✕</button></div>;})}
         {instrHidden.length>0&&instrMore&&<button type="button" onClick={()=>{ instrHiddenSet([]); setInstrHidden([]); showToast("ההנחיות שהסתרת חזרו"); }} style={{padding:"6px 10px",borderRadius:10,border:"none",background:"none",color:"#64748b",fontSize:13,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>↩ הנחיות שהסתרתי ({instrHidden.length}) — החזר</button>}
         <button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות (כלליות)"}</button>
@@ -14474,7 +14493,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "240";
+const APP_BUILD = "241";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
