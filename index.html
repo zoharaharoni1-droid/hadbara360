@@ -2910,11 +2910,13 @@ function aiNorm(d,chems=[],text=""){
   out.notes=String(d.notes||"").trim();
   out.summary=String(d.summary||"").trim(); out.apptId=String(d.apptId||""); out.customerName=String(d.customerName||"").trim();
   out.wantLog=d.wantLog!==false; out.wantInvoice=!!d.wantInvoice; out.ai=true;
+  out.customerId=String(d.customerId||""); out.invoiceDesc=String(d.invoiceDesc||"").trim();
+  out.docType=aiDocType(out,text); out.inclVat=aiInclVat(text);
   return out;
 }
-async function aiAssist(text,{appts=[],chems=[]}={}){
+async function aiAssist(text,{appts=[],chems=[],custs=[]}={}){
   let tok=SUPA_KEY; try{ const {data}=await sb.auth.getSession(); if(data&&data.session) tok=data.session.access_token; }catch(e){}
-  const ctx={today:isoLocal(),appts,pests:PEST_TYPES_LOG,signs:[...new Set([...Object.values(MONITOR_SIGNS).flat(),...MON_DEFAULT,MON_NONE])],chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
+  const ctx={today:isoLocal(),appts,customers:custs,pests:PEST_TYPES_LOG,signs:[...new Set([...Object.values(MONITOR_SIGNS).flat(),...MON_DEFAULT,MON_NONE])],chems,areas:[...new Set(Object.values(APPLY_AREAS).flat())],places:AI_PLACES,methods:AI_METHODS,payMethods:PAY_METHODS};
   const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),30000);
   let r; try{ r=await fetch(ASSIST_URL,{method:"POST",signal:ctl.signal,headers:{"Content-Type":"application/json","Authorization":"Bearer "+tok,"apikey":SUPA_KEY},body:JSON.stringify({text,ctx})}); }
   catch(e){ clearTimeout(to); throw new Error(e&&e.name==="AbortError"?"לקח יותר מדי זמן":"אין חיבור לאינטרנט"); }
@@ -2927,6 +2929,15 @@ async function aiAssist(text,{appts=[],chems=[]}={}){
     throw new Error(m.slice(0,100)); }
   return aiNorm(j.data,chems,text);
 }
+// התאמת לקוח לטקסט: כמה מילים מהשם / העסק / המקום / איש הקשר מופיעות במשפט (+ טלפון)
+const AI_STOP=new Set(["חשבונית","קבלה","יומן","ביצוע","הדברה","שקלים","שקל","כולל","לקוח","בית","דירה","משרד"]);
+function aiCustScore(c,normT,digits){ if(!c) return 0; let sc=0; const toks=[c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).map(elNorm).join(" ").split(" ").filter(w=>w.length>=3&&!AI_STOP.has(w));
+  [...new Set(toks)].forEach(w=>{ if((" "+normT+" ").includes(" "+w+" ")||normT.includes(" "+w)||normT.startsWith(w)) sc++; });
+  const ph=String(c.phone||"").replace(/\D/g,""); if(ph.length>=9&&digits.includes(ph.slice(-9))) sc+=3; return sc; }
+function aiDocType(r,t){ const T=String(t||""); if(/חשבונית\s*מס\s*[\/\\-]?\s*קבלה|חשבונית[\s-]*קבלה/.test(T)) return "חשבונית מס/קבלה";
+  if(/(^|\s|ו|ל)קבלה(\s|$|[,.])/.test(T)&&!/חשבונית/.test(T)) return "קבלה";
+  return r&&r.payStatus==="paid"&&r.payMethod?"חשבונית מס/קבלה":"חשבונית מס"; }
+const aiInclVat=t=>!/לפני\s*מע"?מ|פלוס\s*מע"?מ|\+\s*מע"?מ|לא\s*כולל\s*מע"?מ|בלי\s*מע"?מ/.test(String(t||""));
 // מיזוג: מה שהעוזר הבין קובע; חומרים שהזיהוי הרגיל מצא בשם מדויק — נוספים
 function aiMerge(ai,loc){ if(!loc) return ai; const o={...ai}; if((loc.materials||[]).length){ o.materials=[...new Set([...(ai.materials||[]),...loc.materials])]; if(!o.found.includes("חומרים")) o.found=[...o.found,"חומרים"]; } return o; }
 function aiChips(r){ if(!r) return []; return [r.pests&&"🐛 "+r.pests.join(", ")+(r.level?" ("+r.level+")":""),r.placeType&&"🏠 "+r.placeType,(r.materials||[]).length&&"🧪 "+r.materials.join(", ")+(r.methodHint?" · "+r.methodHint:""),(r.areas||[]).length&&"📍 "+r.areas.join(", "),(r.boxesNew||r.boxesRefill)&&"🪤 "+[r.boxesNew?r.boxesNew+" חדשות":"",r.boxesRefill?"מילוי "+r.boxesRefill:""].filter(Boolean).join(" + "),r.reentry0?"🚪 אין צורך לצאת":r.reentryAdults&&"🚪 לצאת "+r.reentryAdults+" שעות",r.price?"💰 "+r.price+" ₪"+(r.payStatus==="debt"?" · חוב":r.payMethod?" · "+r.payMethod:""):(r.payMethod?"💰 "+r.payMethod:r.payStatus==="debt"?"💰 חוב":""),r.warranty&&"🛡️ אחריות "+r.warranty+" חודשים",r.hasPets&&"🐕 בעלי חיים",r.hasBaby&&"👶 תינוק",r.monitor&&"🔎 "+Object.values(r.monitor).flat().join(", ")].filter(Boolean); }
@@ -2986,17 +2997,30 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
   const run=async()=>{ const t=txt.trim(); if(!t) return; setBusy(true); setErr(""); setRes(null);
     try{
       const appts=todays.map(a=>{ const c=custOf(a)||{}; return {id:String(a.id),name:a.customerName||custDocName(c),contact:a.contactName||c.contactName||"",place:c.placeName||"",addr:a.address||"",phone:a.phone||c.phone||"",time:a.time||"",pests:(a.pests||[]).join(", ")||a.pestType||"",price:a.price||"",status:a.status||""}; });
-      const r=aiAssist? await aiAssist(t,{appts,chems}) : null;
-      let hit=todays.find(a=>String(a.id)===r.apptId);
-      if(!hit&&r.customerName){ const k=elNorm(r.customerName); hit=todays.find(a=>{ const n=elNorm([a.customerName,a.contactName,(custOf(a)||{}).placeName].filter(Boolean).join(" ")); return k.length>=2&&n.includes(k); }); }
-      const sel=hit?String(hit.id):(todays.length===1?String(todays[0].id):"new"); const dl=r.wantLog||!r.wantInvoice, di=r.wantInvoice;
-      setRes(r); setApptSel(sel); setDoLog(dl); setDoInv(di);
-      if(hit){ setBusy(false); go({r,sel,dl,di,t}); return; }
+      const digits=t.replace(/\D/g,""); const nT=elNorm(t);
+      const scored=(customers||[]).filter(c=>c&&!c.deleted).map(c=>[c,aiCustScore(c,nT,digits)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,15);
+      const custs=scored.map(([c])=>({id:String(c.id),name:custDocName(c),contact:c.contactName||"",place:c.placeName||"",addr:c.address||"",phone:c.phone||""}));
+      const r=await aiAssist(t,{appts,chems,custs});
+      const nT2=elNorm(t+" "+(r.customerName||"")); const sc=c=>aiCustScore(c,nT2,digits);
+      const apptCust=a=>custOf(a)||{name:a.customerName,contactName:a.contactName,phone:a.phone};
+      // לקוח: מה שהעוזר בחר (אם באמת מתאים לטקסט) או ההתאמה הכי טובה
+      let cust=(customers||[]).find(c=>String(c.id)===r.customerId&&sc(c)>0)||null;
+      const best=(customers||[]).filter(c=>c&&!c.deleted).map(c=>[c,sc(c)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+      if(!cust&&best.length&&(best.length===1||best[0][1]>best[1][1])) cust=best[0][0];
+      // תור של היום: רק אם הלקוח שלו באמת מוזכר
+      let hit=todays.find(a=>String(a.id)===r.apptId&&sc(apptCust(a))>0)||null;
+      if(!hit&&cust) hit=todays.find(a=>String(a.customerId)===String(cust.id))||null;
+      if(!hit){ const tb=todays.map(a=>[a,sc(apptCust(a))]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]); if(tb.length&&(!cust||sc(apptCust(tb[0][0]))>=sc(cust))) hit=tb[0][0]; }
+      if(hit&&cust&&String(hit.customerId)!==String(cust.id)&&sc(cust)>sc(apptCust(hit))) hit=null;
+      const sel=hit?String(hit.id):cust?"c:"+cust.id:"new"; const dl=r.wantLog||!r.wantInvoice, di=r.wantInvoice;
+      setRes({...r,_custId:cust?String(cust.id):""}); setApptSel(sel); setDoLog(dl); setDoInv(di);
+      if(hit||cust){ setBusy(false); go({r:{...r,_custId:cust?String(cust.id):""},sel,dl,di,t}); return; }
     }catch(e){ setErr(e.message||"משהו השתבש"); }
     setBusy(false); };
-  const pickAppt=(apptSel,res)=>{ if(apptSel&&apptSel!=="new") return todays.find(a=>String(a.id)===apptSel);
+  const pickAppt=(apptSel,res)=>{ if(apptSel&&apptSel!=="new"&&!String(apptSel).startsWith("c:")) return todays.find(a=>String(a.id)===apptSel);
     const nm=res&&res.customerName||""; const k=elNorm(nm);
-    const c=k.length>=2&&(customers||[]).find(c=>!c.deleted&&elNorm([c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).join(" ")).includes(k));
+    const cid=String(apptSel||"").startsWith("c:")?String(apptSel).slice(2):"";
+    const c=cid?(customers||[]).find(c=>String(c.id)===cid):null;
     const now=new Date(); return {id:"ai"+Date.now(),_ai:true,customerName:c?custDocName(c):nm,customerId:c?c.id:null,contactName:c&&c.contactName||"",phone:c&&c.phone||"",address:c&&c.address||"",date:today,time:String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0"),pestType:(res.pests||[]).join(", "),pests:res.pests||[],price:parseFloat(res.price)||0,workerId:currentUser.id,status:"ממתין"}; };
   function go(o){ const res=o&&o.r||resNow(), apptSel=o&&o.sel||apptSelNow(), doLog=o?o.dl:doLogNow(), doInv=o?o.di:doInvNow(), t=(o&&o.t||txt).trim();
     const a=pickAppt(apptSel,res); if(!a) return;
@@ -3005,7 +3029,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     if(old&&old.logId==null&&old.docId==null) aiHistUpd(hid,{...entry,ts:new Date().toISOString()}); else hid=aiHistAdd(entry);
     hidRef.current=hid; if(mem) mem.current={txt:t,res,apptSel,doLog,doInv,hid};
     if(doLog){ onOpenLog(a,{r:res,text:txt.trim(),wantInvoice:doInv,hid}); return; }
-    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_hid:hid}); }
+    if(doInv) onOpenInvoice({...a,price:parseFloat(res.price)||a.price||0,_aiPaid:res.payStatus==="paid",_aiPayMethod:res.payMethod||"",_aiDocType:res.docType||"",_aiInclVat:res.inclVat!==false,_aiDesc:res.invoiceDesc||"",_hid:hid}); }
   const stRef=React.useRef({}); stRef.current={res,apptSel,doLog,doInv};
   const resNow=()=>stRef.current.res, apptSelNow=()=>stRef.current.apptSel, doLogNow=()=>stRef.current.doLog, doInvNow=()=>stRef.current.doInv;
   const chips=aiChips(res);
@@ -3031,8 +3055,9 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       {apptSel==="new"&&<div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>👇 לא מצאתי תור היום ללקוח הזה — בחר מהרשימה או המשך בלי תור</div>}
       <div style={{fontSize:13,fontWeight:800,color:"#334155",marginBottom:4}}>👤 ללקוח:</div>
       <select value={apptSel} onChange={e=>setApptSel(e.target.value)} style={{width:"100%",padding:"11px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",background:"#fff",marginBottom:8}}>
+        {(()=>{ const c=res._custId&&(customers||[]).find(x=>String(x.id)===res._custId); return c&&!todays.some(a=>String(a.customerId)===String(c.id))?<option value={"c:"+c.id}>👤 {custDocName(c)}{c.contactName?" ("+c.contactName+")":""} — לקוח קיים, בלי תור היום</option>:null; })()}
         {todays.map(a=><option key={a.id} value={String(a.id)}>{[a.time,a.customerName,a.address].filter(Boolean).join(" · ")}</option>)}
-        <option value="new">➕ בלי תור היום{res.customerName?" — "+res.customerName:""}</option>
+        <option value="new">➕ לקוח חדש / בלי תור{res.customerName?" — "+res.customerName:""}</option>
       </select>
       {chips.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}</div>}
       <div style={{display:"flex",gap:8,marginBottom:10}}>
@@ -5882,7 +5907,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
         onSave={t=>{setAppointments(as=>as.map(a=>a.id===t.id?t:a));setEditTask(null);backIfReq();}}
         onDelete={t=>{softDelete(setAppointments,t.id);setEditTask(null);backIfReq();}}/>
     </Modal>}
-    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=(_lg&&_lg.paymentDone)||!!invAppt._aiPaid; const _pm=_lg?_lg.paymentMethod:invAppt._aiPayMethod; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{ const _hid=invAppt&&invAppt._hid; setInvAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={rec=>{ if(invAppt&&invAppt._hid){ const _id=nextId(finance); setFinance(fs=>[...fs,{...rec,id:fs.some(x=>x.id===_id)?nextId(fs):_id}]); aiHistUpd(invAppt._hid,{docId:_id}); return; } setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _ai=!!invAppt._hid; const _paid=_ai?!!invAppt._aiPaid:(_lg&&_lg.paymentDone); const _pm=_ai?invAppt._aiPayMethod:(_lg&&_lg.paymentMethod); const _amt=_ai?(invAppt.price||""):((_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""); return <DocModal type={_ai&&invAppt._aiDocType?invAppt._aiDocType:(_paid?"חשבונית מס/קבלה":"חשבונית מס")} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:_ai?invAppt._aiInclVat!==false:true,lines:[{desc:(_ai&&invAppt._aiDesc)||(invAppt.pestType?"הדברת "+invAppt.pestType:"שירותי הדברה")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&_pm&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>{ const _hid=invAppt&&invAppt._hid; setInvAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={rec=>{ if(invAppt&&invAppt._hid){ const _id=nextId(finance); setFinance(fs=>[...fs,{...rec,id:fs.some(x=>x.id===_id)?nextId(fs):_id}]); aiHistUpd(invAppt._hid,{docId:_id}); return; } setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);}}/>; })()}
     {repeatFrom&&<Modal title={"🔁 ביקור חוזר — "+(repeatFrom.orig.customerName||"")} onClose={()=>setRepeatFrom(null)} width={860}>
       <div className="h360-hint" style={{fontSize:13,color:"#166534",marginBottom:12,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}>🔁 כל הפרטים מולאו מהביקור הקודם (הזמנה, יומן ביצוע וכרטיס הלקוח). בחר <b>תאריך ושעה</b> — ואפשר לשנות כל דבר אחר.</div>
       <OrderForm workers={workers} customers={customers} showGuidance={false}
@@ -8511,7 +8536,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       onClose={()=>setSchedFor(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setSchedFor(null);}}/>}
     {invLog&&(()=>{ const {type,prefill}=docPrefillFromLog(invLog,customers); return <DocModal type={type} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={prefill} onClose={()=>setInvLog(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setInvLog(null);}}/>; })()}
-    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _paid=(_lg&&_lg.paymentDone)||!!invAppt._aiPaid; const _pm=_lg?_lg.paymentMethod:invAppt._aiPayMethod; const _amt=(_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""; return <DocModal type={_paid?"חשבונית מס/קבלה":"חשבונית מס"} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:true,lines:[{desc:"הדברת "+(invAppt.pestType||"")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
+    {invAppt&&(()=>{ const _lg=invAppt.id==null||invAppt._ai?null:(execLogs||[]).find(l=>l.apptId===invAppt.id&&!l.deleted); const _ai=!!invAppt._hid; const _paid=_ai?!!invAppt._aiPaid:(_lg&&_lg.paymentDone); const _pm=_ai?invAppt._aiPayMethod:(_lg&&_lg.paymentMethod); const _amt=_ai?(invAppt.price||""):((_lg&&parseFloat(_lg.paymentAmount))||invAppt.price||""); return <DocModal type={_ai&&invAppt._aiDocType?invAppt._aiDocType:(_paid?"חשבונית מס/קבלה":"חשבונית מס")} customers={customers} setCustomers={setCustomers} appointments={appointments} finance={finance} prefill={{custId:invAppt.customerId,custName:custDocName((customers||[]).find(c=>String(c.id)===String(invAppt.customerId)))||invAppt.customerName,apptId:invAppt._ai?null:invAppt.id,execLogId:_lg?_lg.id:null,execDocNum:_lg?_lg.docNum:"",inclVat:_ai?invAppt._aiInclVat!==false:true,lines:[{desc:(_ai&&invAppt._aiDesc)||(invAppt.pestType?"הדברת "+invAppt.pestType:"שירותי הדברה")+(invAppt.address?" – "+invAppt.address:""),qty:"1",unit:"יח׳",price:String(_amt)}],payments:_paid&&_pm&&LOG_PAY_TO_DOC[_pm]?[{method:LOG_PAY_TO_DOC[_pm],amount:String(_amt),date:todayStr(),details:{}}]:[]}} onClose={()=>setInvAppt(null)} onSave={rec=>{setFinance(fs=>[...fs,{...rec,id:nextId(fs)}]);setSel(null);}}/>; })()}
   </div>;
 }
 
