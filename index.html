@@ -940,6 +940,35 @@ const logTplApply=(t,x)=>{ const d=JSON.parse(JSON.stringify((t&&t.data)||{})); 
     materials:d.materials||x.materials,devices:d.devices||x.devices,reentry:d.reentry||x.reentry,hasPets:!!(d.hasPets||x.hasPets),hasBaby:!!(d.hasBaby||x.hasBaby),instructions:d.instructions||x.instructions,terms:d.terms||x.terms,pestLevels:{...(x.pestLevels||{}),...(d.pestLevels||{})},monitor:{...(x.monitor||{}),...(d.monitor||{})},
     warranty:wd(d.warranty),warrantyMode:d.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(d.warrantyByPest||{}).map(([k,v])=>[k,wd(v)])),tplName:t.name,tplId:t.id}; };
 const logTplWarrTxt=d=>{ const f=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?"עד "+parseInt(String(v).slice(4,6))+"/"+parseInt(String(v).slice(1,3))+" בשנה שאחרי":warrLabel(v); const bp=Object.entries(d.warrantyByPest||{}).filter(([,v])=>String(v||"").trim()); return bp.length?bp.map(([k,v])=>k+": "+f(v)).join(" · "):f(d.warranty); };
+// 🧩 שילוב תבניות: לוחצים על כמה — הכול מתאחד ליומן אחד בלי כפילויות; לחיצה חוזרת מורידה תבנית
+const TPL_FIELDS=["pest","customPest","place","materials","devices","reentry","hasPets","hasBaby","instructions","terms","pestLevels","monitor","warranty","warrantyMode","warrantyByPest","exterminate"];
+const tplPick=x=>JSON.parse(JSON.stringify(Object.fromEntries(TPL_FIELDS.map(k=>[k,x[k]===undefined?null:x[k]]))));
+const tplWarrMap=(x,pests)=>{ if(x.warrantyMode==="per"||Object.values(x.warrantyByPest||{}).some(v=>String(v||"").trim())) return {...(x.warrantyByPest||{})}; const w=String(x.warranty||"").trim(); return w?Object.fromEntries((pests||[]).map(p=>[p,w])):{}; };
+const logTplMerge=(t,x)=>{ const y=logTplApply(t,{date:x.date}); const out={...x};
+  out.pest=[...new Set([...(x.pest||[]),...(y.pest||[])])]; out.customPest=x.customPest||y.customPest||"";
+  out.place={...(x.place||{}),type:(x.place||{}).type||(y.place||{}).type||"",extras:[...new Set([...((x.place||{}).extras||[]),...((y.place||{}).extras||[])])]};
+  const M=[...(x.materials||[]).map(m=>({...m}))]; (y.materials||[]).forEach(m=>{ const c=M.find(z=>String(z.name).trim()===String(m.name).trim()); if(c) c.areas=[...new Set([...(c.areas||[]),...(m.areas||[])])]; else M.push(JSON.parse(JSON.stringify(m))); }); out.materials=M;
+  const D=[...(x.devices||[]).map(d=>({...d}))]; (y.devices||[]).forEach(d=>{ const c=D.find(z=>z.type===d.type); if(c) c.qty=String(Math.max(parseFloat(c.qty)||0,parseFloat(d.qty)||0)||c.qty||d.qty); else D.push({...d}); }); out.devices=D;
+  const r={...(x.reentry||{})}; Object.entries(y.reentry||{}).forEach(([k,v])=>{ const a=parseFloat(r[k]), b=parseFloat(v); if(isNaN(a)) r[k]=v; else if(!isNaN(b)&&b>a) r[k]=v; }); out.reentry=r;
+  out.hasPets=!!(x.hasPets||y.hasPets); out.hasBaby=!!(x.hasBaby||y.hasBaby);
+  out.instructions=[...new Set([...(x.instructions||[]),...(y.instructions||[])])];
+  const T=[...(x.terms||[])]; (y.terms||[]).forEach(z=>{ if(!T.some(q=>q.id===z.id)) T.push(z); }); out.terms=T;
+  out.pestLevels={...(y.pestLevels||{}),...Object.fromEntries(Object.entries(x.pestLevels||{}).filter(([,v])=>v))};
+  const mo={...(x.monitor||{})}; Object.entries(y.monitor||{}).forEach(([k,v])=>{ mo[k]=[...new Set([...(mo[k]||[]),...(v||[])])]; }); out.monitor=mo;
+  const wa=tplWarrMap(x,x.pest), wb=tplWarrMap(y,(t.data||{}).pest); const wm={...wb,...wa}; const vals=[...new Set(Object.values(wm).filter(v=>String(v||"").trim()))];
+  if(!Object.keys(wm).length){ out.warranty=x.warranty||y.warranty||""; }
+  else if(vals.length===1&&out.pest.every(p=>wm[p])){ out.warrantyMode="all"; out.warranty=vals[0]; out.warrantyByPest={}; }
+  else { out.warrantyMode="per"; out.warranty=""; out.warrantyByPest=wm; }
+  out.exterminate=true; return out; };
+function tplCompose(x,ids,list,base){ const L=logTplLive(list); const Ts=ids.map(id=>L.find(t=>t.id===id)).filter(Boolean);
+  if(!Ts.length) return {...x,...base,tplIds:[],tplName:"",tplId:""};
+  let acc=logTplApply(Ts[0],{...x,...base}); Ts.slice(1).forEach(t=>{ acc=logTplMerge(t,acc); });
+  return {...acc,tplIds:Ts.map(t=>t.id),tplName:Ts.map(t=>t.name).join(" + "),tplId:Ts.length===1?Ts[0].id:""}; }
+// העוזר: כמה תבניות במשפט אחד ("תבנית אמריקאי דירה ותבנית גרמני ג'ל")
+function aiTplFindAll(T,list){ T=String(T||""); if(!/תבני/.test(T)) return []; const L=logTplLive(list); const tp=aiPh(T);
+  let named=L.filter(t=>String(t.name||"").trim().length>=3&&tp.includes(aiPh(t.name))); named=named.filter(t=>!named.some(o=>o!==t&&aiPh(o.name).includes(aiPh(t.name))&&aiPh(o.name)!==aiPh(t.name)));
+  const segs=T.split(/(?=תבני)/).filter(x=>/^תבני/.test(x)); const byNum=segs.filter(sg=>!named.some(t=>aiPh(sg).includes(aiPh(t.name)))).map(sg=>aiTplFind(sg,list)).filter(Boolean);
+  return [...new Map([...named,...byNum].map(t=>[t.id,t])).values()]; }
 // העוזר: "תבנית אמריקאי דירה" (לפי שם) או "תבנית 2 של תיקן אמריקאי" / "תבנית תיקן אמריקאי 2" (לפי מזיק ומספר)
 const TPL_ORD={"ראשונה":1,"ראשון":1,"שנייה":2,"שניה":2,"שלישית":3,"רביעית":4,"חמישית":5};
 function aiTplFind(T,list){ T=String(T||""); if(!/תבני/.test(T)) return null; const L=logTplLive(list); if(!L.length) return null;
@@ -2688,6 +2717,8 @@ function placeToScope(pl){ if(!pl) return []; const out=[]; const t=pl.type||"";
   (pl.extras||[]).forEach(x=>out.push(x)); return out; }
 function PlaceEditor({place,onChange}){
   const p=place||{}; const set=(k,v)=>onChange({...p,[k]:v}); const unit=p.type==="דירה"||p.type==="בית פרטי";
+  // חדרים / מפלסים / קומה — שייכים להזמנת העבודה; ביומן הביצוע מוסתרים מאחורי "+"
+  const [more,setMore]=useState(false); const detTxt=[p.rooms?p.rooms+" חד׳":"",p.floor?"קומה "+p.floor:"",p.levels&&p.levels!=="1"?p.levels+" מפלסים":"",p.floors?p.floors+" קומות":""].filter(Boolean).join(" · ");
   const sel={width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,fontFamily:"inherit",background:"#fff"};
   const lbl={display:"block",fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:3};
   const extras=p.extras||[];
@@ -2695,12 +2726,13 @@ function PlaceEditor({place,onChange}){
     {!React.useContext(CompactCtx)&&<div className="h360-hint" style={{fontSize:12,color:CLR.muted,marginBottom:8}}>מולא מההזמנה — אפשר לשנות לפי מה שבוצע בפועל. הנקודות עצמן (פנלים, ניקוזים...) נרשמות בכל חומר ב"אזורי יישום".</div>}
     <label style={lbl}>סוג המקום</label>
     <GridChoice items={[...(p.type?[p.type]:[]),...PLACE_TYPES.filter(t=>t!==p.type)]} isOn={t=>p.type===t} onToggle={t=>set("type",p.type===t?"":t)} onOther={t=>set("type",t)} otherLabel="אחר" min={96} small limit={4}/>
-    {unit&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:10}}>
+    {(unit||p.type==="בניין משותף")&&<button type="button" onClick={()=>setMore(m=>!m)} style={{marginTop:8,border:"none",background:"none",color:"#0369a1",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:0}}>{more?"− הסתר":"+ "+(unit?"חדרים, מפלסים, קומה":"קומות בבניין")}{!more&&detTxt?<span style={{color:"#64748b",fontWeight:500}}> ({detTxt})</span>:null}</button>}
+    {more&&unit&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:10}}>
       <label><span style={lbl}>חדרים</span><select value={p.rooms||""} onChange={e=>set("rooms",e.target.value)} style={sel}><option value="">—</option>{["1","1.5","2","2.5","3","3.5","4","4.5","5","5.5","6","7","8","9","10"].map(o=><option key={o}>{o}</option>)}</select></label>
       <label><span style={lbl}>מפלסים</span><select value={p.levels||"1"} onChange={e=>set("levels",e.target.value)} style={sel}>{["1","2","3","4"].map(o=><option key={o}>{o}</option>)}</select></label>
       <label><span style={lbl}>קומה</span><select value={p.floor||""} onChange={e=>set("floor",e.target.value)} style={sel}><option value="">—</option>{["מרתף","קרקע","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20"].map(o=><option key={o}>{o}</option>)}</select></label>
     </div>}
-    {p.type==="בניין משותף"&&<div style={{marginTop:10,maxWidth:160}}><label><span style={lbl}>קומות בבניין</span><select value={p.floors||""} onChange={e=>set("floors",e.target.value)} style={sel}><option value="">—</option>{Array.from({length:30},(_,i)=>String(i+1)).map(o=><option key={o}>{o}</option>)}</select></label></div>}
+    {more&&p.type==="בניין משותף"&&<div style={{marginTop:10,maxWidth:160}}><label><span style={lbl}>קומות בבניין</span><select value={p.floors||""} onChange={e=>set("floors",e.target.value)} style={sel}><option value="">—</option>{Array.from({length:30},(_,i)=>String(i+1)).map(o=><option key={o}>{o}</option>)}</select></label></div>}
     <label style={{...lbl,marginTop:12}}>אזורים נוספים שטופלו</label>
     <GridChoice items={[...PLACE_EXTRAS,...extras.filter(x=>!PLACE_EXTRAS.includes(x))]} isOn={x=>extras.includes(x)} onToggle={x=>set("extras",extras.includes(x)?extras.filter(y=>y!==x):[...extras,x])} onOther={x=>{ if(!extras.includes(x)) set("extras",[...extras,x]); }} otherLabel="אזור אחר" min={110} small limit={4}/>
   </div>;
@@ -3028,7 +3060,7 @@ function aiNorm(d,chems=[],text=""){
   if(out.notes) out.found.push("הערות");
   const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
   const iN=instrNumsSaid(T0).map(n=>allI[n-1]).filter(Boolean); if(iN.length) out.instructions=[...new Set([...iN,...out.instructions])];
-  { const tp=aiTplFind(T0,logTplGet()); if(tp){ out.tplId=tp.id; out.tplName=tp.name; out.found.push("תבנית: "+tp.name); } }
+  { const tps=aiTplFindAll(T0,logTplGet()); if(tps.length){ out.tplIds=tps.map(t=>t.id); out.tplId=tps[0].id; out.tplName=tps.map(t=>t.name).join(" + "); out.found.push((tps.length>1?"תבניות: ":"תבנית: ")+out.tplName); } }
   out.noTerms=/(בלי|ללא|לא צריך|אין)\s+(את\s+)?מהות\s+(ה)?טיפול/.test(T); if(out.noTerms) out.found.push("בלי מהות הטיפול");
   out.instrGeneric=/הנחיות\s+(ל|של|רגילות|כרגיל)/.test(T);
   if(out.instructions.length) out.found.push("הנחיות");
@@ -3134,7 +3166,7 @@ const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }ca
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
-    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית אמריקאי דירה' / 'תבנית 2 של תיקן אמריקאי' — ממלא הכול, ומה שתגיד בנוסף גובר"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית אמריקאי דירה' / 'תבנית 2 של תיקן אמריקאי'. כמה ביחד: 'תבנית אמריקאי דירה ותבנית גרמני ג׳ל' — מתאחד בלי כפילויות"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
   invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
     s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
@@ -3321,7 +3353,8 @@ function LogTplBar({f,onApply,pests,editT=null}){
   const rel=(pests||[]).length?list.filter(t=>((t.data||{}).pest||[]).some(p=>pests.includes(p))):[]; const shown=open?[...rel,...list.filter(t=>!rel.includes(t))]:rel;
   const pest0=(f.pest||[])[0]||f.customPest||""; const nextNum=logTplFreeNum(all,pest0); const [newNum,setNewNum]=useState(""); const [det,setDet]=useState(false);
   // התבנית שממנה מולא היומן (או שעורכים) — עדכון בלחיצה אחת
-  const cur=(editT&&list.find(t=>t.id===editT.id))||(f.tplId&&list.find(t=>t.id===f.tplId))||(f.tplName&&list.find(t=>t.name===f.tplName))||null;
+  const tIds=f.tplIds||(f.tplId?[f.tplId]:[]);
+  const cur=(editT&&list.find(t=>t.id===editT.id))||(tIds.length===1&&list.find(t=>t.id===tIds[0]))||null;
   const doUpdate=async()=>{ if(!cur) return; if(!confirm('לעדכן את התבנית "'+cur.name+'" לפי מה שיש עכשיו ביומן?\n(כל השינויים והתיקונים שעשית ייכנסו לתבנית)')) return;
     setBusy(true); try{ await logTplSave(all.map(x=>x.id===cur.id?{...x,data:logTplSnap(f),updatedAt:new Date().toISOString()}:x)); showToast("✅ התבנית \""+cur.name+"\" עודכנה"); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
   const doSave=async()=>{ const nm=name.trim(); if(!nm) return alert("תן לתבנית שם שתזכור"); if(!pest0) return alert("בחר קודם מזיק ביומן");
@@ -3329,8 +3362,8 @@ function LogTplBar({f,onApply,pests,editT=null}){
     const wantN=parseInt(newNum)||0; const nums=logTplNums(all,pest0); if(!same&&wantN&&Object.entries(nums).some(([id,n])=>n===wantN)) return alert("מספר "+wantN+" כבר תפוס ב"+pest0+". בחר מספר אחר, או שנה מספרים במסך התבניות.");
     const t={id:same?same.id:"t"+Date.now(),name:nm,desc:desc.trim(),num:same?(same.num||logTplNum(all,same)):(wantN||nextNum),data:logTplSnap(f),updatedAt:new Date().toISOString(),createdAt:same?same.createdAt:new Date().toISOString()};
     setBusy(true); try{ await logTplSave(same?all.map(x=>x.id===same.id?t:x):[...all,t]); setSave(false); setName(""); setDesc(""); showToast("📌 נשמרה תבנית: "+logTplTag([...all,t],t)+" — "+nm); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
-  const chip=t=><button key={t.id} type="button" onClick={()=>onApply(t)} title={t.desc||""} style={{textAlign:"right",padding:"7px 11px",borderRadius:12,border:"1.5px solid "+(f.tplName===t.name?"#16a34a":"#bae6fd"),background:f.tplName===t.name?"#dcfce7":"#fff",cursor:"pointer",fontFamily:"inherit",lineHeight:1.25}}>
-    <div style={{fontSize:14,fontWeight:800,color:"#0f172a"}}>{t.name}</div><div style={{fontSize:11.5,color:"#64748b"}}>{logTplTag(all,t)}{t.desc?" · "+t.desc.slice(0,40):""}</div></button>;
+  const chip=t=>{ const on=tIds.includes(t.id); return <button key={t.id} type="button" onClick={()=>onApply(t)} title={t.desc||""} style={{textAlign:"right",padding:"7px 11px",borderRadius:12,border:"1.5px solid "+(on?"#16a34a":"#bae6fd"),background:on?"#dcfce7":"#fff",cursor:"pointer",fontFamily:"inherit",lineHeight:1.25}}>
+    <div style={{fontSize:14,fontWeight:800,color:"#0f172a"}}>{t.name}</div><div style={{fontSize:11.5,color:"#64748b"}}>{on?"✓ ":""}{logTplTag(all,t)}{t.desc?" · "+t.desc.slice(0,40):""}</div></button>; };
   return <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:14,padding:"8px 10px",marginBottom:10}}>
     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <b style={{fontSize:14.5,color:"#0369a1",flex:1}}>📌 תבניות{f.tplName?<span style={{fontWeight:600,color:"#166534",fontSize:13}}> · מולא מ"{f.tplName}"</span>:null}</b>
@@ -3341,6 +3374,8 @@ function LogTplBar({f,onApply,pests,editT=null}){
     {cur&&det&&<div style={{marginTop:8}}><LogTplDetails key={cur.id} t={cur} all={all} onDone={()=>setDet(false)}/></div>}
     {cur&&!save&&!det&&<button type="button" disabled={busy} onClick={doUpdate} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{busy?"שומר…":"🔄 עדכן את התבנית \""+cur.name+"\" במה שתיקנת"}</button>}
     {shown.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{shown.map(chip)}</div>}
+    {tIds.length>1&&<div style={{fontSize:12.5,color:"#166534",marginTop:6,fontWeight:700}}>🧩 שולבו {tIds.length} תבניות — בלי כפילויות. לחיצה על תבנית מסומנת מורידה אותה. אפשר לשמור את השילוב כתבנית חדשה.</div>}
+    {list.length>1&&tIds.length<2&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:6}}>אפשר לסמן כמה תבניות (למשל אמריקאי + גרמני) — הכול מתאחד ליומן אחד בלי כפילויות.</div>}
     {!list.length&&!save&&<div className="h360-hint" style={{fontSize:12.5,color:"#64748b",marginTop:6}}>עוד אין תבניות. כשיומן יוצא לך "בול" — לחץ "שמור כתבנית" ותן לו שם.</div>}
     {save&&<div style={{background:"#fff",borderRadius:12,padding:10,marginTop:8,display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:8}}>
       <div><div style={{fontSize:12.5,fontWeight:700,color:"#334155",marginBottom:3}}>שם התבנית (מה שתגיד לעוזר)</div>
@@ -3583,9 +3618,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [aiSum,setAiSum]=useState(null);
   const [tplEdit,setTplEdit]=useState(null);
   React.useEffect(()=>{ const id=window.__h360EditTpl; if(!id||(initialData&&initialData.id)||aiR) return; window.__h360EditTpl=null; const t=logTplLive(logTplGet()).find(x=>x.id===id); if(!t) return; setTplEdit(t); setTimeout(()=>applyTpl(t),300); },[]);
-  const applyTpl=t=>{ touched.current.reentry=true; touched.current.instr=true; touched.current.terms=true; setF(x=>logTplApply(t,x)); };
+  const tplBaseRef=React.useRef(null);
+  const applyTplIds=ids=>{ touched.current.reentry=true; touched.current.instr=true; touched.current.terms=true; const list=logTplGet();
+    setF(x=>{ if(!tplBaseRef.current) tplBaseRef.current=tplPick(x); const base=tplBaseRef.current; const r=tplCompose(x,ids,list,base); if(!ids.length) tplBaseRef.current=null; return r; }); };
+  const applyTpl=t=>applyTplIds([t.id]);
+  const toggleTpl=t=>{ const ids=f.tplIds||(f.tplId?[f.tplId]:[]); applyTplIds(ids.includes(t.id)?ids.filter(i=>i!==t.id):[...ids,t.id]); };
   const applySmart=r=>{ if(r&&r.ai) setAiSum(r);
-    const tplT=r&&r.tplId?logTplLive(logTplGet()).find(t=>t.id===r.tplId):null; if(tplT) applyTpl(tplT);
+    const tplT=r&&(r.tplIds||[]).length?r.tplIds:null; if(tplT) applyTplIds(tplT);
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
     if(r.reentry0) touched.current.reentry=true; else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) touched.current.reAi=true;
     if(r.noTerms) touched.current.terms=true;
@@ -3683,7 +3722,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
     <AiFillSummary r={aiSum} said={(aiSum&&aiSum._said)||""}/>
     {tplEdit&&<div style={{background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:12,padding:"8px 12px",marginBottom:8,fontSize:14,fontWeight:700,color:"#713f12"}}>✏️ עורך את התבנית "{tplEdit.name}" — שנה מה שצריך ולחץ למטה בפס התבניות "💾 שמור את השינויים בתבנית". (לא נשמר כיומן ביצוע)</div>}
-    <LogTplBar f={f} pests={allPests} editT={tplEdit} onApply={t=>fillWithHighlight(elRef,()=>{ applyTpl(t); setTimeout(()=>showToast("📌 מולא מהתבנית \""+t.name+"\" — בדוק ועדכן אם צריך"),30); })}/>
+    <LogTplBar f={f} pests={allPests} editT={tplEdit} onApply={t=>{ const on=(f.tplIds||(f.tplId?[f.tplId]:[])).includes(t.id); fillWithHighlight(elRef,()=>{ toggleTpl(t); setTimeout(()=>showToast(on?"↩️ התבנית \""+t.name+"\" הוסרה מהיומן":"📌 נוספה התבנית \""+t.name+"\" — בדוק ועדכן אם צריך"),30); }); }}/>
     <ExecSmartFill startClosed={!!aiR} onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן ביצוע לפי שלבים"],["flat","📄 יומן ביצוע רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
@@ -14538,7 +14577,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "245";
+const APP_BUILD = "246";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
