@@ -934,7 +934,7 @@ const logTplSnap=f=>{ const c=o=>JSON.parse(JSON.stringify(o==null?null:o)); con
 const logTplApply=(t,x)=>{ const d=JSON.parse(JSON.stringify((t&&t.data)||{})); const y=(parseInt(String(x.date||"").slice(0,4))||new Date().getFullYear())+1; const wd=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?y+"-"+String(v).slice(1):(v||"");
   return {...x,exterminate:true,pest:[...new Set([...(x.pest||[]),...(d.pest||[])])],customPest:x.customPest||d.customPest||"",place:{...(x.place||{}),...(d.place&&d.place.type?{type:d.place.type}:{}),extras:[...new Set([...((x.place||{}).extras||[]),...((d.place||{}).extras||[])])]},
     materials:d.materials||x.materials,devices:d.devices||x.devices,reentry:d.reentry||x.reentry,hasPets:!!(d.hasPets||x.hasPets),hasBaby:!!(d.hasBaby||x.hasBaby),instructions:d.instructions||x.instructions,terms:d.terms||x.terms,pestLevels:{...(x.pestLevels||{}),...(d.pestLevels||{})},monitor:{...(x.monitor||{}),...(d.monitor||{})},
-    warranty:wd(d.warranty),warrantyMode:d.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(d.warrantyByPest||{}).map(([k,v])=>[k,wd(v)])),tplName:t.name}; };
+    warranty:wd(d.warranty),warrantyMode:d.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(d.warrantyByPest||{}).map(([k,v])=>[k,wd(v)])),tplName:t.name,tplId:t.id}; };
 const logTplWarrTxt=d=>{ const f=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?"עד "+parseInt(String(v).slice(4,6))+"/"+parseInt(String(v).slice(1,3))+" בשנה שאחרי":warrLabel(v); const bp=Object.entries(d.warrantyByPest||{}).filter(([,v])=>String(v||"").trim()); return bp.length?bp.map(([k,v])=>k+": "+f(v)).join(" · "):f(d.warranty); };
 // העוזר: "תבנית אמריקאי דירה" (לפי שם) או "תבנית 2 של תיקן אמריקאי" / "תבנית תיקן אמריקאי 2" (לפי מזיק ומספר)
 const TPL_ORD={"ראשונה":1,"ראשון":1,"שנייה":2,"שניה":2,"שלישית":3,"רביעית":4,"חמישית":5};
@@ -3291,6 +3291,10 @@ function LogTplBar({f,onApply,pests,editT=null}){
   React.useEffect(()=>{ if(editT){ setSave(true); setName(editT.name); setDesc(editT.desc||""); } },[editT&&editT.id]); const [busy,setBusy]=useState(false);
   const rel=(pests||[]).length?list.filter(t=>((t.data||{}).pest||[]).some(p=>pests.includes(p))):[]; const shown=open?[...rel,...list.filter(t=>!rel.includes(t))]:rel;
   const pest0=(f.pest||[])[0]||f.customPest||""; const nextNum=list.filter(x=>logTplPest(x)===pest0).length+1;
+  // התבנית שממנה מולא היומן (או שעורכים) — עדכון בלחיצה אחת
+  const cur=(editT&&list.find(t=>t.id===editT.id))||(f.tplId&&list.find(t=>t.id===f.tplId))||(f.tplName&&list.find(t=>t.name===f.tplName))||null;
+  const doUpdate=async()=>{ if(!cur) return; if(!confirm('לעדכן את התבנית "'+cur.name+'" לפי מה שיש עכשיו ביומן?\n(כל השינויים והתיקונים שעשית ייכנסו לתבנית)')) return;
+    setBusy(true); try{ await logTplSave(all.map(x=>x.id===cur.id?{...x,data:logTplSnap(f),updatedAt:new Date().toISOString()}:x)); showToast("✅ התבנית \""+cur.name+"\" עודכנה"); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
   const doSave=async()=>{ const nm=name.trim(); if(!nm) return alert("תן לתבנית שם שתזכור"); if(!pest0) return alert("בחר קודם מזיק ביומן");
     const same=(editT&&list.find(t=>t.id===editT.id))||list.find(t=>String(t.name).trim()===nm); if(same&&!(editT&&same.id===editT.id)&&!confirm('כבר יש תבנית בשם "'+nm+'". להחליף אותה בתוכן של היומן הזה?')) return;
     const t={id:same?same.id:"t"+Date.now(),name:nm,desc:desc.trim(),data:logTplSnap(f),updatedAt:new Date().toISOString(),createdAt:same?same.createdAt:new Date().toISOString()};
@@ -3301,8 +3305,9 @@ function LogTplBar({f,onApply,pests,editT=null}){
     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <b style={{fontSize:14.5,color:"#0369a1",flex:1}}>📌 תבניות{f.tplName?<span style={{fontWeight:600,color:"#166534",fontSize:13}}> · מולא מ"{f.tplName}"</span>:null}</b>
       {list.length>rel.length&&<button type="button" onClick={()=>setOpen(o=>!o)} style={{border:"none",background:"none",color:"#0369a1",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{open?"פחות ▲":"כל התבניות ("+list.length+") ▼"}</button>}
-      <button type="button" onClick={()=>setSave(v=>!v)} style={{padding:"6px 10px",borderRadius:10,border:"1.5px solid #0284c7",background:save?"#0284c7":"#fff",color:save?"#fff":"#0369a1",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>💾 שמור כתבנית</button>
+      {!editT&&<button type="button" onClick={()=>setSave(v=>!v)} style={{padding:"6px 10px",borderRadius:10,border:"1.5px solid #0284c7",background:save?"#0284c7":"#fff",color:save?"#fff":"#0369a1",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{cur?"➕ שמור כתבנית חדשה":"💾 שמור כתבנית"}</button>}
     </div>
+    {cur&&!save&&<button type="button" disabled={busy} onClick={doUpdate} style={{width:"100%",marginTop:8,padding:"10px",borderRadius:10,border:"none",background:"#16a34a",color:"#fff",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{busy?"שומר…":"🔄 עדכן את התבנית \""+cur.name+"\" במה שתיקנת"}</button>}
     {shown.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{shown.map(chip)}</div>}
     {!list.length&&!save&&<div className="h360-hint" style={{fontSize:12.5,color:"#64748b",marginTop:6}}>עוד אין תבניות. כשיומן יוצא לך "בול" — לחץ "שמור כתבנית" ותן לו שם.</div>}
     {save&&<div style={{background:"#fff",borderRadius:12,padding:10,marginTop:8,display:"grid",gridTemplateColumns:wide?"1fr 1fr":"1fr",gap:8}}>
@@ -14506,7 +14511,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "243";
+const APP_BUILD = "244";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
