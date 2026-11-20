@@ -752,7 +752,7 @@ const MONITOR_SIGNS={
 const MON_DEFAULT=["בוגרים","צעירים","צואה","נשלים","נזק"];
 const MON_NONE="לא נמצאו סימנים";
 const monitorSigns=p=>[...(MONITOR_SIGNS[p]||Object.entries(MONITOR_SIGNS).find(([k])=>String(p||"").includes(k)||k.includes(String(p||"")))?.[1]||MON_DEFAULT),MON_NONE];
-const monitorText=l=>{ const m=(l&&l.monitor)||{}; const parts=Object.entries(m).filter(([,v])=>Array.isArray(v)&&v.length).map(([p,v])=>p+": "+v.join(", ")); if(l&&l.monitorNote) parts.push(String(l.monitorNote).trim()); return parts.join(" · "); };
+const monitorText=l=>{ const m=(l&&l.monitor)||{}; const P=[...((l&&l.pest)||[]),...String((l&&l.customPest)||"").split(",").map(x=>x.trim()).filter(Boolean)]; const parts=Object.entries(m).filter(([p,v])=>Array.isArray(v)&&v.length&&(!P.length||P.includes(p))).map(([p,v])=>p+": "+v.join(", ")); if(l&&l.monitorNote) parts.push(String(l.monitorNote).trim()); return parts.join(" · "); };
 const pestsWithLevels=l=>{ const lv=(l&&l.pestLevels)||{}; return (l&&l.pest||[]).map(p=>lv[p]?p+" (נגיעות "+lv[p]+")":p).join(", ")+((!l||!l.pestLevels||!Object.keys(l.pestLevels).length)&&l&&l.pestLevel?" · נגיעות "+l.pestLevel:""); };
 const docNameOf=w=>(w&&String(w.fullName||"").trim())||"";
 const splitPests=arr=>(arr||[]).flatMap(p=>p==="דבורים וצרעות"?["דבורים","צרעות"]:[p]);
@@ -933,6 +933,8 @@ const logTplTag=(list,t)=>logTplPest(t)+" "+logTplNum(list,t);
 // אחריות עם תאריך נשמרת יחסית ("@04-01") — בכל יומן הופכת לשנה שאחרי תאריך היומן
 const logTplRelW=v=>isWarrDate(v)?"@"+String(v).slice(5):v;
 const logTplSnap=f=>{ const c=o=>JSON.parse(JSON.stringify(o==null?null:o)); const pl=f.place||{};
+  const P=[...(f.pest||[]),...String(f.customPest||"").split(",").map(x=>x.trim()).filter(Boolean)]; const onlyP=o=>Object.fromEntries(Object.entries(o||{}).filter(([k])=>P.includes(k)));
+  const relT=new Set(termsRelevant(TERMS_DEFAULT.concat(termsTpl?termsTpl():[]),P,true).map(t=>t.id)); f={...f,pestLevels:onlyP(f.pestLevels),monitor:onlyP(f.monitor),terms:(f.terms||[]).filter(t=>!/^p_/.test(String(t.id||""))||relT.has(t.id))};
   return {pest:c(f.pest||[]),customPest:f.customPest||"",place:{type:pl.type||"",extras:c(pl.extras||[])},materials:c(f.materials||[]),devices:c(f.devices||[]),reentry:c(f.reentry||{}),hasPets:!!f.hasPets,hasBaby:!!f.hasBaby,
     instructions:c(f.instructions||[]),terms:c(f.terms||[]),pestLevels:c(f.pestLevels||{}),monitor:c(f.monitor||{}),warranty:logTplRelW(f.warranty||""),warrantyMode:f.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(f.warrantyByPest||{}).map(([k,v])=>[k,logTplRelW(v)]))}; };
 const logTplApply=(t,x)=>{ const d=JSON.parse(JSON.stringify((t&&t.data)||{})); const y=(parseInt(String(x.date||"").slice(0,4))||new Date().getFullYear())+1; const wd=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?y+"-"+String(v).slice(1):(v||"");
@@ -3009,6 +3011,17 @@ function instrNumsSaid(T){ const out=[]; const toks=String(T||"").replace(/[,.;:
 const AI_WEEKDAY=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
 // מוחקים "הנחיות 1, 3, 5" מהטקסט לפני בדיקת שעות/מחיר — כדי שמספר הנחיה לא ייחשב שעה או מחיר
 const instrNumStrip=T=>{ const W=Object.keys(HEB_NUM).join("|"); return String(T||"").replace(/תבני[תו]?[^,.\n]{0,30}/g," ").replace(new RegExp("ו?ה?הנחי(?:ה|ות)(?:[\\s,]*(?:ו-?|מספר|מס['׳]?|עד|-)?[\\s]*(?:\\d{1,2}(?:-\\d{1,2})?|(?:ו)?(?:"+W+"))(?![\\dא-ת]))+","g")," "); };
+// 🪤 "שמתי 5 מלכודות ניטור לתיקנים" → מוצר + כמות (רק מה שנאמר)
+function aiDevParse(T){ T=String(T||""); const out=[]; const W=Object.keys(HEB_NUM).join("|");
+  const re=new RegExp("(\\d{1,3}|"+W+")\\s+(?:מלכוד(?:ות|ת)|תחנ(?:ות|ת))(?:\\s+(?:ה)?(ניטור|דבק|קפיץ|כלוב|פרומונים|אור))?(?:[^,.\\n]{0,25}?(תיקנ|ג'וק|ג׳וק|עכבר|חולד|מכרס|עש|זבוב))?","g"); let m;
+  while((m=re.exec(T))){ const n=/^\d+$/.test(m[1])?parseInt(m[1]):HEB_NUM[m[1]]; if(!n) continue; const k=m[2]||"", tgt=m[3]||""; let type="";
+    if(/תיקנ|ג.וק/.test(tgt)) type="תחנת ניטור לתיקנים";
+    else if(k==="ניטור") type=/עכבר|חולד|מכרס/.test(tgt)?"תחנת האכלה ריקה (ניטור)":"תחנת ניטור לתיקנים";
+    else if(k==="דבק") type="מלכודת דבק"; else if(k==="קפיץ") type="מלכודת קפיץ"; else if(k==="כלוב") type="מלכודת כלוב";
+    else if(k==="פרומונים") type="מלכודת פרומונים לעש מזון"; else if(k==="אור"||/זבוב/.test(tgt)) type="מלכודת אור UV לזבובים";
+    else if(/עכבר|חולד|מכרס/.test(tgt)) type="מלכודת דבק";
+    if(type&&!out.some(x=>x.type===type)) out.push({type,qty:n}); }
+  return out; }
 function aiNorm(d,chems=[],text=""){
   const out={found:[],skipped:[]}; if(!d) return out; const T0=String(text||""); const T=instrNumStrip(T0);
   const arr=x=>Array.isArray(x)?x.map(s=>String(s||"").trim()).filter(Boolean):[];
@@ -3017,6 +3030,8 @@ function aiNorm(d,chems=[],text=""){
   if(out.level&&!/קל|בינונ|גבוה|חמור|קשה|הרבה|מעט|נגיע/.test(T)){ out.skipped.push("רמת נגיעות"); delete out.level; }
   if(out.level) out.found.push("רמת נגיעות");
   if(d.placeType&&AI_PLACES.includes(d.placeType)){ out.placeType=d.placeType; out.found.push("מקום"); }
+  { const pm=T0.match(/(?:^|[\s,])(?:ב|ל)?(פיצרי[הא]|מסעד[הת]|מאפי[יה]+|בית קפה|בית ספר|גן ילדים|מלון|משרד|מחסן|מפעל|חנות|סופרמרקט|מכולת|קיוסק|מספר[הת]|מרפא[הת]|קליניק[הא]|אולם|מטבח מוסדי|חדר אוכל|דירת גן|בית פרטי|וילה|בניין)(?=[\s,.]|$)/);
+    if(pm){ const w=pm[1].replace(/פיצריא$/,"פיצריה").replace(/קליניקא$/,"קליניקה"); if(!out.placeType||!AI_PLACES.includes(w)){ out.placeType=w; if(!out.found.includes("מקום")) out.found.push("מקום"); } } }
   if(/^\d+(\.\d)?$/.test(String(d.rooms||""))&&/חדר/.test(T)) out.rooms=String(d.rooms);
   if(d.floor) out.floor=String(d.floor);
   out.extras=arr(d.extras);
@@ -3024,6 +3039,8 @@ function aiNorm(d,chems=[],text=""){
   const mats=[]; arr(d.materials).forEach(m=>{ const k=elNorm(m); const hit=byN[k]||chems.find(n=>{ const kn=elNorm(n); return kn.length>=3&&(kn.includes(k)||k.includes(kn)); })||m; if(!mats.includes(hit)) mats.push(hit); });
   const matsOk=mats.filter(m=>aiSaid(m,T)); if(matsOk.length<mats.length) out.skipped.push("חומר שלא נאמר: "+mats.filter(m=>!matsOk.includes(m)).join(", "));
   if(matsOk.length){ out.materials=matsOk; out.found.push("חומרים"); }
+  out.matReplace=/(אחר|אחרים|אחרת|במקום|החלפתי|הפעם השתמשתי)/.test(T)&&!!matsOk.length;
+  out.devices=aiDevParse(T); if(out.devices.length) out.found.push("מוצרים: "+out.devices.map(x=>x.type+" × "+x.qty).join(", "));
   out.methodHint=AI_METHODS.includes(d.methodHint)?d.methodHint:"";
   out.areas=arr(d.areas); out.spots=arr(d.spots);
   const bn=parseInt(d.boxesNew)||0, br=parseInt(d.boxesRefill)||0; if(bn||br){ out.boxesNew=bn; out.boxesRefill=br; out.found.push("תיבות"); }
@@ -3166,7 +3183,7 @@ const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }ca
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
-    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית אמריקאי דירה' / 'תבנית 2 של תיקן אמריקאי'. כמה ביחד: 'תבנית אמריקאי דירה ותבנית גרמני ג׳ל' — מתאחד בלי כפילויות"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית 1 של תיקן גרמני בפיצריה' — ממלא הכול ומשנה רק את המקום. 'השתמשתי בחומר אחר, ברקת' — מחליף. כמה ביחד: 'תבנית אמריקאי דירה ותבנית גרמני ג׳ל'"],["🪤","מלכודות","'שמתי 5 מלכודות ניטור לתיקנים' — נכנס למוצרים + הנחיה לא לגעת במלכודות"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
   invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
     s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
@@ -3617,6 +3634,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const elRef=React.useRef(null);
   const [aiSum,setAiSum]=useState(null);
   const [tplEdit,setTplEdit]=useState(null);
+  // 🪤 יש מלכודות/תחנות → "לא לגעת במלכודות"; אין → ההנחיה יורדת (כשההנחיות כבר נבחרו ידנית / מתבנית)
+  const hasBaitK=f.materials.some(m=>m.method==="תחנת האכלה")||f.devices.length>0; const firstBait=React.useRef(true);
+  React.useEffect(()=>{ if(firstBait.current){ firstBait.current=false; return; } setTimeout(()=>{ if(!touched.current.instr) return;
+    setF(x=>{ const has=(x.instructions||[]).some(t=>INSTR_TRAPS.includes(t)); if(hasBaitK&&!has) return {...x,instructions:[...x.instructions,INSTR_TRAPS[0]]}; if(!hasBaitK&&has) return {...x,instructions:x.instructions.filter(t=>!INSTR_TRAPS.includes(t))}; return x; }); },900); },[hasBaitK]);
+  // מזיק שהוסר — יורדים גם הנוסח שלו ב"מהות הטיפול"
+  React.useEffect(()=>{ const P=[...f.pest,...String(f.customPest||"").split(",").map(x=>x.trim()).filter(Boolean)]; const rel=new Set(termsRelevant(termsTplL,P,true).map(t=>t.id));
+    setF(x=>{ const nt=(x.terms||[]).filter(t=>!/^p_/.test(String(t.id||""))||rel.has(t.id)); return nt.length===(x.terms||[]).length?x:{...x,terms:nt}; }); },[pestKey]);
   React.useEffect(()=>{ const id=window.__h360EditTpl; if(!id||(initialData&&initialData.id)||aiR) return; window.__h360EditTpl=null; const t=logTplLive(logTplGet()).find(x=>x.id===id); if(!t) return; setTplEdit(t); setTimeout(()=>applyTpl(t),300); },[]);
   const tplBaseRef=React.useRef(null);
   const applyTplIds=ids=>{ touched.current.reentry=true; touched.current.instr=true; touched.current.terms=true; const list=logTplGet();
@@ -3634,19 +3658,22 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         if(r.level){ const lv={...x.pestLevels}; [...nx.pest,...(nx.customPest?[nx.customPest]:[])].filter(p=>p!=="חרקי מזון").forEach(p=>{ if(!lv[p]) lv[p]=r.level; }); nx.pestLevels=lv; } }
       else if(r.level){ const lv={...x.pestLevels}; x.pest.forEach(p=>{ if(!lv[p]) lv[p]=r.level; }); nx.pestLevels=lv; }
       if(r.placeType||r.rooms||r.floor||(r.extras||[]).length){ const pl={...(x.place||{})}; if(r.placeType) pl.type=r.placeType; if(r.rooms) pl.rooms=r.rooms; if(r.floor) pl.floor=r.floor; pl.extras=[...new Set([...(pl.extras||[]),...(r.extras||[])])]; nx.place=pl; }
-      let mats=[...x.materials];
+      let mats=[...x.materials]; const tplMats=tplT?[...x.materials]:[];
       (r.materials||[]).forEach(name=>{ if(mats.some(m=>m.name===name)) return; const mem=(chemMem||{})[name]||{}; const rg=regBy[name]; const lg=CHEMICALS.find(c=>c.name===name)||{};
         const cat=mem.cat||(rg?regCat(rg):(lg.method==="ג'ל"?"gel":lg.method==="תחנת האכלה"?"rodent":"spray"));
         let method=(r.materials.length===1&&r.methodHint)?r.methodHint:(mem.method||(TM_REF.current||{})[name]||CAT_METHOD[cat]||"ריסוס");
         if(cat==="rodent") method="תחנת האכלה";
         const okAreas=APPLY_AREAS[method]||DEFAULT_AREAS; const areas=[...new Set([...(r.areas||[]).filter(a=>okAreas.includes(a)),...(method==="תחנת האכלה"?(r.spots||[]).filter(a=>okAreas.includes(a)):[])])];
-        mats.push({name,batch:mem.batch||"",method,active:(rg&&rg[4])||lg.active||mem.active||"",reg:(rg&&rg[2])||mem.reg||"",maker:(rg&&rg[1])||lg.mfr||mem.maker||"",cat,dose:pickDose(name,nx.pest,chemMem||{}),areas,stations:"",custom:!rg}); });
+        // "השתמשתי בחומר אחר": מחליף את החומר מהתבנית באותה שיטה (ריסוס/ג'ל), ושומר את האזורים שלו
+        let areas2=areas; if(tplT&&r.matReplace){ const old=mats.filter(m=>tplMats.includes(m)&&m.method===method&&!(r.materials||[]).includes(m.name)); if(old.length){ if(!areas2.length) areas2=[...new Set(old.flatMap(m=>m.areas||[]))]; mats=mats.filter(m=>!old.includes(m)); } }
+        mats.push({name,batch:mem.batch||"",method,active:(rg&&rg[4])||lg.active||mem.active||"",reg:(rg&&rg[2])||mem.reg||"",maker:(rg&&rg[1])||lg.mfr||mem.maker||"",cat,dose:pickDose(name,nx.pest,chemMem||{}),areas:areas2,stations:"",custom:!rg}); });
       let devices=[...x.devices];
       if(r.boxesNew||r.boxesRefill){ const bi=mats.findIndex(m=>m.method==="תחנת האכלה");
         if(bi>=0){ const m0={...mats[bi]}; if(r.boxesNew) m0.stationsNew=String(r.boxesNew); if(r.boxesRefill) m0.stationsRefill=String(r.boxesRefill); m0.stations=String((parseInt(m0.stationsNew)||0)+(parseInt(m0.stationsRefill)||0)); mats[bi]=m0; }
         else { const put=(type,n)=>{ if(!n) return; const k=devices.findIndex(d=>d.type===type); const loc=(r.spots||[]).join(", "); if(k>=0) devices[k]={...devices[k],qty:n,location:devices[k].location||loc}; else devices.push({type,qty:n,location:loc}); };
           put("תיבת האכלה כולל רעלים",r.boxesNew); } }
       if((r.spots||[]).length) devices=devices.map(d=>/תיבת (?:האכלה|הכלה)|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
+      (r.devices||[]).forEach(dv=>{ const k=devices.findIndex(z=>z.type===dv.type); if(k>=0) devices[k]={...devices[k],qty:dv.qty,auto:false}; else devices.push({type:dv.type,qty:dv.qty,location:""}); });
       nx.materials=mats; nx.devices=devices;
       if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"};
       else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) nx.reentry={...x.reentry,...(r.reentryAdults?{adults:r.reentryAdults}:{}),...(r.reentryBabies?{babies:r.reentryBabies}:{}),...(r.reentryAnimals?{animals:r.reentryAnimals}:{})};
@@ -3664,7 +3691,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
     // הנחיות שנאמרו לעוזר — רק הן (בלי ברירות מחדל), כדי שלא ייכנס מה שלא ביקשת
-    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai&&!r.instrGeneric&&!tplT?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
+    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai&&!r.instrGeneric&&!tplT?[...new Set([...r.instructions,...((r.devices||[]).length?[INSTR_TRAPS[0]]:[])])]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
   };
   // טיוטה מהעוזר החכם — ממלאים פעם אחת כשהיומן נפתח
@@ -3973,7 +4000,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.97)",backdropFilter:"blur(6px)",padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
     {(()=>{
-      const buildData=()=>({...f,reentry:Object.fromEntries(Object.entries(f.reentry||{}).map(([k,v])=>[k,v==="__o"?"":v])),pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),structureType:(f.place&&f.place.type)||f.structureType||"",pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
+      const buildData=()=>({...f,reentry:Object.fromEntries(Object.entries(f.reentry||{}).map(([k,v])=>[k,v==="__o"?"":v])),pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),monitor:Object.fromEntries(Object.entries(f.monitor||{}).filter(([p])=>allPests.includes(p))),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),structureType:(f.place&&f.place.type)||f.structureType||"",pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
       const problems=send=>{ const P=[]; const add=(sec,label,block)=>P.push({sec,label,block:!!block});
         if(!f.clientName) add("client","שם לקוח",true); if(!f.address) add("client","כתובת",true);
         if(send&&!String(f.phone||"").trim()) add("client","טלפון לקוח (כדי לשלוח)",true);
@@ -14577,7 +14604,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "246";
+const APP_BUILD = "247";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
