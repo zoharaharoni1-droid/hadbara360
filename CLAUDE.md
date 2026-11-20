@@ -31,6 +31,7 @@ Phone (<900px) = clean, minimal (extra actions behind +, explanations only with 
   Key is the Supabase secret `GEMINI_API_KEY` (never in code). Only sends today's appointments + ≤15 matching customers + lists; no chat history.
 - Opened from anywhere: event `h360aiopen` (button `AiAssistBtn` next to every 🧠 smart fill — `SmartTitle`); App renders `AssistantModal`; drafts are opened in the calendar via event `h360aiact` (log / inv / appt). Shared memory `AI_MEM`.
 - Explanations use class `h360-hint` (shown only when the 💡 lamp is on).
+- Rule: the assistant and the 🧠 smart fill are **fully independent**. The assistant fills forms itself from Gemini fields (appt → `{direct:{...}}` to `OrderForm` → `applyWA`; log → `previewData`); it never uses `waParse`/`elParse` or the smart-fill box. Smart fill is local parsing only and never calls Gemini.
 - Rule: the assistant **never saves or sends** — it only opens drafts; the user approves.
 - Rule: **zero guessing** — a field is filled only if it was said (warranty only with the word "אחריות", price only if the number was said, notes only after "הערות").
 
