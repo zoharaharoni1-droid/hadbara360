@@ -97,6 +97,7 @@ function loadScript(urls,cb,i){
   }
   html{overflow-x:hidden}
   .h360-nohints .h360-hint{display:none!important}
+  .h360-nohints textarea::placeholder{color:transparent!important}
   @keyframes h360nudge{0%,100%{transform:translateX(0);box-shadow:0 0 0 0 rgba(239,68,68,0)}10%{transform:translateX(-3px)}20%{transform:translateX(3px)}30%{transform:translateX(-3px)}40%{transform:translateX(3px);box-shadow:0 0 0 4px rgba(239,68,68,.55)}55%{transform:translateX(0);box-shadow:0 0 0 7px rgba(239,68,68,.15)}}
   .h360-nudge{animation:h360nudge 1.1s ease-in-out 4;animation-delay:.4s}
   .h360-nohints .h360-oform input::placeholder,.h360-nohints .h360-oform textarea::placeholder{color:transparent}
@@ -771,7 +772,7 @@ const REENTRY_LEGACY = [{k:"kids",l:"ילדים ותינוקות"},{k:"pregnant"
 const REENTRY_OPTS = ["0","0.5","1","2","3","4","6","8","12","24","48"];
 const normReentry = r => { r=r||{}; const mx=(...v)=>{const n=v.map(parseFloat).filter(x=>!isNaN(x)); return n.length?String(Math.max(...n)):"";};
   return {adults:r.adults||"", babies:r.babies||mx(r.kids,r.pregnant), animals:r.animals||mx(r.pets,r.birds)}; };
-const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(n===0) return "אין צורך לצאת"; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
+const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(isNaN(n)) return String(h); if(n===0) return "אין צורך לצאת"; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
 const REENTRY_LABEL_ADULTS = {"דלתא סופר":"1","טמפריד":"1","דינופליי":"1"};
 const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g.k]);
 const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.every(g=>parseFloat(r[g.k])===0); };
@@ -810,8 +811,13 @@ const INSTR_TRAPS = ["לא להזיז ולא לגעת במלכודות ובתח�
 const INSTR_RODENT_BAIT = ["אין צורך לצאת מהבית ואין הגבלה על שטיפת רצפה ומשטחים — הפיתיון נמצא בתיבות סגורות","לא לפתוח את התיבות ולא להוציא מהן את הפיתיון","פעילות המכרסמים אמורה לרדת בהדרגה תוך 7–14 ימים"];
 // 🐾👶 בעלי חיים / תינוקות זוחלים — במקום "לא לשטוף 24 שעות": לשטוף, לייבש ולאוורר לפני שהם נכנסים
 const INSTR_PETS = ["לפני שבעלי החיים חוזרים — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה והמשטחים יבשים לגמרי לפני שבעלי החיים חוזרים","לאוורר היטב את המקום לפני שבעלי החיים חוזרים","להוציא את קערות האוכל והמים של בעלי החיים מהאזור, ולשטוף אותן לפני השימוש"];
-const INSTR_BABY = ["לפני שהתינוק חוזר — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה יבשה לגמרי לפני שהתינוק זוחל עליה","לאוורר היטב את המקום לפני שהתינוק חוזר","לשטוף צעצועים ומשטחים שהתינוק נוגע בהם"];
+const INSTR_BABY = ["לפני שהתינוק חוזר — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה יבשה לגמרי לפני שהתינוק זוחל עליה","לאוורר היטב את המקום לפני שהתינוק חוזר"];
 const INSTR_NO_WASH=[INSTR_BASE[0],INSTR_BASE[1]];
+// הנחיות שהמשתמש הסתיר (לא רלוונטיות לעבודה שלו) — לא יופיעו ולא יסומנו אוטומטית
+const instrHiddenGet=()=>{ try{ return JSON.parse(localStorage.getItem("h360_instr_hidden")||"[]")||[]; }catch(e){ return []; } };
+const instrHiddenSet=a=>{ try{ localStorage.setItem("h360_instr_hidden",JSON.stringify(a)); }catch(e){} };
+// 🧠 זיכרון לפי מזיק: היומן האחרון שבו הופיע המזיק
+const lastLogWithPest=(logs,p,exceptId)=>{ let best=null; (logs||[]).forEach(l=>{ if(!l||l.deleted||l.draft||(exceptId!=null&&String(l.id)===String(exceptId))) return; if(!(l.pest||[]).includes(p)) return; if(!best||String(l.date||"")+String(l.id)>String(best.date||"")+String(best.id)) best=l; }); return best; };
 const isRodent = pests => /עכבר|חולד|מכרסם/.test((pests||[]).join(" "));
 const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרסם|נחש|יונ/.test(p));
 const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
@@ -935,18 +941,27 @@ function warrLines(log){ if(!log) return []; const bp=log.warrantyByPest&&typeof
   if(bp){ const L=Object.entries(bp).filter(([k,v])=>String(v||"").trim()&&(!(log.pest||[]).length||(log.pest||[]).includes(k))).map(([k,v])=>k+": "+warrLabel(v)); if(L.length) return L; if(log.warrantyMode==="per") return []; }
   const w=warrLabel(log.warranty); return w?[w]:[]; }
 function warrShort(log){ const L=warrLines(log); return L.length?L.join(" · "):""; }
+// הסבר ללקוח למה אין אחריות — נכנס ל"מהות הטיפול" רק אם לוחצים
+const NOWARR_TERM=pests=>{ const rod=/עכבר|חולד|מכרסם/.test((pests||[]).join(" ")), fly=/זבוב|יתוש/.test((pests||[]).join(" "));
+  return {id:"nowarr",title:"ללא אחריות — הסבר",text:rod?"מכרסמים יכולים להמשיך להגיע מהסביבה (שכנים, ביוב, חצרות) כל עוד יש פתחים ומקורות מזון, ולכן הטיפול ניתן ללא אחריות. מומלץ לסגור פתחים וחורים ולא להשאיר מזון פתוח. במידת הצורך נשמח להגיע לטיפול נוסף בתיאום.":fly?"חרקים מעופפים ממשיכים להגיע מבחוץ דרך חלונות ודלתות, ולכן הטיפול ניתן ללא אחריות.":"הטיפול ניתן ללא אחריות, כי הישנות הבעיה תלויה בגורמים שאינם בשליטתנו (שכנים, פתחים, מקורות מזון ומים). במידת הצורך נשמח להגיע לטיפול נוסף בתיאום."}; };
 function WarrantyPicker({f,setF,pests}){
-  const mode=f.warrantyMode||(f.warrantyByPest&&Object.values(f.warrantyByPest).some(v=>String(v||"").trim())?"per":String(f.warranty||"").trim()?"all":"hide");
-  const setMode=m=>setF(x=>({...x,warrantyMode:m,...(m==="hide"?{warranty:"",warrantyByPest:{}}:m==="all"?{warrantyByPest:{}}:{warranty:""})}));
+  const mode=f.warrantyMode||(f.warrantyByPest&&Object.values(f.warrantyByPest).some(v=>String(v||"").trim())?"per":String(f.warranty||"").trim()==="0"?"none":String(f.warranty||"").trim()?"all":"hide");
+  const setMode=m=>setF(x=>({...x,warrantyMode:m,...(m==="hide"?{warranty:"",warrantyByPest:{}}:m==="none"?{warranty:"0",warrantyByPest:{}}:m==="all"?{warrantyByPest:{},warranty:String(x.warranty||"")==="0"?"":x.warranty}:{warranty:""})}));
+  const hasNoWarrTerm=(f.terms||[]).some(t=>t.id==="nowarr");
   const chip=(on,l,fn,k)=><button key={k||l} type="button" onClick={fn} style={{border:"1.5px solid "+(on?"#16a34a":"#cbd5e1"),background:on?"#dcfce7":"#fff",borderRadius:20,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:on?700:400}}>{l}</button>;
   const bp=f.warrantyByPest||{};
   return <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,padding:"10px 10px 8px",marginBottom:10}}>
     <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:mode==="hide"?0:8}}>
-      {chip(mode==="hide","בלי אחריות (לא מופיע במסמך)",()=>setMode("hide"))}
-      {chip(mode==="all",(pests||[]).length>1?"אותה אחריות לכל המזיקים":"עם אחריות",()=>setMode("all"))}
+      {chip(mode==="hide","🙈 לא להזכיר אחריות",()=>setMode("hide"))}
+      {chip(mode==="none","🚫 ללא אחריות (הלקוח רואה)",()=>setMode("none"))}
+      {chip(mode==="all",(pests||[]).length>1?"✅ אותה אחריות לכל המזיקים":"✅ עם אחריות",()=>setMode("all"))}
       {(pests||[]).length>1&&chip(mode==="per","אחריות שונה לכל מזיק",()=>setMode("per"))}
     </div>
     {mode==="hide"&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:4}}>לא יופיע שום דבר על אחריות במסמך.</div>}
+    {mode==="none"&&<div style={{marginTop:6}}>
+      <div className="h360-hint" style={{fontSize:12,color:"#64748b",marginBottom:6}}>במסמך יופיע: "אחריות: ללא אחריות".</div>
+      <button type="button" onClick={()=>setF(x=>{ const ts=x.terms||[]; return {...x,terms:ts.some(t=>t.id==="nowarr")?ts.filter(t=>t.id!=="nowarr"):[...ts,NOWARR_TERM(pests)]}; })} style={{border:"1.5px solid "+(hasNoWarrTerm?"#16a34a":"#cbd5e1"),background:hasNoWarrTerm?"#dcfce7":"#fff",borderRadius:10,padding:"7px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:13.5,fontWeight:700,color:"#334155"}}>{hasNoWarrTerm?"✓ ":"+ "}📜 הסבר ללקוח למה אין אחריות (ב"מהות הטיפול")</button>
+    </div>}
     {mode==="all"&&<><div style={{fontSize:12.5,color:"#475569",margin:"2px 0 6px"}}>כמה זמן אחריות?</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{WARR_OPTS.filter(([v])=>v!=="0").map(([v,l])=>chip(String(f.warranty||"")===v,l,()=>setF(x=>({...x,warranty:v}))))}
       <input value={WARR_OPTS.some(([v])=>v===String(f.warranty||""))?"":(f.warranty||"")} onChange={e=>{ const v=e.target.value.replace(/[^0-9]/g,""); setF(x=>({...x,warranty:v})); }} inputMode="numeric" placeholder="מס׳ חודשים אחר" style={{width:120,padding:"5px 10px",borderRadius:20,border:"1.5px solid #cbd5e1",fontSize:13,fontFamily:"inherit"}}/></div></>}
     {mode==="per"&&(pests||[]).map(p=><div key={p} style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",padding:"6px 0",borderTop:"1px solid #e2e8f0"}}>
@@ -3280,13 +3295,25 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       let ins=prev&&(prev.instructions||[]).length?prev.instructions.filter(t=>relSet.has(t)):null;
       if(!ins||!ins.length){ ins=[...(hasSpray?INSTR_SPRAY.slice(0,2):[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&!hasSpray&&hasBait?[INSTR_RODENT_BAIT[0],"לדווח לנו על פגרים או ריח"]:[])]; }
       if(f.hasPets||f.hasBaby) ins=ins.filter(t=>!INSTR_NO_WASH.includes(t)).concat([...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])]);
-      ins=[...new Set(ins)];
+      ins=[...new Set(ins)].filter(t=>!instrHiddenGet().includes(t));
       setF(x=>({...x,instructions:ins}));
     } else {
       // גם אחרי שסימנת ידנית — הנחיות של מזיק שהורד יוצאות
       setF(x=>({...x,instructions:x.instructions.filter(t=>!allKnown.has(t)||relSet.has(t)||INSTR_BASE.includes(t))}));
     }
   },[matKey,pestKey]);
+  // 🧠 כשבוחרים מזיק — לוקחים מהיומן האחרון עם אותו מזיק: רמת נגיעות, ממצאי ניטור וזמני יציאה (אפשר לשנות)
+  const prevPests=React.useRef(new Set(f.pest));
+  React.useEffect(()=>{ const added=f.pest.filter(p=>!prevPests.current.has(p)); prevPests.current=new Set(f.pest); if(!added.length||initialData&&initialData.id) return;
+    added.forEach(p=>{ const lg=lastLogWithPest(execLogs,p); if(!lg) return;
+      setF(x=>{ const nx={...x};
+        const lv=lg.pestLevels&&lg.pestLevels[p]; if(lv&&!(x.pestLevels||{})[p]) nx.pestLevels={...(x.pestLevels||{}),[p]:lv};
+        const mo=lg.monitor&&lg.monitor[p]; if(Array.isArray(mo)&&mo.length&&!((x.monitor||{})[p]||[]).length) nx.monitor={...(x.monitor||{}),[p]:mo};
+        if(!touched.current.reentry&&lg.reentry&&Object.values(lg.reentry).some(v=>v!==""&&v!=null)&&!Object.values(x.reentry||{}).some(v=>v!==""&&v!=null)) nx.reentry=normReentry(lg.reentry);
+        return nx; }); }); },[pestKey]);
+  // הנחיות שסימנת בעבר לאותם מזיקים — יופיעו ראשונות ברשימה
+  const instrUsed=React.useMemo(()=>{ const cnt={}; const ps=new Set([...f.pest]); (execLogs||[]).filter(l=>l&&!l.deleted&&(l.pest||[]).some(p=>ps.has(p))).slice(-30).forEach(l=>(l.instructions||[]).forEach(t=>{ cnt[t]=(cnt[t]||0)+1; })); return cnt; },[pestKey,execLogs&&execLogs.length]);
+  const [instrHidden,setInstrHidden]=useState(instrHiddenGet);
   // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
   const spotTotals=RODENT_SPOTS.map(([k])=>f.materials.reduce((s0,m)=>s0+(parseInt(m[k])||0),0));
   const newBoxes=spotTotals[0], refillBoxes=spotTotals[1];
@@ -3388,6 +3415,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const sec=(id,icon,title,summary,state,children)=><ExecSec key={id} flat={logMode==="flat"} id={id} icon={icon} title={title} summary={summary} state={state} open={openSec===id} onToggle={()=>setOpenSec(o=>o===id?null:id)} onNext={()=>goNext(id)}>{children}</ExecSec>;
   const placeSum=placeToScope(f.place).join(" · ");
   const reSum=REENTRY_GROUPS.filter(g=>f.reentry[g.k]).map(g=>g.l.split(" ")[0]+" "+hrsLabel(f.reentry[g.k])).join(" · ");
+  const pickCust=(c)=>{
+        if(!c){ set("customerId",null); return; }
+        const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
+        setF(x=>({...x,customerId:c.id,clientName:custDocName(c)||x.clientName,contactName:c.contactName||"",clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),docDraft:null,taxId:c.taxId||"",address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
+          structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
+      };
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
     <AiFillSummary r={aiSum}/>
     <ExecSmartFill onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
@@ -3396,22 +3429,14 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
     {sec("client","👤","לקוח",[f.clientName,f.address].filter(Boolean).join(" · "),f.clientName&&f.address?"ok":"req",<>
     {/* בחירת לקוח קיים — ממלא שם, כתובת, טלפון וסוג מבנה */}
-    {customers.length>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-      <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:8}}>👤 לקוח קיים? בחר ונמלא את הפרטים</div>
-      <CustomerSearchSelect customers={customers.filter(c=>!c.deleted)} value={f.customerId||""} onChange={(id,c)=>{
-        if(!c){ set("customerId",null); return; }
-        const ST=["דירה","בית פרטי","בניין משותף","עסק","מסעדה","מפעל","גן ילדים","מחסן","אחר"];
-        setF(x=>({...x,customerId:c.id,clientName:custDocName(c)||x.clientName,contactName:c.contactName||"",clientKind:c.contactName?"biz":"private",placeName:c.placeName||(c.contactName?c.name:""),docDraft:null,taxId:c.taxId||"",address:c.address?navAddr(c.address):x.address,unit:unitLine({floor:c.floor,aptNum:c.aptNum,entrance:c.entrance})||unitFromAddr(c.address)||x.unit,phone:c.phone?normILPhone(c.phone):x.phone,
-          structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
-      }}/>
-    </div>}
+    {f.customerId!=null&&f.customerId!==""&&<div style={{fontSize:12.5,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים · <button type="button" onClick={()=>set("customerId",null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12.5,padding:0,fontFamily:"inherit"}}>נתק</button></div>}
     {prefillAppt&&(prefillAppt.rawMsg||prefillAppt.freeText)&&<details open style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"8px 12px",marginBottom:12}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700,color:"#166534"}}>📝 הפרטים כפי שנרשמו בהזמנה</summary><div style={{whiteSpace:"pre-wrap",fontSize:14,marginTop:4}}>{prefillAppt.freeText||prefillAppt.rawMsg}</div></details>}
     {/* לקוח — אותו סדר כמו בלקוח חדש / הזמנת עבודה */}
     {(()=>{ const biz=f.clientKind?f.clientKind==="biz":!!f.contactName;
       const place=f.placeName!=null?f.placeName:(f.contactName?f.clientName:"");
       const doc=f.docDraft!=null?f.docDraft:(f.contactName&&f.placeName&&f.clientName!==f.placeName?f.clientName:"");
       const person=biz?(f.contactName||""):(f.clientName||"");
-      return <ClientIdentity v={{kind:biz?"biz":"private",name:person,phone:f.phone,place,doc,taxId:f.taxId||""}} onChange={x=>setF(p=>{ const isB=x.kind==="biz"; const docs=isB?(String(x.doc||"").trim()||String(x.place||"").trim()||x.name):x.name;
+      return <ClientIdentity v={{kind:biz?"biz":"private",name:person,phone:f.phone,place,doc,taxId:f.taxId||""}} customers={(customers||[]).filter(c=>!c.deleted)} onPick={c=>{ pickCust(c); showToast("✓ נבחר לקוח קיים — הפרטים מולאו"); }} linked={f.customerId!=null&&f.customerId!==""} onChange={x=>setF(p=>{ const isB=x.kind==="biz"; const docs=isB?(String(x.doc||"").trim()||String(x.place||"").trim()||x.name):x.name;
         const pt=(p.place&&p.place.type)||""; const cur=p.clientKind||(p.contactName?"biz":"private"); const flip=x.kind!==cur&&(x.kind==="biz"?(!pt||pt==="דירה"||pt==="בית פרטי"):pt==="עסק");
         const np=flip?{...(p.place||{}),type:x.kind==="biz"?"עסק":"דירה"}:p.place;
         return {...p,place:np,structureType:flip?np.type:p.structureType,clientKind:x.kind,phone:x.phone,clientName:docs,contactName:isB?x.name:"",placeName:isB?(x.place||""):"",docDraft:isB?(x.doc||""):"",taxId:x.taxId||""}; })}/>; })()}
@@ -3527,10 +3552,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         <span style={{width:20,height:20,borderRadius:5,border:"1.5px solid "+(all0?"#16a34a":"#cbd5e1"),background:all0?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{all0?"✓":""}</span>✅ אין צורך לצאת מהמקום{!hasSpray&&hasBait?<span className="h360-hint" style={{fontWeight:400,fontSize:12,color:"#64748b"}}> (תיבות / מלכודות — בלי ריסוס)</span>:null}</button>;})()}
       {REENTRY_GROUPS.map(g=><div key={g.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"4px 0"}}>
         <span style={{fontSize:13,color:"#334155",fontWeight:600}}>{g.l}</span>
-        <select value={f.reentry[g.k]||""} onChange={e=>setReentry(g.k,e.target.value)} style={{flexShrink:0,width:112,padding:"5px 8px",borderRadius:8,border:"1.5px solid "+(f.reentry[g.k]?"#2563eb":"#e2e8f0"),background:"#fff",fontSize:13,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
+        {(()=>{ const v=f.reentry[g.k]||""; const other=v!==""&&!REENTRY_OPTS.includes(v); return <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        {(other||v==="__o")&&<input autoFocus={v==="__o"} value={v==="__o"?"":v} onChange={e=>setReentry(g.k,e.target.value||"__o")} placeholder="למשל: עד שהריח יתפוגג" style={{width:150,padding:"5px 8px",borderRadius:8,border:"1.5px solid #2563eb",fontSize:13,fontFamily:"inherit"}}/>}
+        <select value={other?"__o":v} onChange={e=>setReentry(g.k,e.target.value)} style={{flexShrink:0,width:112,padding:"5px 8px",borderRadius:8,border:"1.5px solid "+(f.reentry[g.k]?"#2563eb":"#e2e8f0"),background:"#fff",fontSize:13,fontWeight:f.reentry[g.k]?700:400,fontFamily:"inherit",color:"#0f172a"}}>
           <option value="">לא צוין</option>
           {REENTRY_OPTS.map(o=><option key={o} value={o}>{hrsLabel(o)}</option>)}
-        </select>
+          <option value="__o">אחר…</option>
+        </select></div>; })()}
       </div>)}
     </div>
 
@@ -3547,8 +3575,12 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <div className="h360-hint" style={{fontSize:12,color:CLR.muted,marginBottom:6}}>מוצגות ההנחיות שמתאימות ל{allPests.length?allPests.join(", "):"טיפול"}{hasSpray?" · ריסוס":""}{hasBait?" · תיבות/מלכודות":""}. השאר — ב"עוד הנחיות".</div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
         {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])])].filter(t=>!((f.hasPets||f.hasBaby)&&INSTR_NO_WASH.includes(t)&&!f.instructions.includes(t)));
-          const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t));
-          return instrMore?[...rel,...rest]:rel;})().map(t=>{const on=f.instructions.includes(t);return <button key={t} type="button" onClick={()=>toggleInstr(t)} style={{display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{t}</span></button>;})}
+          const used=Object.keys(instrUsed).filter(t=>!rel.includes(t));
+          const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t)&&!used.includes(t));
+          const all=[...rel,...used].filter(t=>!instrHidden.includes(t)||f.instructions.includes(t)).sort((a,b)=>(instrUsed[b]||0)-(instrUsed[a]||0));
+          return instrMore?[...all,...rest.filter(t=>!instrHidden.includes(t))]:all;})().map(t=>{const on=f.instructions.includes(t);return <div key={t} style={{display:"flex",gap:4,alignItems:"stretch"}}><button type="button" onClick={()=>toggleInstr(t)} style={{flex:1,display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{instrUsed[t]?"⭐ ":""}{t}</span></button>
+            <button type="button" title="הסתר את ההנחיה הזו (לא רלוונטית)" onClick={()=>{ const nh=[...new Set([...instrHidden,t])]; instrHiddenSet(nh); setInstrHidden(nh); touched.current.instr=true; setF(x=>({...x,instructions:x.instructions.filter(y=>y!==t)})); showToast("ההנחיה הוסתרה — אפשר להחזיר ב'הנחיות שהסתרתי'"); }} style={{flexShrink:0,width:34,border:"1px solid #e2e8f0",background:"#fff",color:"#94a3b8",borderRadius:10,cursor:"pointer",fontSize:14}}>✕</button></div>;})}
+        {instrHidden.length>0&&instrMore&&<button type="button" onClick={()=>{ instrHiddenSet([]); setInstrHidden([]); showToast("ההנחיות שהסתרת חזרו"); }} style={{padding:"6px 10px",borderRadius:10,border:"none",background:"none",color:"#64748b",fontSize:13,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>↩ הנחיות שהסתרתי ({instrHidden.length}) — החזר</button>}
         <button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות (כלליות)"}</button>
       </div>
       <div style={{display:"flex",gap:6,marginTop:8}}>
@@ -3577,7 +3609,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       <div style={{maxWidth:240,marginBottom:4}}><Inp label="מחיר סופי שסוכם עם הלקוח (₪, כולל מע״מ) *" type="number" value={f.agreedPrice} onChange={v=>setF(x=>({...x,agreedPrice:v,paymentAmount:x.paymentStatus==="paid"&&(String(x.paymentAmount)===String(x.agreedPrice)||!x.paymentAmount)?v:x.paymentAmount,paymentDebt:x.paymentStatus==="debt"&&(String(x.paymentDebt)===String(x.agreedPrice)||!x.paymentDebt)?v:x.paymentDebt}))}/></div>
       {prefillAppt?.price&&String(prefillAppt.price)!==String(f.agreedPrice)&&<div style={{fontSize:12,color:"#64748b",marginBottom:8}}>מחיר בהזמנה: ₪{prefillAppt.price}</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,margin:"6px 0 10px"}}>
-        {[["paid","✅ שולם בשטח"],["debt","⏳ חוב"],["office","🏢 מול המשרד"]].map(([k,l])=>{const on=f.paymentStatus===k;return <button key={k} type="button" onClick={()=>setF(x=>({...x,paymentStatus:k,paymentDone:k==="paid",paymentAmount:k==="paid"&&!x.paymentAmount?x.agreedPrice:x.paymentAmount,paymentDebt:k==="debt"&&!x.paymentDebt?x.agreedPrice:x.paymentDebt}))} style={{padding:"10px 6px",borderRadius:10,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#fef2f2":"#fff",color:on?"#991b1b":"#7f1d1d",fontSize:14,fontWeight:on?800:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;})}
+        {[["paid","✅ שולם בשטח"],["debt","⏳ חוב"]].map(([k,l])=>{const on=f.paymentStatus===k;return <button key={k} type="button" onClick={()=>setF(x=>({...x,paymentStatus:k,paymentDone:k==="paid",paymentAmount:k==="paid"&&!x.paymentAmount?x.agreedPrice:x.paymentAmount,paymentDebt:k==="debt"&&!x.paymentDebt?x.agreedPrice:x.paymentDebt}))} style={{padding:"10px 6px",borderRadius:10,border:"1.5px solid "+(on?"#dc2626":"#fecaca"),background:on?"#fef2f2":"#fff",color:on?"#991b1b":"#7f1d1d",fontSize:14,fontWeight:on?800:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;})}
       </div>
       {f.paymentStatus==="paid"&&<div>
         <div style={{fontSize:12,color:CLR.muted,fontWeight:600,marginBottom:5}}>איך שולם? *</div>
@@ -3634,7 +3666,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </>)}
     <div style={{position:"sticky",bottom:0,zIndex:20,background:"rgba(248,250,252,0.97)",backdropFilter:"blur(6px)",padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",marginTop:6,borderTop:"1px solid #e2e8f0"}}>
     {(()=>{
-      const buildData=()=>({...f,pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),structureType:(f.place&&f.place.type)||f.structureType||"",pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
+      const buildData=()=>({...f,reentry:Object.fromEntries(Object.entries(f.reentry||{}).map(([k,v])=>[k,v==="__o"?"":v])),pestLevels:Object.fromEntries(levelPests.map(p=>[p,f.pestLevels[p]])),pestLevel:[...new Set(levelPests.map(p=>f.pestLevels[p]))].length===1?f.pestLevels[levelPests[0]]:"",paymentDone:f.paymentStatus==="paid",paymentDebt:f.paymentStatus==="debt"?(f.paymentDebt||f.agreedPrice):(f.paymentStatus==="paid"&&parseFloat(f.paymentAmount)<parseFloat(f.agreedPrice)?String(parseFloat(f.agreedPrice)-parseFloat(f.paymentAmount)):""),scope:placeToScope(f.place),structureType:(f.place&&f.place.type)||f.structureType||"",pest:allPests,workerName:f.workerName,workerLicense:f.workerLicense,workerLicenseType:f.workerLicenseType,extraWorkers:f.extraWorkers,maintenanceId:contract?contract.id:(prefillAppt?.maintenanceId||null),stationChecks:stations.length?checks.filter(c=>c.activity||c.baitReplaced):[]});
       const problems=send=>{ const P=[]; const add=(sec,label,block)=>P.push({sec,label,block:!!block});
         if(!f.clientName) add("client","שם לקוח",true); if(!f.address) add("client","כתובת",true);
         if(send&&!String(f.phone||"").trim()) add("client","טלפון לקוח (כדי לשלוח)",true);
@@ -3691,11 +3723,17 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         </div>
       </Modal></div>,document.body); })()}
       {(()=>{ const bb={border:"none",borderRadius:10,padding:"10px 6px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",color:"#fff",flex:"1 1 0",minWidth:0};
-        return <div style={{display:"flex",gap:6}}>
-          <button type="button" onClick={()=>go(false,true)} style={{...bb,background:"#0f766e",flex:"1.4 1 0"}}>🧾 שמור + חשבונית</button>
-          <button type="button" onClick={()=>go(true)} style={{...bb,background:"#25D366"}}>📤 שמור ושלח</button>
-          <button type="button" onClick={()=>go(false)} style={{...bb,background:"#fff",color:CLR.primary,border:"1px solid #cbd5e1",flex:"0 0 auto",padding:"10px 12px"}}>💾</button>
-          <button type="button" onClick={()=>setBarMore(true)} style={{...bb,background:"#fff",color:"#334155",border:"1px solid #cbd5e1",flex:"0 0 auto",padding:"10px 12px"}}>⋯</button>
+        const wb={...bb,background:"#fff",color:"#334155",border:"1px solid #cbd5e1",fontSize:13.5,padding:"8px 6px"};
+        return <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{display:"flex",gap:6}}>
+            <button type="button" onClick={()=>go(false,true)} style={{...bb,background:"#0f766e",flex:"1.3 1 0"}}>🧾 שמור + חשבונית</button>
+            <button type="button" onClick={()=>go(true)} style={{...bb,background:"#25D366"}}>📤 שמור ושלח</button>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button type="button" onClick={()=>setShowPrev(true)} style={wb}>👁️ צפה</button>
+            <button type="button" onClick={()=>go(false)} style={{...wb,color:CLR.primary}}>💾 שמור</button>
+            <button type="button" onClick={()=>onPreview(buildData(),{draft:true})} style={wb}>📝 טיוטה</button>
+          </div>
         </div>; })()}
       {barMore&&<ActionSheet title="עוד אפשרויות" items={[{icon:"💾",label:"שמור בלבד",onClick:()=>go(false)},{icon:"📝",label:"טיוטה — אשלים אחר כך",onClick:()=>onPreview(buildData(),{draft:true})},{icon:"👁️",label:"תצוגה מקדימה",onClick:()=>setShowPrev(true)}]} onClose={()=>setBarMore(false)}/>}
       </>; })()}
@@ -3748,12 +3786,12 @@ function ExecLogPreview({data:rawData,onBack,onFix,onApprove,saved,phone,approve
         saved&&{icon:"⭐",label:"בקשת ביקורת",onClick:()=>sendReviewRequest(log.clientName,phone)},
         linkedDoc&&{icon:"👁",label:"הצג חשבונית",onClick:()=>printDoc(linkedDoc)},
         saved&&{icon:"💳",label:"בקשת תשלום ללקוח (קישור)",onClick:()=>setPayReq(true)}].filter(Boolean);
-      return <div style={{position:"sticky",top:-1,zIndex:15,background:"rgba(248,250,252,.97)",backdropFilter:"blur(6px)",padding:"6px 0",margin:"0 0 10px",display:"flex",gap:6,alignItems:"center",borderBottom:"1px solid #e2e8f0"}}>
+      return <div style={{position:"sticky",top:-1,zIndex:15,background:"rgba(248,250,252,.97)",backdropFilter:"blur(6px)",padding:"6px 0",margin:"0 0 10px",display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",borderBottom:"1px solid #e2e8f0"}}>
         <button type="button" onClick={()=>{ if(linkedDoc) sendLogAndDocWA(logForSend,linkedDoc,phone); else sendExecLogWA(logForSend,phone); }} style={{...ib,background:"#25D366",color:"#fff",border:"none"}}>📤 שלח יומן ביצוע</button>
         {saved&&onSaveDoc&&!linkedDoc&&<button type="button" onClick={openInvoice} style={{...ib,background:"#0f766e",color:"#fff",border:"none"}}>🧾 חשבונית</button>}
         {saved&&onBack&&!(logSent(saved)||sentNow)&&<button type="button" onClick={onBack} style={{...ib,color:"#1d4ed8",borderColor:"#93c5fd"}}>✏️ ערוך</button>}
         {saved&&onFix&&(logSent(saved)||sentNow)&&<button type="button" onClick={onFix} title="היומן נשלח ונעול. שכפול יוצר גרסה מתוקנת חדשה" style={{...ib,color:"#1d4ed8",borderColor:"#93c5fd"}}>🔒 ⧉ שכפל ותקן</button>}
-        <button type="button" onClick={()=>setMoreOpen(true)} style={ib}>⋯ עוד</button>
+        {more.map((m,i)=><button key={i} type="button" onClick={m.onClick} style={{...ib,fontSize:12.5,padding:"7px 9px"}}>{m.icon} {m.label}</button>)}
         {onApprove&&<button type="button" onClick={onApprove} style={{...ib,marginRight:"auto",background:CLR.primary,color:"#fff",border:"none"}}>{saved?"✓ סיום":(approveLabel||"✓ סיום")}</button>}
         {moreOpen&&<ActionSheet title="עוד פעולות ליומן הביצוע" items={more} onClose={()=>setMoreOpen(false)}/>}
       </div>; })()}
@@ -7217,6 +7255,7 @@ function ClientIdentity({v,onChange,sharedHint="",customers=null,onPick=null,lin
     </div>
     <G2><Inp label={biz?"שם איש הקשר *":"שם הלקוח *"} value={v.name||""} onChange={x=>set("name",x)} placeholder={biz?"למשל: יוסי":""}/><Inp label={biz?"טלפון איש הקשר *":"טלפון *"} value={v.phone||""} onChange={x=>set("phone",x)} placeholder="050-000-0000"/></G2>
     {customers&&onPick&&<CustSuggest customers={customers} q={v.name} onPick={onPick} off={linked}/>}
+    {customers&&onPick&&String(v.phone||"").replace(/\D/g,"").length>=4&&<CustSuggest customers={customers} q={String(v.phone||"").replace(/\D/g,"")} onPick={onPick} off={linked} title="לקוח עם הטלפון הזה"/>}
     {biz&&<>
       <Inp label="🏪 שם המקום (איך שכולם מכירים)" value={v.place||""} onChange={x=>set("place",x)} placeholder={sharedHint||"למשל: שווארמה שמש, גן השקמה"}/>
       {customers&&onPick&&<CustSuggest customers={customers} q={v.place} onPick={onPick} off={linked}/>}
@@ -7437,12 +7476,7 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     </div>}
     <IntakeTextBox onContact={c=>{ if(c.tel&&!String(f.phone||"").trim()) set("phone",c.tel); if(c.name&&!String(f.name||"").trim()) set("name",c.name); }} value={f.rawMsg} onChange={v=>set("rawMsg",v)} onFill={(r,raw)=>fillWithHighlight(ofRef,()=>applyWA(r,raw,true))} cityNames={ilCities.map(c=>c.name)} custOnly={custOnly}/>
     <FieldCard title="פרטי לקוח">
-      <div style={{marginBottom:12}}>
-        <button type="button" onClick={()=>setShowExistingSearch(true)}
-          style={{width:"100%",padding:"9px 14px",borderRadius:8,border:"2px dashed "+CLR.primary,background:CLR.primaryLight,color:CLR.primary,cursor:"pointer",fontWeight:600,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-          👤 לקוח חוזר? חפש לקוח קיים
-        </button>
-      </div>
+
       {dupCand&&<button type="button" onClick={()=>{ pickExisting(dupCand); showToast("✓ נבחר הלקוח הקיים — השמירה תעדכן אותו"); }} style={{display:"block",width:"100%",textAlign:"right",fontFamily:"inherit",cursor:"pointer",fontSize:13,color:"#92400e",background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 10px",marginBottom:10}}>⚠️ כבר יש לקוח כזה: <b>{dupCand.name}</b>{dupCand.phone?" · "+dupCand.phone:""}{dupCand.address?" · "+dupCand.address:""} — <u>לחץ כדי לבחור אותו</u> (בלי כרטיס כפול)</button>}
       {existingId!=null&&!initialCustomer&&<div style={{fontSize:12,color:"#166534",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 10px",marginBottom:10}}>✓ לקוח קיים — השמירה תעדכן את הכרטיס שלו (בלי כפילות) · <button type="button" onClick={()=>setExistingId(null)} style={{border:"none",background:"none",color:"#b91c1c",cursor:"pointer",fontSize:12}}>זה לקוח חדש</button></div>}
       <ClientIdentity v={{kind:isBizClient?"biz":"private",name:f.name,phone:f.phone,place:f.placeName,doc:f.bizName,taxId:f.taxId}} sharedHint={isShared?docNameShown:""} customers={customers} onPick={c=>{ pickExisting(c); showToast("✓ נבחר לקוח קיים — השמירה תעדכן אותו"); }} linked={existingId!=null}
@@ -14681,10 +14715,9 @@ function App(){
             <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
             <span style={{display:"block",width:20,height:2,background:"#0f172a",borderRadius:2}}/>
           </button>
-          {/* Logo + page name — באמצע */}
+          {/* Logo באמצע (שם המסך כבר מופיע בראש הדף עצמו) */}
           <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             <img src="logo.png" alt="הדברה 360" style={{height:32,width:"auto",display:"block",flexShrink:0}}/>
-            <div style={{fontSize:13,color:"#0f172a",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{tabLabel[tab]||tab}</div>
           </div>
           <HintsBtn/>
           {/* קיצור דרך ליומן */}
