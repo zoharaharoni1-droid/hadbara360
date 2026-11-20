@@ -934,7 +934,8 @@ const logTplTag=(list,t)=>logTplPest(t)+" "+logTplNum(list,t);
 const logTplRelW=v=>isWarrDate(v)?"@"+String(v).slice(5):v;
 const logTplSnap=f=>{ const c=o=>JSON.parse(JSON.stringify(o==null?null:o)); const pl=f.place||{};
   const P=[...(f.pest||[]),...String(f.customPest||"").split(",").map(x=>x.trim()).filter(Boolean)]; const onlyP=o=>Object.fromEntries(Object.entries(o||{}).filter(([k])=>P.includes(k)));
-  const relT=new Set(termsRelevant(TERMS_DEFAULT.concat(termsTpl?termsTpl():[]),P,true).map(t=>t.id)); f={...f,pestLevels:onlyP(f.pestLevels),monitor:onlyP(f.monitor),terms:(f.terms||[]).filter(t=>!/^p_/.test(String(t.id||""))||relT.has(t.id))};
+  // נגיעות וממצאי ניטור — רק של המזיקים שמסומנים. נוסחי "מהות הטיפול" נשארים כמו שבחרת (גם של מזיק אחר)
+  f={...f,pestLevels:onlyP(f.pestLevels),monitor:onlyP(f.monitor)};
   return {pest:c(f.pest||[]),customPest:f.customPest||"",place:{type:pl.type||"",extras:c(pl.extras||[])},materials:c(f.materials||[]),devices:c(f.devices||[]),reentry:c(f.reentry||{}),hasPets:!!f.hasPets,hasBaby:!!f.hasBaby,
     instructions:c(f.instructions||[]),terms:c(f.terms||[]),pestLevels:c(f.pestLevels||{}),monitor:c(f.monitor||{}),warranty:logTplRelW(f.warranty||""),warrantyMode:f.warrantyMode||"",warrantyByPest:Object.fromEntries(Object.entries(f.warrantyByPest||{}).map(([k,v])=>[k,logTplRelW(v)]))}; };
 const logTplApply=(t,x)=>{ const d=JSON.parse(JSON.stringify((t&&t.data)||{})); const y=(parseInt(String(x.date||"").slice(0,4))||new Date().getFullYear())+1; const wd=v=>/^@\d{2}-\d{2}$/.test(String(v||""))?y+"-"+String(v).slice(1):(v||"");
@@ -3638,9 +3639,6 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const hasBaitK=f.materials.some(m=>m.method==="תחנת האכלה")||f.devices.length>0; const firstBait=React.useRef(true);
   React.useEffect(()=>{ if(firstBait.current){ firstBait.current=false; return; } setTimeout(()=>{ if(!touched.current.instr) return;
     setF(x=>{ const has=(x.instructions||[]).some(t=>INSTR_TRAPS.includes(t)); if(hasBaitK&&!has) return {...x,instructions:[...x.instructions,INSTR_TRAPS[0]]}; if(!hasBaitK&&has) return {...x,instructions:x.instructions.filter(t=>!INSTR_TRAPS.includes(t))}; return x; }); },900); },[hasBaitK]);
-  // מזיק שהוסר — יורדים גם הנוסח שלו ב"מהות הטיפול"
-  React.useEffect(()=>{ const P=[...f.pest,...String(f.customPest||"").split(",").map(x=>x.trim()).filter(Boolean)]; const rel=new Set(termsRelevant(termsTplL,P,true).map(t=>t.id));
-    setF(x=>{ const nt=(x.terms||[]).filter(t=>!/^p_/.test(String(t.id||""))||rel.has(t.id)); return nt.length===(x.terms||[]).length?x:{...x,terms:nt}; }); },[pestKey]);
   React.useEffect(()=>{ const id=window.__h360EditTpl; if(!id||(initialData&&initialData.id)||aiR) return; window.__h360EditTpl=null; const t=logTplLive(logTplGet()).find(x=>x.id===id); if(!t) return; setTplEdit(t); setTimeout(()=>applyTpl(t),300); },[]);
   const tplBaseRef=React.useRef(null);
   const applyTplIds=ids=>{ touched.current.reentry=true; touched.current.instr=true; touched.current.terms=true; const list=logTplGet();
@@ -14604,7 +14602,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "247";
+const APP_BUILD = "248";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
