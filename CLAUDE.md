@@ -2,6 +2,7 @@
 
 Single-page app: `index.html` (React 18 + Babel in the browser, no build step). Hosted on GitHub Pages.
 All text in the UI is Hebrew (RTL). Mobile-first, white with sky-blue/green.
+Phone (<900px) = clean, minimal (extra actions behind +, explanations only with 💡). Desktop (`useWide()`) = use the width: side-by-side panels (e.g. exec log form + history), all buttons visible.
 
 ## Release checklist
 1. Bump `APP_BUILD` in `index.html` **and** the cache name `hadbara360-vNNN` in `sw.js` (same number).

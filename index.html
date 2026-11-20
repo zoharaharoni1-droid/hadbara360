@@ -1797,6 +1797,8 @@ function sendIntl(ph){ const d=String(ph||"").replace(/[^0-9]/g,""); return d.st
 // ── 💳 בקשת תשלום ללקוח — דף תשלום בסגנון שלנו (hadbara360.co.il/p/) ──
 // עד שיהיה חיבור לחברת סליקה: ביט / פייבוקס / העברה בנקאית / מזומן. הלקוח מעדכן פרטים לחשבונית ושולח אישור בוואטסאפ.
 // 💡 הסברים — מוסתרים בכל המערכת, נפתחים בלחיצה על 💡 (נשמר במכשיר)
+// 🖥️ מסך רחב (מחשב) מול טלפון — במחשב מנצלים את הרוחב, בטלפון שומרים על מסך נקי
+function useWide(){ const [w,setW]=useState(()=>typeof window!=="undefined"&&window.innerWidth>=900); React.useEffect(()=>{ const f=()=>setW(window.innerWidth>=900); window.addEventListener("resize",f); return()=>window.removeEventListener("resize",f); },[]); return w; }
 function hintsOn(){ try{ return localStorage.getItem("h360_hints")==="1"; }catch(e){ return false; } }
 function applyHints(v){ try{ document.documentElement.classList.toggle("h360-nohints",!v); }catch(e){} }
 function setHintsOn(v){ try{ localStorage.setItem("h360_hints",v?"1":"0"); }catch(e){} applyHints(v); try{ window.dispatchEvent(new Event("h360-hints")); }catch(e){} }
@@ -2991,7 +2993,8 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
   const list=compact?hist.slice(0,3):hist;
   if(!list.length) return <div style={{fontSize:14,color:"#64748b",textAlign:"center",padding:compact?"6px":"30px 10px"}}>עדיין אין כאן כלום. כל מה שתבקש מהעוזר יופיע כאן — ותוכל לחזור ולערוך.</div>;
   const ib=(bg,c)=>({border:"1.5px solid "+c,background:bg,color:c,borderRadius:10,padding:"8px 12px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"});
-  return <div style={{display:"flex",flexDirection:"column",gap:8}}>{list.map(h=>{
+  const wideH=!compact&&typeof window!=="undefined"&&window.innerWidth>=900;
+  return <div style={wideH?{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"start"}:{display:"flex",flexDirection:"column",gap:8}}>{list.map(h=>{
     const lg=h.logId!=null?aiLatestLog(execLogs,h.logId):null;
     const doc=h.docId!=null?(finance||[]).find(f=>String(f.id)===String(h.docId)):null;
     const d=new Date(h.ts); const when=d.toLocaleDateString("he-IL",{day:"numeric",month:"numeric"})+" "+d.toLocaleTimeString("he-IL",{hour:"2-digit",minute:"2-digit"});
@@ -3887,7 +3890,8 @@ function ensureLogCustomer(newLog,customers,setCustomers){
 function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,setExecLogs,finance,setFinance,customers=[],setCustomers,maintenance=[]}){
   const workerObj = workers.find(w=>String(w.crmUserId)===String(currentUser.id)) || workers.find(w=>String(w.name||"").trim()===String(currentUser.name||"").trim()) || {name:currentUser.name,license:"—"};
   const [savedLog,setSavedLog]=useState(null);
-  const [mode,setMode]=useState(()=>window.__h360ExecAction?"list":"new"); // list | new | preview — נכנסים ישר ליומן ביצוע חדש
+  const wide=useWide();
+  const [mode,setMode]=useState(()=>window.__h360ExecAction||window.innerWidth>=900?"list":"new"); // list | new | preview — בטלפון נכנסים ישר ליומן ביצוע חדש; במחשב: טופס + היסטוריה זה לצד זה
   const [prefillAppt,setPrefillAppt]=useState(null);
   const [extracted,setExtracted]=useState({});
   const [formKey,setFormKey]=useState(0);
@@ -3919,7 +3923,7 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
     setSavedLog(newLog);
     return newLog;
   };
-  const finish=()=>{ setMode("list"); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
+  const finish=()=>{ setMode("list"); setFormKey(k=>k+1); setExtracted({}); setPrefillAppt(null); setPreviewData(null); setSavedLog(null); };
 
   const startNew=(appt=null)=>{setPrefillAppt(appt);setExtracted({});setSavedLog(null);setFormKey(k=>k+1);setMode("new");};
   const fixRef=React.useRef(null);
@@ -4020,15 +4024,14 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
       <button onClick={()=>startNew(a)} style={{...ib,background:"#0284c7",color:"#fff",border:"none"}}>✍️ מלא יומן ביצוע</button>
     </div>;
   const cur=curSeg==="wait"?waitList:curSeg==="draft"?draftList:doneList;
-  return(
-    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
-     <div style={{maxWidth:1150,margin:"0 auto"}}>
+  const listInner=(
+     <div style={{maxWidth:wide?"none":1150,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
         <div>
           <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#0f172a"}}>📋 יומן ביצוע</h2>
           <div style={{fontSize:12,color:CLR.muted,marginTop:2}}>{currentUser.role==="מדביר"?"יומני הביצוע שלי":"כל יומני הביצוע"}</div>
         </div>
-        <Btn onClick={()=>startNew(null)}>+ יומן ביצוע חדש</Btn>
+        {!wide&&<Btn onClick={()=>startNew(null)}>+ יומן ביצוע חדש</Btn>}
       </div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
         <div className="h360-seg">{segs.map(([k,lb,n])=><button key={k} type="button" className={curSeg===k?"on":""} onClick={()=>setElSeg(k)}>{lb} <span style={{fontWeight:800}}>({n})</span></button>)}</div>
@@ -4039,7 +4042,16 @@ function ExecLogTab({currentUser,workers,appointments,setAppointments,execLogs,s
             {nq?"לא נמצאו תוצאות לחיפוש":curSeg==="wait"?"אין תורים שממתינים ליומן ביצוע 👍":curSeg==="draft"?"אין טיוטות פתוחות":"אין יומני ביצוע עדיין"}
           </div>
         : <div className="h360-grid">{curSeg==="wait"?cur.map(apptCard):cur.map(logCard)}</div>}
-     </div>
+     </div>);
+  return(
+    <div style={{background:"#f8fafc",minHeight:"100%",padding:20,direction:"rtl",fontFamily:"'Inter','Segoe UI',system-ui,sans-serif",color:"#0f172a",maxWidth:"100%",overflowX:"hidden"}}>
+      {wide?<div style={{display:"grid",gridTemplateColumns:"minmax(0,1.15fr) minmax(0,1fr)",gap:20,alignItems:"start",maxWidth:1500,margin:"0 auto"}}>
+        <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:"14px 16px",position:"sticky",top:70,maxHeight:"calc(100vh - 90px)",overflowY:"auto"}}>
+          <h2 style={{margin:"0 0 10px",fontSize:17,fontWeight:800}}>📋 יומן ביצוע חדש</h2>
+          <ExecLogForm key={"inline-"+formKey} worker={workerObj} prefillAppt={null} initialData={{}} onPreview={handlePreview} workers={workers} appointments={appointments} customers={customers} execLogs={execLogs} maintenance={maintenance}/>
+        </div>
+        {listInner}
+      </div>:listInner}
     </div>
   );
 }
@@ -8349,7 +8361,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
     (customers||[]).forEach(c=>{ bump(c.id,stamp(c.id),"לקוח חדש"); if(c.createdAt) bump(c.id,String(c.createdAt),"לקוח חדש"); if(c.updatedAt) bump(c.id,String(c.updatedAt),c.openOrder?"הזמנת עבודה":"עדכון פרטים"); if(c.lastTreatment) bump(c.id,c.lastTreatment,"טיפול"); });
     return m; },[appointments,execLogs,customers,finance]);
   const lastAct=React.useMemo(()=>{ const o={}; Object.keys(lastActX).forEach(k=>o[k]=lastActX[k].t); return o; },[lastActX]);
-  const [sortMode,setSortMode]=useState(()=>{ try{ return localStorage.getItem("h360_cust_sort")||"history"; }catch(_){ return "history"; } }); const [custMore,setCustMore]=useState(false);
+  const [sortMode,setSortMode]=useState(()=>{ try{ return localStorage.getItem("h360_cust_sort")||"history"; }catch(_){ return "history"; } }); const [custMore,setCustMore]=useState(false); const wide=useWide();
   const setSort=v=>{ setSortMode(v); try{ localStorage.setItem("h360_cust_sort",v); }catch(_){} };
   const whenTxt=t=>{ if(!t) return ""; if(!/T/.test(t)) return fmtDate(t.slice(0,10)); const d=new Date(t); if(isNaN(d)) return ""; const p2=x=>String(x).padStart(2,"0"); const ld=d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); const n0=new Date(); const td=n0.getFullYear()+"-"+p2(n0.getMonth()+1)+"-"+p2(n0.getDate()); const y0=new Date(n0.getTime()-864e5); const yd=y0.getFullYear()+"-"+p2(y0.getMonth()+1)+"-"+p2(y0.getDate()); return (ld===td?"היום":ld===yd?"אתמול":fmtDate(ld))+" "+p2(d.getHours())+":"+p2(d.getMinutes()); };
   const filtered=displayCustomers.filter(c=>{
@@ -8361,10 +8373,18 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   return <div>
     <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
       <input placeholder="🔍 חיפוש שם, טלפון, כתובת..." value={srch} onChange={e=>setSrch(e.target.value)} style={{flex:1,minWidth:160,padding:"9px 14px",borderRadius:8,border:"1px solid #d1d5db",fontSize:14,background:"#f9fafb",boxSizing:"border-box"}}/>
+      {wide&&<>
+      <Btn v="accent" sm onClick={()=>setShowCalc(true)}>🧮 מחשבון</Btn>
+      <Btn sm v="secondary" onClick={()=>exportCustomers(customers)}>📥 ייצא Excel</Btn>
+      {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowImport(true)}>📂 ייבוא לקוחות</Btn>}
+      <button onClick={()=>setShowArchive(a=>!a)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(showArchive?"#f59e0b":CLR.border),background:showArchive?"#fef9c3":"transparent",color:showArchive?"#92400e":CLR.muted,cursor:"pointer",fontSize:13,fontWeight:showArchive?700:400}}>
+        {showArchive?"← חזור לפעילים":"📦 ארכיון ("+archivedCustomers.length+")"}
+      </button>
+      </>}
       <Btn sm onClick={()=>setShowNew(true)}>+ לקוח חדש</Btn>
-      <button type="button" title="עוד פעולות" onClick={()=>setCustMore(v=>!v)} style={{width:38,height:34,borderRadius:8,border:"1px solid "+(custMore||showArchive?"#0284c7":CLR.border),background:custMore||showArchive?"#e0f2fe":"#fff",color:"#0f172a",fontSize:18,fontWeight:800,cursor:"pointer",lineHeight:1}}>{custMore||showArchive?"−":"+"}</button>
+      {!wide&&<button type="button" title="עוד פעולות" onClick={()=>setCustMore(v=>!v)} style={{width:38,height:34,borderRadius:8,border:"1px solid "+(custMore||showArchive?"#0284c7":CLR.border),background:custMore||showArchive?"#e0f2fe":"#fff",color:"#0f172a",fontSize:18,fontWeight:800,cursor:"pointer",lineHeight:1}}>{custMore||showArchive?"−":"+"}</button>}
     </div>
-    {(custMore||showArchive)&&<div style={{display:"flex",gap:8,marginTop:-8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+    {!wide&&(custMore||showArchive)&&<div style={{display:"flex",gap:8,marginTop:-8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
       <Btn v="accent" sm onClick={()=>setShowCalc(true)}>🧮 מחשבון</Btn>
       <Btn sm v="secondary" onClick={()=>exportCustomers(customers)}>📥 ייצא Excel</Btn>
       {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowImport(true)}>📂 ייבוא לקוחות</Btn>}
@@ -9962,8 +9982,8 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:14}}>
       <div style={{fontWeight:800,fontSize:15,color:"#0f172a",marginBottom:10}}>מסמך חדש</div>
       {!mineOnly&&<PayReportsPanel customers={customers} onIssue={r=>setDocReq(payRepDocReq(r,customers))}/>}
-      <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false}})} style={{width:"100%",border:"2px solid #7dd3fc",borderRadius:12,background:"#e0f2fe",color:"#0c4a6e",padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
-        <span style={{textAlign:"right"}}><span style={{display:"block",fontSize:17,fontWeight:800}}>+ חשבונית מס/קבלה</span><span className="h360-hint" style={{fontSize:12,color:"#0369a1"}}>הלקוח שילם עכשיו — הכי נפוץ</span></span><span style={{fontSize:24}}>🧾</span>
+      <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false}})} style={{width:"100%",...(window.innerWidth>=900?{border:"none",background:"#1a5c3a",color:"#fff"}:{border:"2px solid #7dd3fc",background:"#e0f2fe",color:"#0c4a6e"}),borderRadius:12,padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+        <span style={{textAlign:"right"}}><span style={{display:"block",fontSize:17,fontWeight:800}}>+ חשבונית מס/קבלה</span><span className="h360-hint" style={{fontSize:12,color:window.innerWidth>=900?"#d1fae5":"#0369a1"}}>הלקוח שילם עכשיו — הכי נפוץ</span></span><span style={{fontSize:24}}>🧾</span>
       </button>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
         {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
@@ -12179,7 +12199,8 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
 
       <button onClick={()=>setFvRoute(true)} style={{width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid #cbd5e1",background:"#fff",color:"#0f172a",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>🗺️ המסלול שלי היום — ניווט לכל העצירות</button>
       {fvRoute&&<RoutePlanner appointments={appointments} setAppointments={setAppointments} workers={workers} currentUser={currentUser} onClose={()=>setFvRoute(false)}/>}
-      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:14,border:"2px solid #25D366",background:"transparent",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>🧠 מילוי חכם</button>}
+      {onQuickAdd&&(window.innerWidth>=900?<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>🧠 מילוי חכם ליומן — 🎤 דבר · 📋 הדבק · ⌨️ הקלד</button>
+        :<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:14,border:"2px solid #25D366",background:"transparent",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>🧠 מילוי חכם</button>)}
       {/* משימות אישיות של היום */}
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
@@ -14820,7 +14841,7 @@ function App(){
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
             {aiOpenG&&user&&<AssistantModal mem={AI_MEM} appointments={appointments} customers={customers} execLogs={execLogs} finance={activeFinance} currentUser={user} onClose={()=>setAiOpenG(false)}
               onOpenLog={(a,d)=>aiAct("log",{a,d})} onOpenInvoice={a=>aiAct("inv",{a})} onOpenAppt={p=>aiAct("appt",p)}/>}
-            {tab==="aihist"&&<div style={{maxWidth:640,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
+            {tab==="aihist"&&<div style={{maxWidth:isMobile?640:1100,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}
             {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={jobAppointments} templates={msgTemplates}/>}
