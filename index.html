@@ -2941,9 +2941,18 @@ function aiNorm(d,chems=[],text=""){
   const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
   if(out.instructions.length) out.found.push("הנחיות");
   out.wantAppt=!!d.wantAppt;
-  out.apptDate=/^\d{4}-\d{2}-\d{2}$/.test(String(d.apptDate||""))?String(d.apptDate):"";
-  out.apptTime=/^\d{1,2}:\d{2}$/.test(String(d.apptTime||""))?String(d.apptTime).padStart(5,"0"):"";
   out.newName=String(d.newName||"").trim(); out.newPhone=String(d.newPhone||"").replace(/\D/g,""); out.newAddress=String(d.newAddress||"").trim();
+  { const ds=String(d.apptDate||"").trim(); let m;
+    out.apptDate=(m=ds.match(/^(\d{4}-\d{2}-\d{2})/))?m[1]:(m=ds.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})$/))?((m[3].length===2?"20"+m[3]:m[3])+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0")):"";
+    const ts=String(d.apptTime||"").trim()||(ds.match(/T(\d{1,2}:\d{2})/)||[])[1]||""; out.apptTime=(m=ts.match(/^(\d{1,2}):(\d{2})/))?m[1].padStart(2,"0")+":"+m[2]:""; }
+  if(out.wantAppt){ try{ const w=waParse(T,[]);
+      if(!out.newAddress&&(w.street||w.city)) out.newAddress=[[w.street,w.buildingNum].filter(Boolean).join(" "),w.city].filter(Boolean).join(", ");
+      if(!out.newPhone&&w.phone) out.newPhone=String(w.phone).replace(/\D/g,"");
+      if(!out.newName) out.newName=out.customerName||w.name||"";
+      if(!out.apptDate&&w.prefDate) out.apptDate=w.prefDate;
+      if(!out.apptTime){ let tm=(T.match(/(?:בשעה|ב-?|ב)\s*(\d{1,2})(?::(\d{2}))?/)||[]); let h=tm[1]?parseInt(tm[1]):NaN; const mi=tm[2]||"00";
+        if(!isNaN(h)){ if(h<12&&/(צהריים|אחה"?צ|אחר הצהריים|בערב|ערב|לילה)/.test(T)&&!(h>=11&&/צהריים/.test(T)&&h===12)) h+=12; if(h>=7&&h<=23) out.apptTime=String(h).padStart(2,"0")+":"+mi; }
+        else if(w.timeFrom) out.apptTime=w.timeFrom; } }catch(e){} }
   if(out.newPhone&&!T.replace(/\D/g,"").includes(out.newPhone.slice(-7))) out.newPhone="";
   out.summary=String(d.summary||"").trim(); out.apptId=String(d.apptId||""); out.customerName=String(d.customerName||"").trim();
   out.wantLog=d.wantLog!==false; out.wantInvoice=!!d.wantInvoice; out.ai=true;
@@ -2967,8 +2976,9 @@ async function aiAssist(text,{appts=[],chems=[],custs=[],mode=""}={}){
   return aiNorm(j.data,chems,text);
 }
 // התאמת לקוח לטקסט: כמה מילים מהשם / העסק / המקום / איש הקשר מופיעות במשפט (+ טלפון)
-const AI_STOP=new Set(["חשבונית","קבלה","יומן","ביצוע","הדברה","שקלים","שקל","כולל","לקוח","בית","דירה","משרד"]);
-function aiCustScore(c,normT,digits){ if(!c) return 0; let sc=0; const toks=[c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).map(elNorm).join(" ").split(" ").filter(w=>w.length>=3&&!AI_STOP.has(w));
+const AI_STOP=new Set(["חשבונית","קבלה","יומן","ביצוע","הדברה","הדברת","ריסוס","טיפול","שקלים","שקל","כולל","לקוח","בית","דירה","משרד","בניין","קומה","קומות","כלל","רחוב","יום","שעה","בצהריים","בבוקר","בערב","מחר","היום","תור","חצר","מטבח","מחיר","סוכם","עבודה","הזמנת","כניסה","ועד","מלון","מסעדה","גן","עסק"]);
+const AI_PEST_STEM=/^(ה|ב|ו|ל)?(תיקן|תיקנ|נמל|עכבר|חולד|פרעוש|פשפש|יתוש|זבוב|צרע|דבור|טרמיט|עכביש|ג'?וק|מכרסם|קרצ|מזיק)/;
+function aiCustScore(c,normT,digits){ if(!c) return 0; let sc=0; const toks=[c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).map(elNorm).join(" ").split(" ").filter(w=>w.length>=3&&!AI_STOP.has(w)&&!AI_PEST_STEM.test(w));
   [...new Set(toks)].forEach(w=>{ if((" "+normT+" ").includes(" "+w+" ")||normT.includes(" "+w)||normT.startsWith(w)) sc++; });
   const ph=String(c.phone||"").replace(/\D/g,""); if(ph.length>=9&&digits.includes(ph.slice(-9))) sc+=3; return sc; }
 function aiDocType(r,t){ const T=String(t||""); if(/חשבונית\s*מס\s*[\/\\-]?\s*קבלה|חשבונית[\s-]*קבלה/.test(T)) return "חשבונית מס/קבלה";
@@ -3082,6 +3092,8 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
       let cust=(customers||[]).find(c=>String(c.id)===r.customerId&&sc(c)>0)||null;
       const best=(customers||[]).filter(c=>c&&!c.deleted).map(c=>[c,sc(c)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
       if(!cust&&best.length&&(best.length===1||best[0][1]>best[1][1])) cust=best[0][0];
+      // העוזר אומר שזה לקוח חדש, וההתאמה חלשה (מילה אחת) — לא מחברים ללקוח קיים
+      if(cust&&!r.customerId&&r.newName&&sc(cust)<2&&!elNorm(custDocName(cust)+" "+(cust.contactName||"")).includes(elNorm(r.newName))) cust=null;
       // תור של היום: רק אם הלקוח שלו באמת מוזכר
       let hit=todays.find(a=>String(a.id)===r.apptId&&sc(apptCust(a))>0)||null;
       if(!hit&&cust) hit=todays.find(a=>String(a.customerId)===String(cust.id))||null;
@@ -3114,7 +3126,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
   function goAppt(r,sel,t){ const cid=String(sel||"").startsWith("c:")?String(sel).slice(2):""; const cust=cid?(customers||[]).find(c=>String(c.id)===cid):null;
     const entry={text:(t||txt).trim(),summary:r.summary||"",customerName:cust?custDocName(cust):(r.newName||r.customerName||""),wantAppt:true,wantLog:false,wantInvoice:false,res:r,apptSel:sel};
     let hid=hidRef.current; const old=hid&&aiHistGet().find(x=>x.id===hid); if(old&&!old.apptDone&&old.logId==null&&old.docId==null) aiHistUpd(hid,{...entry,ts:new Date().toISOString()}); else hid=aiHistAdd(entry);
-    hidRef.current=hid; onOpenAppt&&onOpenAppt({cust,r,hid}); }
+    hidRef.current=hid; onOpenAppt&&onOpenAppt({cust,r,hid,text:(t||txt).trim()}); }
   const stRef=React.useRef({}); stRef.current={res,apptSel,doLog,doInv};
   const resNow=()=>stRef.current.res, apptSelNow=()=>stRef.current.apptSel, doLogNow=()=>stRef.current.doLog, doInvNow=()=>stRef.current.doInv;
   const chips=aiChips(res);
@@ -5751,10 +5763,13 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   React.useEffect(()=>{ const f=e=>{ const {kind,p}=e.detail||{};
       if(kind==="log"){ setAiDraft(p.d); setLogEdit(false); setLogAppt(p.a); }
       else if(kind==="inv"){ setInvAppt(p.a); }
-      else if(kind==="appt"){ const {cust,r,hid}=p; aiApptHid.current=hid; window.__h360PendingOrder=cust?{...cust}:null;
+      else if(kind==="appt"){ const {cust,r,hid,text}=p; aiApptHid.current=hid; window.__h360PendingOrder=cust?{...cust}:null;
         setPrefill({date:r.apptDate||"",time:r.apptTime||"",workerId:currentUser.id});
-        const lines=[!cust&&(r.newName||r.customerName),!cust&&r.newPhone,!cust&&r.newAddress,(r.pests||[]).join(", "),r.price?r.price+" ₪":"",r.notes].filter(Boolean).join("\n");
-        setFullText(lines?{text:lines,n:Date.now()}:null); setConvertId(null); setNewKind("job"); setShowNew(true); } };
+        // הטקסט המקורי (בלי "תקבע…") נכנס למילוי החכם של הזמנת העבודה — שם מזהים כתובת, קומה, דירה, חצר והערות;
+        // תאריך, שעה, מחיר ומזיקים — לפי מה שהעוזר הבין
+        const clean=String(text||"").replace(/^\s*(תקבע|קבע|תרשום|רשום|תזמין|תכניס)(\s+לי)?(\s+(תור|ביומן|עבודה|הזמנה))?\s*(ל|את)?\s*/,"").trim();
+        const ai={prefDate:r.apptDate||"",timeFrom:r.apptTime||"",price:r.price||"",pests:(r.pests||[]).length?r.pests:undefined};
+        setFullText(clean?{text:clean,n:Date.now(),ai,keepIdentity:!!cust}:null); setConvertId(null); setNewKind("job"); setShowNew(true); } };
     window.addEventListener("h360aiact",f); return()=>window.removeEventListener("h360aiact",f); },[]);
   const aiBackTo=hid=>{ if(!hid) return; const h=aiHistGet().find(x=>x.id===hid); if(!h) return; const done=(!h.wantLog||h.logId!=null)&&(!h.wantInvoice||h.docId!=null); if(done){ aiMem.current=null; return; } setTimeout(()=>setAiOpen(true),60); };
   const [draggedId,setDraggedId]=useState(null);
@@ -7458,7 +7473,10 @@ function OrderForm({workers,customers=[],onSave,onSchedule,onDone,onCancel,showG
     if(a.quote) setQuote(a.quote);
     setDoSchedule(true); if(a.workerId!=null) setSchedWorker(String(a.workerId)); setRestored(false);
   },[]);
-  React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ const rr=waParse(initialParsed.text,ilCities.map(c=>c.name)); applyWA(rr,initialParsed.text); } },[]);
+  React.useEffect(()=>{ if(initialParsed&&initialParsed.text){ let rr=waParse(initialParsed.text,ilCities.map(c=>c.name));
+    if(initialParsed.ai){ const A=initialParsed.ai; rr={...rr}; Object.keys(A).forEach(k=>{ const v=A[k]; if(v!==undefined&&v!==""&&!(Array.isArray(v)&&!v.length)) rr[k]=v; }); if(A.timeFrom){ rr.timeTo=""; } delete rr.notes; }
+    if(initialParsed.keepIdentity){ ["name","phone","bizName","placeName","city","street","buildingNum","contacts"].forEach(k=>{ delete rr[k]; }); }
+    applyWA(rr,initialParsed.text); } },[]);
   const pickExisting=c=>{
       setExistingId(c.id);
       const ap=custAddrParts(c,ilCities.map(x=>x.name));

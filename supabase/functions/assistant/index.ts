@@ -59,7 +59,7 @@ const SCHEMA = {
     notes: S("ONLY if he said הערות / הערה / 'תרשום ש': that content, rewritten in clear, polite, professional Hebrew for the customer — same facts, nothing added. Otherwise empty."),
     summary: S("one short Hebrew sentence: what you understood"),
   },
-  required: ["apptId", "wantLog", "wantInvoice", "pests", "materials", "summary"],
+  required: ["apptId", "wantLog", "wantInvoice", "wantAppt", "apptDate", "apptTime", "customerId", "newName", "pests", "materials", "price", "summary"],
 };
 
 async function requireUser(req) {
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       "ZERO GUESSING: every field must come from words he actually said. Never add defaults (no default warranty, price, materials, areas, re-entry time, instructions). Empty is better than a guess.",
       "Warranty: fill ONLY if he said the word אחריות. Never guess a warranty.",
       "Instructions: when he mentions an instruction briefly (e.g. 'לא לשטוף 24 שעות', 'לאוורר', 'לא לגעת בתחנות'), return the matching full text(s) from the instructions list. Only ones he said.",
-      "Scheduling: wantAppt=true when he asks to set/book a future appointment. Compute apptDate from today's date and weekday. If he names a customer not in the customers list, put the name/phone/address he said in newName/newPhone/newAddress.",
+      "Scheduling: wantAppt=true when he asks to set/book a future appointment (or the screen mode is appt). ALWAYS fill apptDate as YYYY-MM-DD computed from today's date and weekday (e.g. today Friday 2026-11-20: 'מחר' = 2026-11-21, 'יום שני' = 2026-11-23) and apptTime as 24h HH:MM ('2 בצהריים' = 14:00, '8:30 בערב' = 20:30, 'בעשר' = 10:00). If he names a customer that is NOT clearly in the customers list, leave customerId empty and put the name/phone/address he said in newName/newPhone/newAddress. A customer in the list only matches if the NAME matches — words like הדברה, תיקנים, בניין, קומה are not names.",
       "Mode chosen on screen (hint, may be empty): " + String(c.mode || ""),
       "Signs (monitoring findings) = what he saw: droppings (גללים / צואה), live adults, nymphs, egg cases, shed skins, gnaw marks, nests, trails etc. Map to the signs list.",
       "Pests list: " + L(c.pests),
