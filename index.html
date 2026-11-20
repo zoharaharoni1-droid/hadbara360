@@ -773,6 +773,9 @@ const REENTRY_OPTS = ["0","0.5","1","2","3","4","6","8","12","24","48"];
 const normReentry = r => { r=r||{}; const mx=(...v)=>{const n=v.map(parseFloat).filter(x=>!isNaN(x)); return n.length?String(Math.max(...n)):"";};
   return {adults:r.adults||"", babies:r.babies||mx(r.kids,r.pregnant), animals:r.animals||mx(r.pets,r.birds)}; };
 const hrsLabel = h => { const n=parseFloat(h); if(!h&&h!==0) return ""; if(isNaN(n)) return String(h); if(n===0) return "אין צורך לצאת"; if(n===0.5) return "חצי שעה"; if(n===1) return "שעה"; if(n===2) return "שעתיים"; return n+" שעות"; };
+// ⏱️ ריסוס בלי זמן שנאמר: מבוגרים שעה · תינוקות 3 שעות · בעלי חיים 4 שעות (רק קבוצה שלא מולאה; אפשר לשנות)
+const SPRAY_RE_DEF={adults:"1",babies:"3",animals:"4"};
+const reFill=r=>{ const o={...(r||{})}; const a=parseFloat(o.adults); REENTRY_GROUPS.forEach(g=>{ if(o[g.k]===""||o[g.k]==null||o[g.k]==="__o"){ const d=parseFloat(SPRAY_RE_DEF[g.k]); o[g.k]=String(!isNaN(a)&&a>d?a:d); } }); return o; };
 const REENTRY_LABEL_ADULTS = {"דלתא סופר":"1","טמפריד":"1","דינופליי":"1"};
 const reentryShown = r => [...REENTRY_GROUPS,...REENTRY_LEGACY].filter(g=>r&&r[g.k]);
 const reentryNone = r => { const sh=reentryShown(r); return sh.length>0&&sh.every(g=>parseFloat(r[g.k])===0); };
@@ -787,8 +790,8 @@ const rodentSpotsOn=m=>m&&(m.method==="תחנת האכלה"||m.cat==="rodent"||R
 const stationsText = m => { const parts=RODENT_SPOTS.map(([k,,,,txt])=>{ const n=parseInt(m&&m[k])||0; return n?txt(n,m):""; }).filter(Boolean); if(parts.length) return parts.join(" + "); return m&&m.stations?m.stations+" תחנות":""; };
 // ── הנחיות ללקוח — כפתורים מוכנים
 const INSTR_BASE = [
-  "לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות",
-  "אם תינוק או בעל חיים נכנס לפני שעברו 24 שעות — יש לשטוף את הרצפה לפני כניסתו",
+  "רצוי לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות — כך החומר מתייבש ונקלט היטב במשטחים",
+  "בבית עם תינוק או בעלי חיים — לשטוף את הרצפה במבנה לפני שהם חוזרים. החומר שכבר התייבש ממשיך לפעול לאורך הפאנלים ובחריצים, ולכן הטיפול נשאר יעיל",
   "לאוורר היטב את המקום לפני הכניסה",
   "לנגב משטחי מטבח ושולחנות אוכל לפני שימוש",
   "לא לרסס חומרים ביתיים על האזורים המטופלים",
@@ -810,11 +813,13 @@ const INSTR_SPRAY = INSTR_BASE.slice(0,5);
 const INSTR_TRAPS = ["לא להזיז ולא לגעת במלכודות ובתחנות","להרחיק ילדים וחיות מחמד מהמלכודות והתחנות"];
 const INSTR_RODENT_BAIT = ["אין צורך לצאת מהבית ואין הגבלה על שטיפת רצפה ומשטחים — הפיתיון נמצא בתיבות סגורות","לא לפתוח את התיבות ולא להוציא מהן את הפיתיון","פעילות המכרסמים אמורה לרדת בהדרגה תוך 7–14 ימים"];
 // 🐾👶 בעלי חיים / תינוקות זוחלים — במקום "לא לשטוף 24 שעות": לשטוף, לייבש ולאוורר לפני שהם נכנסים
-const INSTR_PETS = ["לפני שבעלי החיים חוזרים — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה והמשטחים יבשים לגמרי לפני שבעלי החיים חוזרים","לאוורר היטב את המקום לפני שבעלי החיים חוזרים","להוציא את קערות האוכל והמים של בעלי החיים מהאזור, ולשטוף אותן לפני השימוש"];
-const INSTR_BABY = ["לפני שהתינוק חוזר — לשטוף את הרצפה במים וסבון באזורים שרוססו","לוודא שהרצפה יבשה לגמרי לפני שהתינוק זוחל עליה","לאוורר היטב את המקום לפני שהתינוק חוזר"];
+const INSTR_PETS = ["לפני שבעלי החיים חוזרים — לשטוף במים וסבון את הרצפה באזורים שרוססו בתוך המבנה (בחצר אין צורך). אחרי שהחומר התייבש, השטיפה לא פוגעת ביעילות הטיפול","לוודא שהרצפה והמשטחים יבשים לגמרי לפני שבעלי החיים חוזרים","לאוורר היטב את המקום לפני שבעלי החיים חוזרים","להוציא את קערות האוכל והמים של בעלי החיים מהאזור, ולשטוף אותן לפני השימוש"];
+const INSTR_BABY = ["לפני שהתינוק חוזר — לשטוף במים וסבון את הרצפה באזורים שרוססו בתוך המבנה. אחרי שהחומר התייבש, השטיפה לא פוגעת ביעילות הטיפול","לוודא שהרצפה יבשה לגמרי לפני שהתינוק זוחל עליה","לאוורר היטב את המקום לפני שהתינוק חוזר"];
 const INSTR_NO_WASH=[INSTR_BASE[0],INSTR_BASE[1]];
+const INSTR_RENAMED={"לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות":"רצוי לא לשטוף את הרצפה והמשטחים המטופלים ב־24 השעות הראשונות — כך החומר מתייבש ונקלט היטב במשטחים","אם תינוק או בעל חיים נכנס לפני שעברו 24 שעות — יש לשטוף את הרצפה לפני כניסתו":"בבית עם תינוק או בעלי חיים — לשטוף את הרצפה במבנה לפני שהם חוזרים. החומר שכבר התייבש ממשיך לפעול לאורך הפאנלים ובחריצים, ולכן הטיפול נשאר יעיל","לפני שבעלי החיים חוזרים — לשטוף את הרצפה במים וסבון באזורים שרוססו":"לפני שבעלי החיים חוזרים — לשטוף במים וסבון את הרצפה באזורים שרוססו בתוך המבנה (בחצר אין צורך). אחרי שהחומר התייבש, השטיפה לא פוגעת ביעילות הטיפול","לפני שהתינוק חוזר — לשטוף את הרצפה במים וסבון באזורים שרוססו":"לפני שהתינוק חוזר — לשטוף במים וסבון את הרצפה באזורים שרוססו בתוך המבנה. אחרי שהחומר התייבש, השטיפה לא פוגעת ביעילות הטיפול"};
+const instrRen=t=>INSTR_RENAMED[t]||t;
 // הנחיות שהמשתמש הסתיר (לא רלוונטיות לעבודה שלו) — לא יופיעו ולא יסומנו אוטומטית
-const instrHiddenGet=()=>{ try{ return JSON.parse(localStorage.getItem("h360_instr_hidden")||"[]")||[]; }catch(e){ return []; } };
+const instrHiddenGet=()=>{ try{ return (JSON.parse(localStorage.getItem("h360_instr_hidden")||"[]")||[]).map(instrRen); }catch(e){ return []; } };
 const instrHiddenSet=a=>{ try{ localStorage.setItem("h360_instr_hidden",JSON.stringify(a)); }catch(e){} };
 // 🧠 זיכרון לפי מזיק: היומן האחרון שבו הופיע המזיק
 const lastLogWithPest=(logs,p,exceptId)=>{ let best=null; (logs||[]).forEach(l=>{ if(!l||l.deleted||l.draft||(exceptId!=null&&String(l.id)===String(exceptId))) return; if(!(l.pest||[]).includes(p)) return; if(!best||String(l.date||"")+String(l.id)>String(best.date||"")+String(best.id)) best=l; }); return best; };
@@ -831,8 +836,8 @@ const TERMS_DEFAULT=[
     "הטיפול מתבצע באזורים הרגילים. מקומות נסתרים — פתחי מיזוג, תקרות גבס עם מערכות חשמל, שקעים וצנרת פנימית — שלא צוינו מראש דורשים גישה וחומרים מיוחדים. טיפול בהם בתקופת האחריות יינתן בעלות מוזלת (הגעה וחומרים בלבד), ואחרי תום תקופת האחריות — כהזמנת שירות חדשה."]},
   {id:"g_safety",title:"הנחיות כניסה ושטיפה",when:"spray",lines:[
     "יש לשהות מחוץ למקום עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן הביצוע ב\"זמן מחוץ למקום\" (בדרך כלל כשעה).",
-    "מומלץ לא לשטוף את הרצפה 24 שעות, כדי שהחומר ייקבע היטב על המשטחים.",
-    "בבית עם תינוקות זוחלים או בעלי חיים: יש לשטוף את מרכז הרצפה במים וסבון מיד בתום זמן האוורור, לפני שהם חוזרים לרצפה. זה לא פוגע ביעילות הטיפול — החומר הפעיל נשאר לאורך הפאנלים ובחריצים שבהם נעים החרקים, ומרכז החדר נשאר נקי ובטוח למגע.",
+    "רצוי לא לשטוף את הרצפה ב-24 השעות הראשונות: בזמן הזה החומר מתייבש ונקלט היטב במשטחים, וכך הוא פועל הכי טוב.",
+    "בבית עם תינוקות זוחלים או בעלי חיים: יש לשטוף את מרכז הרצפה במבנה במים וסבון בתום זמן היציאה, לפני שהם חוזרים לרצפה (בחצר אין צורך). זה לא סותר את ההנחיה הקודמת: ברגע שהחומר התייבש הוא כבר נקלט, והוא ממשיך לפעול לאורך הפאנלים ובחריצים שבהם נעים החרקים — ומרכז החדר נשאר נקי ובטוח למגע.",
     "גם בשטיפות הבאות — לא לשפשף את הפאנלים ישירות."]},
   {id:"p_american",title:"תיקן אמריקאי",m:["תיקן אמריקאי","תיקן אמריקני","ג'וק"],lines:[
     "החומר על הפאנלים פועל במגע. התיקן מת תוך כמה דקות ועד כחצי שעה מהמגע בחומר. בזמן הזה הוא עלול להתרוצץ מהר או לפרפר — זה סימן שהחומר עובד.",
@@ -893,11 +898,17 @@ const TERMS_DEFAULT=[
     "אין להעביר רהיטים, מזרנים או בגדים מהבית המטופל למקום אחר — זה מפיץ את הנגיעות."]},
 ];
 const termsText=t=>(t.lines||[]).map(l=>"• "+l).join("\n");
-function termsTpl(){ try{ const o=JSON.parse(localStorage.getItem("h360_terms_tpl")||"null"); if(Array.isArray(o)&&o.length) return o; }catch(e){} return TERMS_DEFAULT.map(t=>({...t,text:termsText(t)})); }
+// נוסח ישן של "הנחיות כניסה ושטיפה" שנשמר בלי שינוי — מתעדכן לנוסח החדש
+const TERMS_OLD_SAFETY="• יש לשהות מחוץ למקום עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן הביצוע ב\"זמן מחוץ למקום\" (בדרך כלל כשעה). • מומלץ לא לשטוף את הרצפה 24 שעות, כדי שהחומר ייקבע היטב על המשטחים. • בבית עם תינוקות זוחלים או בעלי חיים: יש לשטוף את מרכז הרצפה במים וסבון מיד בתום זמן האוורור, לפני שהם חוזרים לרצפה. זה לא פוגע ביעילות הטיפול — החומר הפעיל נשאר לאורך הפאנלים ובחריצים שבהם נעים החרקים, ומרכז החדר נשאר נקי ובטוח למגע. • גם בשטיפות הבאות — לא לשפשף את הפאנלים ישירות.";
+const termsMigrate=v=>Array.isArray(v)?v.map(t=>t&&t.id==="g_safety"&&String(t.text||"").replace(/\s+/g," ").trim()===TERMS_OLD_SAFETY?{...t,lines:(TERMS_DEFAULT.find(d=>d.id==="g_safety")||{}).lines,text:termsText(TERMS_DEFAULT.find(d=>d.id==="g_safety"))}:t):v;
+function termsTpl(){ try{ const o=JSON.parse(localStorage.getItem("h360_terms_tpl")||"null"); if(Array.isArray(o)&&o.length) return termsMigrate(o); }catch(e){} return TERMS_DEFAULT.map(t=>({...t,text:termsText(t)})); }
 async function loadTermsTpl(){ if(!sb) return termsTpl(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const f=(data||[]).filter(x=>/^terms-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return termsTpl();
-  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return termsTpl(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)&&v.length){ localStorage.setItem("h360_terms_tpl",JSON.stringify(v)); return v; } }catch(e){} return termsTpl(); }
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return termsTpl(); const v=termsMigrate(JSON.parse(await r.data.text())); if(Array.isArray(v)&&v.length){ localStorage.setItem("h360_terms_tpl",JSON.stringify(v)); return v; } }catch(e){} return termsTpl(); }
 async function saveTermsTpl(list){ localStorage.setItem("h360_terms_tpl",JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-terms")); }catch(e){} if(!sb) return; const n="company/terms-"+String(Date.now()).padStart(15,"0")+".json"; await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
 function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect(()=>{ let on=true; loadTermsTpl().then(v=>on&&setL(v)); const h=()=>setL(termsTpl()); window.addEventListener("h360-terms",h); return ()=>{on=false;window.removeEventListener("h360-terms",h);}; },[]); return l; }
+// 📜 בחירה אוטומטית לפי המזיק: למכרסמים — "בתוך הבית" בדירה, "חצר/בניין/עסק" בשאר
+const termsAuto=(tpl,pests,hasSpray,place)=>{ const pt=String((place&&place.type)||""), ex=JSON.stringify((place&&place.extras)||[]); const out=/בניין|עסק|מחסן|מסעדה|משרד|גן/.test(pt)||/חצר|גינה/.test(ex);
+  return termsRelevant(tpl,pests,hasSpray).filter(t=>t.id==="p_rodent_in"?!out:t.id==="p_rodent_out"?out:true); };
 const termsRelevant=(tpl,pests,hasSpray)=>{ const P=hebFin((pests||[]).join(" ")); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(hebFin(k)))&&!(t.not||[]).some(k=>P.includes(hebFin(k)))); };
 // עריכת הנוסחים בהגדרות
 async function shareText(text){ try{ if(navigator.share){ await navigator.share({text}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
@@ -938,7 +949,12 @@ function PrepTplEditor(){
 }
 // 🛡️ אחריות: "" = לא מופיע במסמך · "0" = ללא אחריות · מספר = חודשים. אפשר גם לפי מזיק (warrantyByPest)
 const WARR_OPTS=[["0","ללא אחריות"],["1","חודש"],["2","חודשיים"],["3","3 חודשים"],["6","חצי שנה"],["12","שנה"]];
-function warrLabel(v){ v=String(v==null?"":v).trim(); if(!v) return ""; if(v==="0") return "ללא אחריות"; const o=WARR_OPTS.find(x=>x[0]===v); return o?o[1]:(/^\d+$/.test(v)?v+" חודשים":v); }
+// תאריך אחריות: "YYYY-MM-DD" במקום מספר חודשים. ברירת מחדל לתיקן אמריקאי: עד 1/4 בשנה שאחרי הטיפול
+const isWarrDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||"").trim());
+const warrDateFmt=v=>{ const [y,m,d]=String(v).split("-"); return parseInt(d)+"/"+parseInt(m)+"/"+y; };
+const warrUntilOpts=date=>{ const y=(parseInt(String(date||"").slice(0,4))||new Date().getFullYear())+1; return [["04","1/4"],["03","1/3"],["01","1/1"]].map(([m,l])=>[y+"-"+m+"-01","עד "+l+"/"+y]); };
+const isAmRoachP=pests=>(pests||[]).some(p=>/תיקן אמריק|ג'וק אמריק/.test(p));
+function warrLabel(v){ v=String(v==null?"":v).trim(); if(!v) return ""; if(isWarrDate(v)) return "עד "+warrDateFmt(v); if(v==="0") return "ללא אחריות"; const o=WARR_OPTS.find(x=>x[0]===v); return o?o[1]:(/^\d+$/.test(v)?v+" חודשים":v); }
 function warrLines(log){ if(!log) return []; const bp=log.warrantyByPest&&typeof log.warrantyByPest==="object"?log.warrantyByPest:null;
   if(bp){ const L=Object.entries(bp).filter(([k,v])=>String(v||"").trim()&&(!(log.pest||[]).length||(log.pest||[]).includes(k))).map(([k,v])=>k+": "+warrLabel(v)); if(L.length) return L; if(log.warrantyMode==="per") return []; }
   const w=warrLabel(log.warranty); return w?[w]:[]; }
@@ -947,8 +963,9 @@ function warrShort(log){ const L=warrLines(log); return L.length?L.join(" · "):
 const NOWARR_TERM=pests=>{ const rod=/עכבר|חולד|מכרס/.test((pests||[]).join(" ")), fly=/זבוב|יתוש/.test((pests||[]).join(" "));
   return {id:"nowarr",title:"ללא אחריות — הסבר",text:rod?"מכרסמים יכולים להמשיך להגיע מהסביבה (שכנים, ביוב, חצרות) כל עוד יש פתחים ומקורות מזון, ולכן הטיפול ניתן ללא אחריות. מומלץ לסגור פתחים וחורים ולא להשאיר מזון פתוח. במידת הצורך נשמח להגיע לטיפול נוסף בתיאום.":fly?"חרקים מעופפים ממשיכים להגיע מבחוץ דרך חלונות ודלתות, ולכן הטיפול ניתן ללא אחריות.":"הטיפול ניתן ללא אחריות, כי הישנות הבעיה תלויה בגורמים שאינם בשליטתנו (שכנים, פתחים, מקורות מזון ומים). במידת הצורך נשמח להגיע לטיפול נוסף בתיאום."}; };
 function WarrantyPicker({f,setF,pests}){
+  const wOpts=warrUntilOpts(f.date); const amR=(pests||[]).filter(p=>/תיקן אמריק/.test(p));
   const mode=f.warrantyMode||(f.warrantyByPest&&Object.values(f.warrantyByPest).some(v=>String(v||"").trim())?"per":String(f.warranty||"").trim()==="0"?"none":String(f.warranty||"").trim()?"all":"hide");
-  const setMode=m=>setF(x=>({...x,warrantyMode:m,...(m==="hide"?{warranty:"",warrantyByPest:{}}:m==="none"?{warranty:"0",warrantyByPest:{}}:m==="all"?{warrantyByPest:{},warranty:String(x.warranty||"")==="0"?"":x.warranty}:{warranty:""})}));
+  const setMode=m=>setF(x=>({...x,warrantyMode:m,...(m==="hide"?{warranty:"",warrantyByPest:{}}:m==="none"?{warranty:"0",warrantyByPest:{}}:m==="all"?{warrantyByPest:{},warranty:String(x.warranty||"")==="0"||!String(x.warranty||"")?(isAmRoachP(pests)?wOpts[0][0]:""):x.warranty}:{warranty:"",warrantyByPest:Object.fromEntries(amR.filter(p=>!String((x.warrantyByPest||{})[p]||"")).map(p=>[p,wOpts[0][0]]).concat(Object.entries(x.warrantyByPest||{})))})}));
   const hasNoWarrTerm=(f.terms||[]).some(t=>t.id==="nowarr");
   const chip=(on,l,fn,k)=><button key={k||l} type="button" onClick={fn} style={{border:"1.5px solid "+(on?"#16a34a":"#cbd5e1"),background:on?"#dcfce7":"#fff",borderRadius:20,padding:"5px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:on?700:400}}>{l}</button>;
   const bp=f.warrantyByPest||{};
@@ -965,16 +982,22 @@ function WarrantyPicker({f,setF,pests}){
       <button type="button" onClick={()=>setF(x=>{ const ts=x.terms||[]; return {...x,terms:ts.some(t=>t.id==="nowarr")?ts.filter(t=>t.id!=="nowarr"):[...ts,NOWARR_TERM(pests)]}; })} style={{border:"1.5px solid "+(hasNoWarrTerm?"#16a34a":"#cbd5e1"),background:hasNoWarrTerm?"#dcfce7":"#fff",borderRadius:10,padding:"7px 12px",cursor:"pointer",fontFamily:"inherit",fontSize:13.5,fontWeight:700,color:"#334155"}}>{hasNoWarrTerm?"✓ ":"+ "}📜 הסבר ללקוח למה אין אחריות (ב"מהות הטיפול")</button>
     </div>}
     {mode==="all"&&<><div style={{fontSize:12.5,color:"#475569",margin:"2px 0 6px"}}>כמה זמן אחריות?</div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{WARR_OPTS.filter(([v])=>v!=="0").map(([v,l])=>chip(String(f.warranty||"")===v,l,()=>setF(x=>({...x,warranty:v}))))}
-      <input value={WARR_OPTS.some(([v])=>v===String(f.warranty||""))?"":(f.warranty||"")} onChange={e=>{ const v=e.target.value.replace(/[^0-9]/g,""); setF(x=>({...x,warranty:v})); }} inputMode="numeric" placeholder="מס׳ חודשים אחר" style={{width:120,padding:"5px 10px",borderRadius:20,border:"1.5px solid #cbd5e1",fontSize:13,fontFamily:"inherit"}}/></div></>}
+      <input value={WARR_OPTS.some(([v])=>v===String(f.warranty||""))||isWarrDate(f.warranty)?"":(f.warranty||"")} onChange={e=>{ const v=e.target.value.replace(/[^0-9]/g,""); setF(x=>({...x,warranty:v})); }} inputMode="numeric" placeholder="מס׳ חודשים אחר" style={{width:120,padding:"5px 10px",borderRadius:20,border:"1.5px solid #cbd5e1",fontSize:13,fontFamily:"inherit"}}/></div>
+      <div style={{fontSize:12.5,color:"#475569",margin:"8px 0 6px"}}>או עד תאריך:</div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>{wOpts.map(([v,l])=>chip(String(f.warranty||"")===v,l,()=>setF(x=>({...x,warranty:v}))))}
+      <input type="date" value={isWarrDate(f.warranty)?f.warranty:""} onChange={e=>setF(x=>({...x,warranty:e.target.value}))} style={{padding:"4px 8px",borderRadius:20,border:"1.5px solid "+(isWarrDate(f.warranty)&&!wOpts.some(([v])=>v===f.warranty)?"#16a34a":"#cbd5e1"),fontSize:13,fontFamily:"inherit"}}/></div>
+      {isAmRoachP(pests)&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:4}}>לתיקן אמריקאי נבחר לבד "עד 1/4" (תחילת הקיץ) — אפשר לשנות.</div>}</>}
     {mode==="per"&&(pests||[]).map(p=><div key={p} style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",padding:"6px 0",borderTop:"1px solid #e2e8f0"}}>
       <b style={{fontSize:13,minWidth:70}}>{p}</b>
       {chip(!String(bp[p]||"").trim(),"לא להציג",()=>setF(x=>({...x,warrantyByPest:{...(x.warrantyByPest||{}),[p]:""}})),"none")}
       {WARR_OPTS.map(([v,l])=>chip(String(bp[p]||"")===v,v==="0"?"ללא":l,()=>setF(x=>({...x,warrantyByPest:{...(x.warrantyByPest||{}),[p]:v}}))))}
+      {chip(String(bp[p]||"")===wOpts[0][0],wOpts[0][1],()=>setF(x=>({...x,warrantyByPest:{...(x.warrantyByPest||{}),[p]:wOpts[0][0]}})),"d1")}
+      <input type="date" value={isWarrDate(bp[p])?bp[p]:""} onChange={e=>{ const v=e.target.value; setF(x=>({...x,warrantyByPest:{...(x.warrantyByPest||{}),[p]:v}})); }} title="עד תאריך אחר" style={{padding:"3px 6px",borderRadius:20,border:"1.5px solid "+(isWarrDate(bp[p])&&bp[p]!==wOpts[0][0]?"#16a34a":"#cbd5e1"),fontSize:12,fontFamily:"inherit"}}/>
     </div>)}
     {mode==="per"&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:4}}>"לא להציג" = המזיק לא יופיע בכלל בשורת האחריות.</div>}
   </div>;
 }
-function TermsPicker({f,setF,pests,hasSpray}){
+function TermsPicker({f,setF:setF0,pests,hasSpray,onTouch}){
+  const setF=fn=>{ onTouch&&onTouch(); setF0(fn); };
   const tpl=useTermsTpl(); const [more,setMore]=useState(false);
   const rel=termsRelevant(tpl,pests,hasSpray); const chosen=f.terms||[];
   const list=[...rel,...(more?tpl.filter(t=>!rel.includes(t)):[]),...chosen.filter(c=>!tpl.some(t=>t.id===c.id)).map(c=>({...c}))];
@@ -982,7 +1005,7 @@ function TermsPicker({f,setF,pests,hasSpray}){
   const toggle=t=>setF(x=>{ const cs=x.terms||[]; return {...x,terms:cs.some(c=>c.id===t.id)?cs.filter(c=>c.id!==t.id):[...cs,{id:t.id,title:t.title,text:t.text}]}; });
   const edit=(id,text)=>setF(x=>({...x,terms:(x.terms||[]).map(c=>c.id===id?{...c,text}:c)}));
   return <div>
-    <div style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. שום דבר לא נכנס לבד — מסמנים V על מה שרוצים, ואפשר לשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן הביצוע ששולחים.</div>
+    <div className="h360-hint" style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. מה שמתאים למזיק מסומן לבד — אפשר להוריד V, להוסיף, ולשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן הביצוע ששולחים.</div>
     {!list.length&&<div style={{fontSize:13,color:"#94a3b8",marginBottom:6}}>אין נוסח מוכן למזיקים שנבחרו{hasSpray?"":" (הנוסחים הכלליים מופיעים כשיש ריסוס)"}.</div>}
     {list.map(t=>{ const on=isOn(t.id); const c=chosen.find(x=>x.id===t.id);
       return <div key={t.id} style={{border:"1.5px solid "+(on?"#16a34a":"#e2e8f0"),background:on?"#f0fdf4":"#fff",borderRadius:10,marginBottom:6}}>
@@ -1547,7 +1570,7 @@ function execLogHtml({company,docNum,log,chemicals}){
     <table style="font-size:12px;margin-bottom:14px;"><thead><tr style="background:#1a5c3a;color:#fff;"><th style="padding:6px 10px;text-align:right;">מוצר</th><th style="padding:6px 10px;text-align:right;">כמות</th><th style="padding:6px 10px;text-align:right;">מיקום</th></tr></thead>
     <tbody>${shownDevices(log).map((d,i)=>`<tr style="background:${i%2?"#fff":"#f9fafb"}"><td style="padding:6px 10px;">${d.type}</td><td style="padding:6px 10px;">${d.qty||1}</td><td style="padding:6px 10px;">${d.location||"—"}</td></tr>`).join("")}</tbody></table>`:""}
     ${reentryLines(log.reentry).length?`<div style="border:1.5px solid #93c5fd;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#eff6ff;">
-      <div style="font-weight:700;color:#1e40af;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+      <div style="font-weight:700;color:#1e40af;font-size:14px;margin-bottom:6px;">⏱️ זמן מחוץ למקום שרוסס</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;">${reentryNone(log.reentry)?"<span><b>אין צורך לצאת מהמקום</b> — לכל הנוכחים</span>":reentryShown(log.reentry).map(g=>`<span><b>${g.l}:</b> ${hrsLabel(log.reentry[g.k])}</span>`).join("")}</div></div>`:""}
     ${(log.instructions||[]).length?`<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
       <div style="font-weight:700;color:#166534;font-size:14px;margin-bottom:6px;">📋 הנחיות ללקוח</div>
@@ -2901,9 +2924,22 @@ const aiPh=s=>elNorm(s).replace(/ט/g,"ת").replace(/ק/g,"כ").replace(/[ךםן
 const aiSaid=(name,T)=>{ const heb=String(name||"").split(/[\s\-–,()\/]+/).filter(w=>/[א-ת]/.test(w)&&w.length>=3); if(!heb.length) return true; const t=aiPh(T); return heb.map(aiPh).filter(w=>w.length>=2).some(w=>t.includes(w.length>=3?w.slice(0,3):w)); };
 const aiNumSaid=(n,T)=>{ const d=String(n||"").replace(/[^\d]/g,""); if(!d) return false; return String(T||"").replace(/[,\s](?=\d{3}\b)/g,"").replace(/[^\d]+/g," ").split(" ").includes(d); };
 const AI_INSTR_ALL=()=>[...new Set([...INSTR_BASE,...INSTR_BY_PEST.flatMap(x=>x.t),...INSTR_RODENT_BAIT,...INSTR_PETS,...INSTR_BABY])];
+// 🔢 מספר קבוע לכל הנחיה מוכנה — אומרים לעוזר "הנחיות 1, 3, 5"
+const instrNum=t=>{ const i=AI_INSTR_ALL().indexOf(t); return i>=0?i+1:0; };
+const HEB_NUM={"אחת":1,"אחד":1,"שתיים":2,"שתים":2,"שניים":2,"שנים":2,"שתי":2,"שני":2,"שלוש":3,"שלושה":3,"ארבע":4,"ארבעה":4,"חמש":5,"חמישה":5,"שש":6,"שישה":6,"שבע":7,"שבעה":7,"שמונה":8,"תשע":9,"תשעה":9,"עשר":10,"עשרה":10};
+function instrNumsSaid(T){ const out=[]; const toks=String(T||"").replace(/[,.;:]/g," , ").split(/\s+/).filter(Boolean);
+  for(let i=0;i<toks.length;i++){ if(!/^ו?ה?הנחי(ה|ות)$/.test(toks[i])) continue; let j=i+1, last=null, range=false;
+    while(j<toks.length){ let w=toks[j].replace(/^ו-?/,"").replace(/^-/,""); if(w===","||w==="מספר"||w==="מס'"||w==="מס׳"||w===""||w==="-"){ j++; continue; } if(w==="עד"){ range=true; j++; continue; }
+      let m=w.match(/^(\d{1,2})(?:-(\d{1,2}))?$/), n=m?parseInt(m[1]):HEB_NUM[w]; if(!n) break;
+      if(m&&m[2]){ for(let k=n;k<=parseInt(m[2]);k++) out.push(k); last=parseInt(m[2]); }
+      else { if(range&&last){ for(let k=last+1;k<=n;k++) out.push(k); } else out.push(n); last=n; } range=false; j++; }
+    i=j-1; }
+  return [...new Set(out)]; }
 const AI_WEEKDAY=["ראשון","שני","שלישי","רביעי","חמישי","שישי","שבת"];
+// מוחקים "הנחיות 1, 3, 5" מהטקסט לפני בדיקת שעות/מחיר — כדי שמספר הנחיה לא ייחשב שעה או מחיר
+const instrNumStrip=T=>{ const W=Object.keys(HEB_NUM).join("|"); return String(T||"").replace(new RegExp("ו?ה?הנחי(?:ה|ות)(?:[\\s,]*(?:ו-?|מספר|מס['׳]?|עד|-)?[\\s]*(?:\\d{1,2}(?:-\\d{1,2})?|(?:ו)?(?:"+W+"))(?![\\dא-ת]))+","g")," "); };
 function aiNorm(d,chems=[],text=""){
-  const out={found:[],skipped:[]}; if(!d) return out; const T=String(text||"");
+  const out={found:[],skipped:[]}; if(!d) return out; const T0=String(text||""); const T=instrNumStrip(T0);
   const arr=x=>Array.isArray(x)?x.map(s=>String(s||"").trim()).filter(Boolean):[];
   const pests=arr(d.pests); if(pests.length){ out.pests=[...new Set(pests)]; out.found.push("מזיקים"); }
   if(/קל/.test(d.level||"")) out.level="קלה"; else if(/בינונ/.test(d.level||"")) out.level="בינונית"; else if(/גבוה|חמור|קשה/.test(d.level||"")) out.level="גבוהה";
@@ -2933,7 +2969,14 @@ function aiNorm(d,chems=[],text=""){
   if(d.payStatus==="debt") out.payStatus="debt";
   out.payMethod=/מזומן|cash/i.test(pm)?"מזומן":/ביט|\bbit\b/i.test(pm)?"ביט":/פייבוקס|paybox/i.test(pm)?"PayBox":/העבר|transfer/i.test(pm)?"העברה בנקאית":/אשראי|כרטיס|credit/i.test(pm)?"אשראי":/צ.?ק|cheque|check/i.test(pm)?"צ'ק":"";
   if(out.payMethod){ if(!out.payStatus) out.payStatus="paid"; if(!out.found.includes("מחיר")) out.found.push("תשלום"); }
-  const w=String(d.warranty||"").replace(/\D/g,""); if(w&&w!=="0"&&/אחריות/.test(String(text||""))){ out.warranty=w; out.found.push("אחריות"); }
+  const w=String(d.warranty||"").replace(/\D/g,""); const wSaid=/אחריות/.test(T)&&!/(בלי|ללא|אין)\s+אחריות/.test(T);
+  { const HM={"ינואר":1,"פברואר":2,"מרץ":3,"מרס":3,"אפריל":4,"מאי":5,"יוני":6,"יולי":7,"אוגוסט":8,"ספטמבר":9,"אוקטובר":10,"נובמבר":11,"דצמבר":12}; const by=new Date().getFullYear()+1;
+    let m=T.match(/אחריות[^.\n]{0,25}?עד\s*(?:ה-?|ל-?)?\s*(\d{1,2})\s*[\/.]\s*(\d{1,2})(?:\s*[\/.]\s*(\d{2,4}))?/), wd="";
+    if(m){ const yy=m[3]?(m[3].length===2?"20"+m[3]:m[3]):String(by); wd=yy+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0"); }
+    else if((m=T.match(/אחריות[^.\n]{0,25}?עד\s*(?:ה-?)?(?:(?:אחד|1)\s*(?:ב|ל)?-?\s*)?(ינואר|פברואר|מרץ|מרס|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר)/))) wd=by+"-"+String(HM[m[1]]).padStart(2,"0")+"-01";
+    if(wd&&wSaid){ out.warranty=wd; out.found.push("אחריות"); }
+    else if(w&&w!=="0"&&wSaid){ out.warranty=w; out.found.push("אחריות"); }
+    else if(wSaid&&isAmRoachP(out.pests)){ out.warranty=by+"-04-01"; out.found.push("אחריות"); } }
   if(d.hasPets&&!/כלב|חתול|בעל.?י? חיים|חיות|ציפור|תוכי|ארנב|אוגר|דגים/.test(T)) d={...d,hasPets:false};
   if(d.hasBaby&&!/תינוק|פעוט|זוחל|ילד קטן/.test(T)) d={...d,hasBaby:false};
   if(d.hasPets){ out.hasPets=true; out.found.push("בעלי חיים"); } if(d.hasBaby){ out.hasBaby=true; out.found.push("תינוק"); }
@@ -2945,6 +2988,8 @@ function aiNorm(d,chems=[],text=""){
   out.notes=/הער|תרשום|תכתוב|לרשום/.test(T)?String(d.notes||"").trim():"";
   if(out.notes) out.found.push("הערות");
   const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
+  const iN=instrNumsSaid(T0).map(n=>allI[n-1]).filter(Boolean); if(iN.length) out.instructions=[...new Set([...iN,...out.instructions])];
+  out.noTerms=/(בלי|ללא|לא צריך|אין)\s+(את\s+)?מהות\s+(ה)?טיפול/.test(T); if(out.noTerms) out.found.push("בלי מהות הטיפול");
   out.instrGeneric=/הנחיות\s+(ל|של|רגילות|כרגיל)/.test(T);
   if(out.instructions.length) out.found.push("הנחיות");
   out.wantAppt=!!d.wantAppt;
@@ -3049,12 +3094,16 @@ const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }ca
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
-    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'לא לשטוף 24 שעות', 'לאוורר' — ייבחר הנוסח המלא"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים'"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
   invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
     s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
     s:[["👤","לקוח","שם / עסק / טלפון — לקוח חדש: גם טלפון וכתובת"],["📅","מתי","'מחר בעשר' / 'יום שלישי ב-14:00'"],["🐛","מזיק","'תיקנים', 'עכברים'"],["💰","מחיר שסוכם","אם יש"],["📝","הערות","אם יש"]]},
 };
+function AiInstrList(){ const [open,setOpen]=useState(false); const hid=instrHiddenGet(); const L=AI_INSTR_ALL().map((t,i)=>[i+1,t]).filter(([,t])=>!hid.includes(t));
+  return <div style={{marginTop:8}}><button type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",padding:"9px 12px",borderRadius:12,border:"1.5px solid #bae6fd",background:"#f0f9ff",color:"#0369a1",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>{open?"▲":"▼"} 🔢 רשימת ההנחיות לפי מספר</button>
+    {open&&<div style={{background:"#fff",borderRadius:12,padding:"6px 10px",marginTop:6,maxHeight:300,overflowY:"auto"}}>{L.map(([n,t])=><div key={n} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:"1px solid #f1f5f9",fontSize:13.5,lineHeight:1.4}}><b style={{color:"#0369a1",minWidth:22}}>{n}.</b><span>{t}</span></div>)}
+      <div style={{fontSize:12,color:"#64748b",padding:"6px 0 2px"}}>אומרים: "הנחיות 1, 2, 4" או "הנחיות 1 עד 4"</div></div>}</div>; }
 function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); const [show,setShow]=useState(false); if(!S) return null;
   if(!hints&&!show) return <button type="button" onClick={()=>setShow(true)} style={{border:"none",background:"none",color:"#6d28d9",fontSize:13.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"0 2px 8px"}}>📜 מה להגיד? (לחץ)</button>;
   return <div style={{background:"#f1f5f9",borderRadius:14,padding:"10px",marginBottom:10}}>
@@ -3062,6 +3111,7 @@ function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); c
     <div style={{display:"flex",flexDirection:"column",gap:6}}>{S.s.map(([ic,h,d],i)=><div key={i} style={{background:"#fff",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
       <span style={{minWidth:22,height:22,borderRadius:11,background:"#ede9fe",color:"#6d28d9",fontSize:12,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{i+1}</span>
       <span style={{fontSize:18}}>{ic}</span><div style={{lineHeight:1.3}}><div style={{fontSize:14.5,fontWeight:800,color:"#0f172a"}}>{h}</div><div style={{fontSize:12.5,color:"#64748b"}}>{d}</div></div></div>)}</div>
+    {mode==="log"&&<AiInstrList/>}
     <div style={{fontSize:12.5,color:"#475569",margin:"8px 4px 0"}}>💡 דוגמה: <i>"{S.ex}"</i></div>
     <div style={{fontSize:12,color:"#94a3b8",margin:"4px 4px 0"}}>רישיון, פרטי העסק, התאריך והמספור — נכנסים לבד.</div>
   </div>; }
@@ -3296,7 +3346,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const elCityName=f.addrCity!=null?f.addrCity:(()=>{ const parts=String(f.address||"").split(",").map(x=>x.trim()).filter(Boolean); return parts.length>1?parts[parts.length-1]:""; })();
   const elStreets=useIlStreets((elCities.find(c=>c.name===String(elCityName||"").trim())||{}).code);
   // מילוי אוטומטי של זמני שהייה והנחיות — לפי יומנים קודמים עם אותם חומרים, או לפי ברירת מחדל
-  const touched=React.useRef({reentry:!!initialData?.reentry,instr:!!(initialData?.instructions||[]).length});
+  const touched=React.useRef({reentry:!!(initialData?.id)||!!(initialData?.reentry&&Object.values(initialData.reentry).some(v=>v!==""&&v!=null)),instr:!!(initialData?.instructions||[]).length,terms:!!(initialData&&(initialData.id||(initialData.terms||[]).length))});
   const matNames=f.materials.map(m=>m.name); const matKey=[...matNames].sort().join("|")+"#"+f.materials.map(m=>m.method||"").join(",")+"#"+f.devices.map(d=>d.type).sort().join(","); const pestKey=[...f.pest].sort().join("|");
   const hasSpray=f.materials.some(m=>!m.method||["ריסוס","ערפול","אבקה","פיזור גרגירים"].includes(m.method));
   const hasBait=f.materials.some(m=>m.method==="תחנת האכלה")||f.devices.length>0;
@@ -3304,12 +3354,16 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   React.useEffect(()=>{
     if(!matNames.length&&!f.devices.length) return;
     const prev=matNames.length?suggestFromHistory(execLogs,f.workerName,matNames,f.pest):null;
-    if(!touched.current.reentry){
+    if(!touched.current.reentry&&touched.current.reAi){
+      // העוזר מילא חלק מהזמנים — משלימים רק את מה שלא נאמר
+      if(hasSpray) setF(x=>REENTRY_GROUPS.every(g=>x.reentry&&x.reentry[g.k]==="0")?x:({...x,reentry:reFill(x.reentry)}));
+    } else if(!touched.current.reentry){
       let r=prev&&prev.reentry?normReentry(prev.reentry):{};
       if(!prev||!prev.reentry){
         if(!hasSpray&&(hasBait||f.materials.length)) r={adults:"0",babies:"0",animals:"0"};
         else { const lab=matNames.map(n=>REENTRY_LABEL_ADULTS[n]).filter(Boolean).map(Number); if(lab.length) r.adults=String(Math.max(...lab)); }
       }
+      if(hasSpray&&!REENTRY_GROUPS.every(g=>r[g.k]==="0")) r=reFill(r);
       setF(x=>({...x,reentry:r}));
     }
     // רק הנחיות ששייכות למזיקים ולטיפול של היום (לא "סוחבים" הנחיות של מכרסמים מיומן קודם)
@@ -3337,8 +3391,13 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         if(!touched.current.reentry&&lg.reentry&&Object.values(lg.reentry).some(v=>v!==""&&v!=null)&&!Object.values(x.reentry||{}).some(v=>v!==""&&v!=null)) nx.reentry=normReentry(lg.reentry);
         return nx; }); }); },[pestKey]);
   // הנחיות שסימנת בעבר לאותם מזיקים — יופיעו ראשונות ברשימה
-  const instrUsed=React.useMemo(()=>{ const cnt={}; const ps=new Set([...f.pest]); (execLogs||[]).filter(l=>l&&!l.deleted&&(l.pest||[]).some(p=>ps.has(p))).slice(-30).forEach(l=>(l.instructions||[]).forEach(t=>{ cnt[t]=(cnt[t]||0)+1; })); return cnt; },[pestKey,execLogs&&execLogs.length]);
+  const instrUsed=React.useMemo(()=>{ const cnt={}; const ps=new Set([...f.pest]); (execLogs||[]).filter(l=>l&&!l.deleted&&(l.pest||[]).some(p=>ps.has(p))).slice(-30).forEach(l=>(l.instructions||[]).forEach(t0=>{ const t=instrRen(t0); cnt[t]=(cnt[t]||0)+1; })); return cnt; },[pestKey,execLogs&&execLogs.length]);
   const [instrHidden,setInstrHidden]=useState(instrHiddenGet);
+  // 📜 מהות הטיפול — נבחרת לבד לפי המזיק והריסוס (עד שנוגעים בה ידנית)
+  const termsTplL=useTermsTpl(); const placeKey=JSON.stringify(f.place||{});
+  React.useEffect(()=>{ if(touched.current.terms) return; const allP=[...f.pest,f.customPest].filter(Boolean); const rel=termsAuto(termsTplL,allP,hasSpray,f.place);
+    setF(x=>{ const keep=(x.terms||[]).filter(t=>t.id==="nowarr"); const nt=[...rel.map(t=>{ const c=(x.terms||[]).find(y=>y.id===t.id); return c||{id:t.id,title:t.title,text:t.text}; }),...keep];
+      return JSON.stringify(nt)===JSON.stringify(x.terms||[])?x:{...x,terms:nt}; }); },[pestKey,hasSpray,placeKey,termsTplL]);
   // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
   const spotTotals=RODENT_SPOTS.map(([k])=>f.materials.reduce((s0,m)=>s0+(parseInt(m[k])||0),0));
   const newBoxes=spotTotals[0], refillBoxes=spotTotals[1];
@@ -3366,7 +3425,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [aiSum,setAiSum]=useState(null);
   const applySmart=r=>{ if(r&&r.ai) setAiSum(r);
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
-    if(r.reentry0||r.reentryAdults||r.reentryBabies||r.reentryAnimals) touched.current.reentry=true;
+    if(r.reentry0) touched.current.reentry=true; else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) touched.current.reAi=true;
+    if(r.noTerms) touched.current.terms=true;
     setF(x=>{ const nx={...x,exterminate:true};
       if(r.pests){ const known=r.pests.filter(p=>PEST_TYPES_LOG.includes(p)), other=r.pests.filter(p=>!PEST_TYPES_LOG.includes(p));
         nx.pest=[...new Set([...x.pest,...known])]; if(other.length) nx.customPest=[x.customPest,...other.filter(o=>!String(x.customPest||"").includes(o))].filter(Boolean).join(", ");
@@ -3396,6 +3456,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       else if(r.payStatus==="debt"){ nx.paymentStatus="debt"; nx.paymentDone=false; nx.paymentDebt=r.price||x.paymentDebt||x.agreedPrice; }
       else if(r.payMethod){ nx.paymentMethod=r.payMethod; }
       if(r.warranty) nx.warranty=r.warranty;
+      if(r.noTerms) nx.terms=(x.terms||[]).filter(t=>t.id==="nowarr");
       if(r.hasPets) nx.hasPets=true; if(r.hasBaby) nx.hasBaby=true;
       if(r.monitor&&Object.keys(r.monitor).length){ const m={...(x.monitor||{})}; Object.entries(r.monitor).forEach(([p,v])=>{ m[p]=[...new Set([...(m[p]||[]),...v])]; }); nx.monitor=m; }
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
@@ -3606,8 +3667,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
         {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])])].filter(t=>!((f.hasPets||f.hasBaby)&&INSTR_NO_WASH.includes(t)&&!f.instructions.includes(t)));
           const used=Object.keys(instrUsed).filter(t=>!rel.includes(t));
           const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t)&&!used.includes(t));
-          const all=[...rel,...used].filter(t=>!instrHidden.includes(t)||f.instructions.includes(t)).sort((a,b)=>(instrUsed[b]||0)-(instrUsed[a]||0));
-          return instrMore?[...all,...rest.filter(t=>!instrHidden.includes(t))]:all;})().map(t=>{const on=f.instructions.includes(t);return <div key={t} style={{display:"flex",gap:4,alignItems:"stretch"}}><button type="button" onClick={()=>toggleInstr(t)} style={{flex:1,display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{instrUsed[t]?"⭐ ":""}{t}</span></button>
+          const all=[...rel,...used].filter(t=>!instrHidden.includes(t)||f.instructions.includes(t)).sort((a,b)=>(f.instructions.includes(b)?1:0)-(f.instructions.includes(a)?1:0)||(instrUsed[b]||0)-(instrUsed[a]||0));
+          return instrMore?[...all,...rest.filter(t=>!instrHidden.includes(t))]:all;})().map(t=>{const on=f.instructions.includes(t);return <div key={t} style={{display:"flex",gap:4,alignItems:"stretch"}}><button type="button" onClick={()=>toggleInstr(t)} style={{flex:1,display:"flex",gap:8,alignItems:"flex-start",textAlign:"right",padding:"8px 10px",borderRadius:10,border:"1.5px solid "+(on?"#16a34a":"#d1fae5"),background:on?"#dcfce7":"#fff",color:"#14532d",fontSize:14,cursor:"pointer",fontFamily:"inherit",lineHeight:1.4}}><span style={{flexShrink:0,width:20,height:20,borderRadius:6,border:"1.5px solid "+(on?"#16a34a":"#86efac"),background:on?"#16a34a":"#fff",color:"#fff",fontSize:13,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{on?"✓":""}</span><span>{instrNum(t)?<b style={{color:"#0369a1",marginLeft:4}}>{instrNum(t)}.</b>:null}{instrUsed[t]?"⭐ ":""}{t}</span></button>
             <button type="button" title="הסתר את ההנחיה הזו (לא רלוונטית)" onClick={()=>{ const nh=[...new Set([...instrHidden,t])]; instrHiddenSet(nh); setInstrHidden(nh); touched.current.instr=true; setF(x=>({...x,instructions:x.instructions.filter(y=>y!==t)})); showToast("ההנחיה הוסתרה — אפשר להחזיר ב'הנחיות שהסתרתי'"); }} style={{flexShrink:0,width:34,border:"1px solid #e2e8f0",background:"#fff",color:"#94a3b8",borderRadius:10,cursor:"pointer",fontSize:14}}>✕</button></div>;})}
         {instrHidden.length>0&&instrMore&&<button type="button" onClick={()=>{ instrHiddenSet([]); setInstrHidden([]); showToast("ההנחיות שהסתרת חזרו"); }} style={{padding:"6px 10px",borderRadius:10,border:"none",background:"none",color:"#64748b",fontSize:13,cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>↩ הנחיות שהסתרתי ({instrHidden.length}) — החזר</button>}
         <button type="button" onClick={()=>setInstrMore(m=>!m)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{instrMore?"פחות ▲":"+ עוד הנחיות (כלליות)"}</button>
@@ -3619,7 +3680,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
     </>)}
-    {sec("terms","📜","מהות הטיפול",f.terms.length?f.terms.map(t=>t.title).join(" · "):"לא חובה",f.terms.length?"ok":"opt",<TermsPicker f={f} setF={setF} pests={allPests} hasSpray={hasSpray}/>)}
+    {sec("terms","📜","מהות הטיפול",f.terms.length?f.terms.map(t=>t.title).join(" · "):"לא חובה",f.terms.length?"ok":"opt",<TermsPicker f={f} setF={setF} pests={allPests} hasSpray={hasSpray} onTouch={()=>{touched.current.terms=true;}}/>)}
     {sec("warranty","🛡️","אחריות",warrShort(f)||"בלי אחריות — לא מופיע במסמך",warrShort(f)?"ok":"opt",<WarrantyPicker f={f} setF={setF} pests={allPests}/>)}
     {sec("notes","📝","הערות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):""].filter(Boolean).join(" · "),f.notes?"ok":"opt",<>
     <div style={{marginBottom:14}}>
@@ -3866,7 +3927,7 @@ function ExecLogPreview({data:rawData,onBack,onFix,onApprove,saved,phone,approve
         {shownDevices(data).map((d,i)=><div key={i} style={{border:"1px solid #e2e8f0",background:"#f8fafc",borderRadius:8,padding:"6px 12px",marginBottom:6,fontSize:13}}><b>{d.type}</b> × {d.qty||1}{d.location?<span style={{color:"#555"}}> · {d.location}</span>:null}</div>)}
       </div>}
       {reentryLines(data.reentry).length>0&&<div style={{border:"1.5px solid #93c5fd",borderRadius:8,padding:"10px 14px",marginBottom:14,background:"#eff6ff"}}>
-        <div style={{fontWeight:700,color:"#1e40af",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום אחרי הטיפול</div>
+        <div style={{fontWeight:700,color:"#1e40af",fontSize:14,marginBottom:6}}>⏱️ זמן מחוץ למקום שרוסס</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:"4px 16px",fontSize:13}}>{reentryNone(data.reentry)?<span><b>אין צורך לצאת מהמקום</b> — לכל הנוכחים</span>:reentryShown(data.reentry).map(g=><span key={g.k}><b>{g.l}:</b> {hrsLabel(data.reentry[g.k])}</span>)}</div>
       </div>}
       {(data.instructions||[]).length>0&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
@@ -8678,7 +8739,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
                 {/* Execution log summary */}
                 {log&&<div style={{borderTop:"1px dashed "+CLR.border,paddingTop:6,marginTop:6,fontSize:11,color:CLR.muted}}>
                   📋 {log.materials?.map(m=>m.name).join(", ")||"—"}
-                  {log.warranty&&<span style={{marginRight:8}}>· אחריות {log.warranty} חו'</span>}
+                  {log.warranty&&<span style={{marginRight:8}}>· אחריות {warrLabel(log.warranty)}</span>}
                   {log.extermination_notes&&<span style={{marginRight:8}}>· {log.extermination_notes.slice(0,40)}</span>}
                 </div>}
                 {log&&logBtns(log)}
@@ -14299,7 +14360,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "238";
+const APP_BUILD = "239";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}

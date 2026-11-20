@@ -110,6 +110,8 @@ Deno.serve(async (req) => {
       "Re-entry times: split by group. 'שעה מחוץ לדירה' = adults 1. 'בעלי חיים ונשים בהריון 4 שעות' = reentryAnimals 4 and reentryBabies 4.",
       "Place: 'דירת סטודיו' / 'דירה' = placeType דירה; 'שני חדרים' = rooms 2.",
       "Address: split into city / street / houseNum / floor / apt (e.g. 'רחוב הקשת 31, תל אביב קומה שנייה דירה 3' = street הקשת, houseNum 31, city תל אביב, floor 2, apt 3).",
+      "Numbered instructions: when he says 'הנחיה/הנחיות' followed by numbers (e.g. 'הנחיות 1, 3 ו-7', 'הנחיות 1 עד 4'), the app maps those numbers itself. Do NOT return instructions for them, and NEVER use those numbers as hours, rooms, price, floor or warranty.",
+      "Warranty by date: 'אחריות עד 1/4' or 'עד אפריל' is handled by the app; leave warranty empty unless he said a number of months/years.",
       "Instructions: when he mentions an instruction briefly (e.g. 'לא לשטוף 24 שעות', 'לאוורר', 'לא לגעת בתחנות'), return the matching full text(s) from the instructions list. Only ones he said.",
       "Scheduling: wantAppt=true when he asks to set/book a future appointment (or the screen mode is appt). ALWAYS fill apptDate as YYYY-MM-DD computed from today's date and weekday (e.g. today Friday 2026-11-20: 'מחר' = 2026-11-21, 'יום שני' = 2026-11-23) and apptTime as 24h HH:MM ('2 בצהריים' = 14:00, '8:30 בערב' = 20:30, 'בעשר' = 10:00). If he names a customer that is NOT clearly in the customers list, leave customerId empty and put the name/phone/address he said in newName/newPhone/newAddress. A customer in the list only matches if the NAME matches — words like הדברה, תיקנים, בניין, קומה are not names.",
       "Mode chosen on screen (hint, may be empty): " + String(c.mode || ""),
