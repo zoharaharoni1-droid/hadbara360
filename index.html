@@ -913,6 +913,10 @@ function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect
 // 📜 בחירה אוטומטית לפי המזיק: למכרסמים — "בתוך הבית" בדירה, "חצר/בניין/עסק" בשאר
 const termsAuto=(tpl,pests,hasSpray,place)=>{ const pt=String((place&&place.type)||""), ex=JSON.stringify((place&&place.extras)||[]); const out=/בניין|עסק|מחסן|מסעדה|משרד|גן/.test(pt)||/חצר|גינה/.test(ex);
   return termsRelevant(tpl,pests,hasSpray).filter(t=>t.id==="p_rodent_in"?!out:t.id==="p_rodent_out"?out:true); };
+// כותרת הנוסח במסמך: נוסח של מזיק שלא נמצא ביומן (למשל נוסח "תיקן אמריקאי" בטיפול לתיקן גרמני) → "הדברה בריסוס"
+function termTitleFor(t,log){ const d=TERMS_DEFAULT.find(x=>x.id===t.id); const title=String(t.title||""); if(!d||!/^p_/.test(t.id)||title!==d.title) return title;
+  const P=hebFin([...((log&&log.pest)||[]),String((log&&log.customPest)||"")].join(" ")); if((d.m||[]).some(k=>P.includes(hebFin(k)))) return title;
+  return ((log&&log.materials)||[]).some(m=>/ריסוס/.test(m.method||""))?"הדברה בריסוס":"הנחיות נוספות"; }
 const termsRelevant=(tpl,pests,hasSpray)=>{ const P=hebFin((pests||[]).join(" ")); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(hebFin(k)))&&!(t.not||[]).some(k=>P.includes(hebFin(k)))); };
 
 // ── 📌 תבניות יומן ביצוע: "מתכון" שמור (מזיק, מקום, חומרים, זמני יציאה, הנחיות, מהות הטיפול, אחריות). נשמר בענן, מספור לפי מזיק ──
@@ -1083,7 +1087,7 @@ function TermsPicker({f,setF:setF0,pests,hasSpray,onTouch}){
         <button type="button" onClick={()=>toggle(t)} style={{width:"100%",display:"flex",gap:8,alignItems:"center",border:"none",background:"none",padding:"9px 10px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}>
           <span style={{width:22,height:22,borderRadius:6,border:"2px solid "+(on?"#16a34a":"#94a3b8"),background:on?"#16a34a":"#fff",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontWeight:900,flexShrink:0}}>{on?"✓":""}</span>
           <b style={{flex:1,fontSize:14}}>{t.title}</b>{!on&&<span style={{fontSize:11,color:"#64748b"}}>לחץ להוספה</span>}</button>
-        {on&&<div style={{padding:"0 10px 10px"}}><textarea value={c.text} onChange={e=>edit(t.id,e.target.value)} rows={Math.min(12,Math.max(4,String(c.text||"").split("\n").length*2))} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit",lineHeight:1.6,background:"#fff"}}/>
+        {on&&<div style={{padding:"0 10px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><span style={{fontSize:12,color:"#64748b",flexShrink:0}}>כותרת במסמך:</span><input value={c.title||""} onChange={e=>{ const v=e.target.value; setF(x=>({...x,terms:(x.terms||[]).map(z=>z.id===t.id?{...z,title:v}:z)})); }} style={{flex:1,minWidth:0,padding:"5px 8px",borderRadius:8,border:"1px solid #bbf7d0",fontSize:13.5,fontWeight:700,fontFamily:"inherit"}}/></div><textarea value={c.text} onChange={e=>edit(t.id,e.target.value)} rows={Math.min(12,Math.max(4,String(c.text||"").split("\n").length*2))} style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",borderRadius:8,border:"1px solid #bbf7d0",fontSize:14,fontFamily:"inherit",lineHeight:1.6,background:"#fff"}}/>
           {c.text!==t.text&&tpl.some(x=>x.id===t.id)&&<button type="button" onClick={()=>edit(t.id,(tpl.find(x=>x.id===t.id)||{}).text||"")} style={{border:"none",background:"none",color:"#1d4ed8",cursor:"pointer",fontFamily:"inherit",fontSize:12}}>↺ חזרה לנוסח המוכן</button>}</div>}
       </div>; })}
     <button type="button" onClick={()=>setMore(v=>!v)} style={{padding:"7px 10px",borderRadius:10,border:"1.5px dashed #cbd5e1",background:"#fff",color:"#475569",fontSize:14,cursor:"pointer",fontFamily:"inherit"}}>{more?"פחות ▲":"+ עוד נוסחים (כל המזיקים)"}</button>
@@ -1648,7 +1652,7 @@ function execLogHtml({company,docNum,log,chemicals}){
       <ul style="margin:0;padding-right:18px;font-size:13px;line-height:1.8;">${log.instructions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
     ${(log.terms||[]).length?`<div style="border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;margin-bottom:14px;background:#f8fafc;">
       <div style="font-weight:700;color:#1e293b;font-size:14px;margin-bottom:4px;">📜 מהות הטיפול והנחיות</div>
-      ${log.terms.map(t=>`<div style="margin-top:8px;"><div style="font-weight:700;font-size:13px;color:#1a5c3a;margin-bottom:2px;">${String(t.title||"").replace(/[<>&]/g,"")}</div><div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;">${String(t.text||"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]))}</div></div>`).join("")}</div>`:""}
+      ${log.terms.map(t=>`<div style="margin-top:8px;"><div style="font-weight:700;font-size:13px;color:#1a5c3a;margin-bottom:2px;">${String(termTitleFor(t,log)).replace(/[<>&]/g,"")}</div><div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;">${String(t.text||"").replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]))}</div></div>`).join("")}</div>`:""}
     ${log.safetyText?`<div style="border:2px solid #ef4444;border-radius:8px;padding:12px 14px;margin-bottom:14px;background:#fff5f5;">
       <div style="font-weight:700;color:#dc2626;font-size:13px;margin-bottom:6px;">⚠️ הנחיות בטיחות לדייר</div>
       <pre style="font-family:Arial;font-size:13px;white-space:pre-wrap;line-height:1.8;">${log.safetyText}</pre></div>`:""}
@@ -2712,7 +2716,7 @@ function placeFromProperty(p){ p=p||{}; const extras=[];
   return {type:p.propertyType||"",rooms:p.rooms?String(p.rooms):"",levels:p.levels?String(p.levels):"1",floor:p.floor||"",floors:p.floors||"",extras}; }
 function placeToScope(pl){ if(!pl) return []; const out=[]; const t=pl.type||"";
   const unit=t==="דירה"||t==="בית פרטי";
-  if(t){ let main=unit?((t==="דירה"?"דירת ":"בית ")+(pl.rooms?pl.rooms+" חד'":"")).trim():t;
+  if(t){ let main=unit?(pl.rooms?(t==="דירה"?"דירת ":"בית ")+pl.rooms+" חד'":t):t;
     if(t==="בניין משותף"&&pl.floors) main+=" · "+pl.floors+" קומות";
     if(unit&&parseInt(pl.levels)>1) main+=" · "+pl.levels+" מפלסים";
     if(unit&&pl.floor) main+=" · "+(pl.floor==="קרקע"?"קומת קרקע":"קומה "+pl.floor);
@@ -14602,7 +14606,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "248";
+const APP_BUILD = "249";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
