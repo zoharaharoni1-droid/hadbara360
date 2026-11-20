@@ -818,9 +818,11 @@ const instrHiddenGet=()=>{ try{ return JSON.parse(localStorage.getItem("h360_ins
 const instrHiddenSet=a=>{ try{ localStorage.setItem("h360_instr_hidden",JSON.stringify(a)); }catch(e){} };
 // 🧠 זיכרון לפי מזיק: היומן האחרון שבו הופיע המזיק
 const lastLogWithPest=(logs,p,exceptId)=>{ let best=null; (logs||[]).forEach(l=>{ if(!l||l.deleted||l.draft||(exceptId!=null&&String(l.id)===String(exceptId))) return; if(!(l.pest||[]).includes(p)) return; if(!best||String(l.date||"")+String(l.id)>String(best.date||"")+String(best.id)) best=l; }); return best; };
-const isRodent = pests => /עכבר|חולד|מכרסם/.test((pests||[]).join(" "));
-const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרסם|נחש|יונ/.test(p));
-const instrForPests = pests => { const P=(pests||[]).join(" "); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(k))).flatMap(x=>x.t))]; };
+const isRodent = pests => /עכבר|חולד|מכרס/.test((pests||[]).join(" "));
+const isInsect = pests => (pests||[]).some(p=>!/עכבר|חולד|מכרס|נחש|יונ/.test(p));
+// השוואה בלי אותיות סופיות: "מכרסם" ⊂ "מכרסמים"
+const hebFin=s=>String(s||"").replace(/[ךםןףץ]/g,c=>({ך:"כ",ם:"מ",ן:"נ",ף:"פ",ץ:"צ"}[c]));
+const instrForPests = pests => { const P=hebFin((pests||[]).join(" ")); return [...new Set(INSTR_BY_PEST.filter(x=>x.m.some(k=>P.includes(hebFin(k)))).flatMap(x=>x.t))]; };
 // ── 📜 מהות הטיפול, אחריות והנחיות — נוסחים מוכנים (לא נכנסים לבד: מסמנים V ואפשר לערוך בכל יומן) ──
 const TERMS_DEFAULT=[
   {id:"g_spray",title:"מהות הטיפול ומסגרת האחריות",when:"spray",lines:[
@@ -896,7 +898,7 @@ async function loadTermsTpl(){ if(!sb) return termsTpl(); try{ const {data}=awai
   const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return termsTpl(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)&&v.length){ localStorage.setItem("h360_terms_tpl",JSON.stringify(v)); return v; } }catch(e){} return termsTpl(); }
 async function saveTermsTpl(list){ localStorage.setItem("h360_terms_tpl",JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-terms")); }catch(e){} if(!sb) return; const n="company/terms-"+String(Date.now()).padStart(15,"0")+".json"; await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
 function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect(()=>{ let on=true; loadTermsTpl().then(v=>on&&setL(v)); const h=()=>setL(termsTpl()); window.addEventListener("h360-terms",h); return ()=>{on=false;window.removeEventListener("h360-terms",h);}; },[]); return l; }
-const termsRelevant=(tpl,pests,hasSpray)=>{ const P=(pests||[]).join(" "); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(k))&&!(t.not||[]).some(k=>P.includes(k))); };
+const termsRelevant=(tpl,pests,hasSpray)=>{ const P=hebFin((pests||[]).join(" ")); return tpl.filter(t=>t.when==="spray"?hasSpray:(t.m||[]).some(k=>P.includes(hebFin(k)))&&!(t.not||[]).some(k=>P.includes(hebFin(k)))); };
 // עריכת הנוסחים בהגדרות
 async function shareText(text){ try{ if(navigator.share){ await navigator.share({text}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
   try{ await navigator.clipboard.writeText(text); alert("✅ הועתק — אפשר להדביק בווטסאפ"); }catch(e){ window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank"); } }
@@ -942,7 +944,7 @@ function warrLines(log){ if(!log) return []; const bp=log.warrantyByPest&&typeof
   const w=warrLabel(log.warranty); return w?[w]:[]; }
 function warrShort(log){ const L=warrLines(log); return L.length?L.join(" · "):""; }
 // הסבר ללקוח למה אין אחריות — נכנס ל"מהות הטיפול" רק אם לוחצים
-const NOWARR_TERM=pests=>{ const rod=/עכבר|חולד|מכרסם/.test((pests||[]).join(" ")), fly=/זבוב|יתוש/.test((pests||[]).join(" "));
+const NOWARR_TERM=pests=>{ const rod=/עכבר|חולד|מכרס/.test((pests||[]).join(" ")), fly=/זבוב|יתוש/.test((pests||[]).join(" "));
   return {id:"nowarr",title:"ללא אחריות — הסבר",text:rod?"מכרסמים יכולים להמשיך להגיע מהסביבה (שכנים, ביוב, חצרות) כל עוד יש פתחים ומקורות מזון, ולכן הטיפול ניתן ללא אחריות. מומלץ לסגור פתחים וחורים ולא להשאיר מזון פתוח. במידת הצורך נשמח להגיע לטיפול נוסף בתיאום.":fly?"חרקים מעופפים ממשיכים להגיע מבחוץ דרך חלונות ודלתות, ולכן הטיפול ניתן ללא אחריות.":"הטיפול ניתן ללא אחריות, כי הישנות הבעיה תלויה בגורמים שאינם בשליטתנו (שכנים, פתחים, מקורות מזון ומים). במידת הצורך נשמח להגיע לטיפול נוסף בתיאום."}; };
 function WarrantyPicker({f,setF,pests}){
   const mode=f.warrantyMode||(f.warrantyByPest&&Object.values(f.warrantyByPest).some(v=>String(v||"").trim())?"per":String(f.warranty||"").trim()==="0"?"none":String(f.warranty||"").trim()?"all":"hide");
@@ -2934,7 +2936,9 @@ function aiNorm(d,chems=[],text=""){
   if(d.hasBaby&&!/תינוק|פעוט|זוחל|ילד קטן/.test(T)) d={...d,hasBaby:false};
   if(d.hasPets){ out.hasPets=true; out.found.push("בעלי חיים"); } if(d.hasBaby){ out.hasBaby=true; out.found.push("תינוק"); }
   if(Array.isArray(d.signs)&&d.signs.length){ const ps=out.pests||[]; const mon={};
-    d.signs.forEach(sg=>{ const t=String(sg||"").trim(); if(!t) return; const tgt=ps.find(p=>monitorSigns(p).includes(t))||ps[0]; if(!tgt) return; const opts=monitorSigns(tgt); const hit=opts.find(o=>o===t)||opts.find(o=>elNorm(o).includes(elNorm(t))||elNorm(t).includes(elNorm(o).split(" (")[0])); if(hit) mon[tgt]=[...new Set([...(mon[tgt]||[]),hit])]; });
+    const SYN=[[/בוגר|חי|נצפה|ראינו|מכרס/,"מכרסם חי נצפה"],[/צואה|גלל/,"גללים"],[/כרסום|כרסם/,"סימני כרסום"],[/שביל|שומן/,"שבילי מעבר / כתמי שומן"],[/חור|מחיל/,"מחילות / חורים"],[/פגר/,"פגרים"],[/קן/,"קן"]];
+    d.signs.forEach(sg=>{ const t=String(sg||"").trim(); if(!t) return; const tgt=ps.find(p=>monitorSigns(p).includes(t))||ps[0]; if(!tgt) return; const opts=monitorSigns(tgt); let hit=opts.find(o=>o===t)||opts.find(o=>elNorm(o).includes(elNorm(t))||elNorm(t).includes(elNorm(o).split(" (")[0]));
+      if(!hit&&/עכבר|חולד|מכרס/.test(tgt)){ const sy=SYN.find(([rx])=>rx.test(t)); if(sy&&opts.includes(sy[1])) hit=sy[1]; } if(hit) mon[tgt]=[...new Set([...(mon[tgt]||[]),hit])]; });
     if(Object.keys(mon).length){ out.monitor=mon; out.found.push("ממצאי ניטור"); } }
   out.notes=/הער|תרשום|תכתוב|לרשום/.test(T)?String(d.notes||"").trim():"";
   if(out.notes) out.found.push("הערות");
@@ -2976,9 +2980,11 @@ async function aiAssist(text,{appts=[],chems=[],custs=[],mode=""}={}){
   return aiNorm(j.data,chems,text);
 }
 // התאמת לקוח לטקסט: כמה מילים מהשם / העסק / המקום / איש הקשר מופיעות במשפט (+ טלפון)
-const AI_STOP=new Set(["חשבונית","קבלה","יומן","ביצוע","הדברה","הדברת","ריסוס","טיפול","שקלים","שקל","כולל","לקוח","בית","דירה","משרד","בניין","קומה","קומות","כלל","רחוב","יום","שעה","בצהריים","בבוקר","בערב","מחר","היום","תור","חצר","מטבח","מחיר","סוכם","עבודה","הזמנת","כניסה","ועד","מלון","מסעדה","גן","עסק"]);
-const AI_PEST_STEM=/^(ה|ב|ו|ל)?(תיקן|תיקנ|נמל|עכבר|חולד|פרעוש|פשפש|יתוש|זבוב|צרע|דבור|טרמיט|עכביש|ג'?וק|מכרסם|קרצ|מזיק)/;
-function aiCustScore(c,normT,digits){ if(!c) return 0; let sc=0; const toks=[c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).map(elNorm).join(" ").split(" ").filter(w=>w.length>=3&&!AI_STOP.has(w)&&!AI_PEST_STEM.test(w));
+const AI_STOP=new Set(["ללא","אין","עם","של","את","אחריות","בוגרים","חומר","מילוי","תיבות","חשבונית","קבלה","יומן","ביצוע","הדברה","הדברת","ריסוס","טיפול","שקלים","שקל","כולל","לקוח","בית","דירה","משרד","בניין","קומה","קומות","כלל","רחוב","יום","שעה","בצהריים","בבוקר","בערב","מחר","היום","תור","חצר","מטבח","מחיר","סוכם","עבודה","הזמנת","כניסה","ועד","מלון","מסעדה","גן","עסק"]);
+const AI_PEST_STEM=/^(ה|ב|ו|ל)?(תיקן|תיקנ|נמל|עכבר|חולד|פרעוש|פשפש|יתוש|זבוב|צרע|דבור|טרמיט|עכביש|ג'?וק|מכרס|קרצ|מזיק)/;
+function aiCustScore(c,normT,digits){ if(!c) return 0; let sc=0; const toks=[c.name,c.bizName,c.placeName,c.contactName].filter(Boolean).filter(n=>!/^(ללא שם|לא צוין|לקוח|—|-)$/.test(String(n).trim())).map(elNorm).join(" ").split(" ").filter(w=>w.length>=3&&!AI_STOP.has(w)&&!AI_PEST_STEM.test(w));
+  // כתובת: רחוב + מספר שנאמרו במשפט
+  { const a=elNorm(String(c.address||"").split(",")[0]); const m=a.match(/^(.*?)\s*(\d+)/); if(m&&m[1].trim().length>=3){ const st=m[1].trim(); if(normT.includes(st)&&new RegExp("(^|\\D)"+m[2]+"(\\D|$)").test(normT)) sc+=2; } }
   [...new Set(toks)].forEach(w=>{ if((" "+normT+" ").includes(" "+w+" ")||normT.includes(" "+w)||normT.startsWith(w)) sc++; });
   const ph=String(c.phone||"").replace(/\D/g,""); if(ph.length>=9&&digits.includes(ph.slice(-9))) sc+=3; return sc; }
 function aiDocType(r,t){ const T=String(t||""); if(/חשבונית\s*מס\s*[\/\\-]?\s*קבלה|חשבונית[\s-]*קבלה/.test(T)) return "חשבונית מס/קבלה";
@@ -3054,8 +3060,8 @@ function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); c
     <div style={{fontSize:12,color:"#94a3b8",margin:"4px 4px 0"}}>רישיון, פרטי העסק, התאריך והמספור — נכנסים לבד.</div>
   </div>; }
 // ✅/⬜ מה העוזר מילא ומה לא נאמר — בראש הטיוטה
-function AiFillSummary({r,kind="log"}){ if(!r||!r.ai) return null;
-  const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
+function AiFillSummary({r,kind="log",said=""}){ const [showSaid,setShowSaid]=useState(false); if(!r||!r.ai) return null;
+  const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["רמת נגיעות",r.level],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
     :[["סכום",r.price],["סוג מסמך",r.docType],["אמצעי תשלום",r.payMethod],["פירוט",r.invoiceDesc]];
   const ok=rows.filter(x=>x[1]).map(x=>x[0]), no=rows.filter(x=>!x[1]).map(x=>x[0]);
   return <div style={{background:"#faf5ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"8px 12px",marginBottom:10,fontSize:13.5,lineHeight:1.6}}>
@@ -3063,6 +3069,8 @@ function AiFillSummary({r,kind="log"}){ if(!r||!r.ai) return null;
     {ok.length>0&&<div>✅ <b>מילאתי:</b> {ok.join(", ")}</div>}
     {no.length>0&&<div style={{color:"#64748b"}}>⬜ <b>לא נאמר (נשאר ריק):</b> {no.join(", ")}</div>}
     {(r.skipped||[]).length>0&&<div style={{color:"#b45309"}}>🚫 <b>לא מילאתי כי לא נאמר במפורש:</b> {r.skipped.join(" · ")}</div>}
+    {said&&<><button type="button" onClick={()=>setShowSaid(v=>!v)} style={{border:"none",background:"none",color:"#6d28d9",fontSize:12.5,cursor:"pointer",padding:"2px 0",fontFamily:"inherit"}}>{showSaid?"▲ הסתר מה אמרת":"🗣️ מה אמרת"}</button>
+      {showSaid&&<div style={{background:"#fff",borderRadius:8,padding:"6px 10px",fontSize:13.5,color:"#334155",whiteSpace:"pre-wrap"}}>{said}</div>}</>}
   </div>; }
 // 🎙️ העוזר מהיומן: "תוציא לשירי יומן ביצוע וחשבונית…" → מוצא את התור של היום ופותח טיוטה ממולאת
 function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],currentUser={},onClose,onOpenLog,onOpenInvoice,onOpenAppt,mem}){
@@ -3178,8 +3186,8 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     </>}</div>}</>}
   </Modal>;
 }
-function ExecSmartFill({onApply,chemNames,memory,value,onChange}){
-  const [open,setOpen]=useState(true); const txt=value||""; const setTxt=v=>onChange(typeof v==="function"?v(txt):v);
+function ExecSmartFill({onApply,chemNames,memory,value,onChange,startClosed=false}){
+  const [open,setOpen]=useState(!startClosed); const txt=value||""; const setTxt=v=>onChange(typeof v==="function"?v(txt):v);
   const r=React.useMemo(()=>txt.trim()?elParse(txt,{chemNames,memory}):null,[txt,chemNames]);
   const [aiBusy,setAiBusy]=useState(false);
   const runFill=async()=>{ setAiBusy(true);
@@ -3319,7 +3327,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   },[matKey,pestKey]);
   // 🧠 כשבוחרים מזיק — לוקחים מהיומן האחרון עם אותו מזיק: רמת נגיעות, ממצאי ניטור וזמני יציאה (אפשר לשנות)
   const prevPests=React.useRef(new Set(f.pest));
-  React.useEffect(()=>{ const added=f.pest.filter(p=>!prevPests.current.has(p)); prevPests.current=new Set(f.pest); if(!added.length||initialData&&initialData.id) return;
+  React.useEffect(()=>{ const added=f.pest.filter(p=>!prevPests.current.has(p)); prevPests.current=new Set(f.pest); if(!added.length||initialData&&initialData.id||aiR) return;
     added.forEach(p=>{ const lg=lastLogWithPest(execLogs,p); if(!lg) return;
       setF(x=>{ const nx={...x};
         const lv=lg.pestLevels&&lg.pestLevels[p]; if(lv&&!(x.pestLevels||{})[p]) nx.pestLevels={...(x.pestLevels||{}),[p]:lv};
@@ -3387,7 +3395,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.monitor&&Object.keys(r.monitor).length){ const m={...(x.monitor||{})}; Object.entries(r.monitor).forEach(([p,v])=>{ m[p]=[...new Set([...(m[p]||[]),...v])]; }); nx.monitor=m; }
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
-    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
+    // הנחיות שנאמרו לעוזר — רק הן (בלי ברירות מחדל), כדי שלא ייכנס מה שלא ביקשת
+    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
   };
   // טיוטה מהעוזר החכם — ממלאים פעם אחת כשהיומן נפתח
@@ -3437,8 +3446,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           structureType:ST.includes(c.propertyType)?c.propertyType:(x.structureType||""),scope:scopeFromProperty(c)}));
       };
   return <CompactCtx.Provider value={logMode==="flat"}><div ref={elRef} style={{color:"#0f172a",paddingBottom:8}}>
-    <AiFillSummary r={aiSum}/>
-    <ExecSmartFill onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
+    <AiFillSummary r={aiSum} said={f.freeText||""}/>
+    <ExecSmartFill startClosed={!!aiR} onApply={r=>fillWithHighlight(elRef,()=>applySmart(r))} chemNames={chemNames} memory={chemMem} value={f.freeText||""} onChange={v=>set("freeText",v)}/>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,background:"#e2e8f0",borderRadius:12,padding:4,marginBottom:12}}>
       {[["steps","🪜 יומן ביצוע לפי שלבים"],["flat","📄 יומן ביצוע רציף"]].map(([k,l])=><button key={k} type="button" onClick={()=>setLogMode(k)} style={{padding:"9px 6px",borderRadius:9,border:"none",background:logMode===k?"#fff":"transparent",color:logMode===k?"#1e3a8a":"#475569",fontSize:14,fontWeight:logMode===k?800:600,cursor:"pointer",fontFamily:"inherit",boxShadow:logMode===k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{l}</button>)}
     </div>
