@@ -2921,8 +2921,10 @@ function aiNorm(d,chems=[],text=""){
   out.areas=arr(d.areas); out.spots=arr(d.spots);
   const bn=parseInt(d.boxesNew)||0, br=parseInt(d.boxesRefill)||0; if(bn||br){ out.boxesNew=bn; out.boxesRefill=br; out.found.push("תיבות"); }
   if(d.reentry0&&!/לצאת|יציאה|להישאר|להשאר|בבית|לחזור/.test(T)) d={...d,reentry0:false};
+  const hrsOk=v=>/^\d+(\.\d+)?$/.test(String(v||""))&&(aiNumSaid(v,T)||/שעה|שעתיים|חצי/.test(T));
+  if(hrsOk(d.reentryBabies)){ out.reentryBabies=String(d.reentryBabies); } if(hrsOk(d.reentryAnimals)){ out.reentryAnimals=String(d.reentryAnimals); }
   if(d.reentryAdults&&!aiNumSaid(d.reentryAdults,T)&&!/שעה|שעתיים|שעות/.test(T)) d={...d,reentryAdults:""};
-  if(d.reentry0){ out.reentry0=true; out.found.push("זמן מחוץ למקום"); } else if(/^\d+(\.\d+)?$/.test(String(d.reentryAdults||""))){ out.reentryAdults=String(d.reentryAdults); out.found.push("זמן מחוץ למקום"); }
+  if(d.reentry0){ out.reentry0=true; out.found.push("זמן מחוץ למקום"); } else if(/^\d+(\.\d+)?$/.test(String(d.reentryAdults||""))){ out.reentryAdults=String(d.reentryAdults); out.found.push("זמן מחוץ למקום"); } else if(out.reentryBabies||out.reentryAnimals) out.found.push("זמן מחוץ למקום");
   const pr=String(d.price||"").replace(/[^\d.]/g,""); if(pr&&aiNumSaid(pr,T)){ out.price=pr; out.found.push("מחיר"); } else if(pr) out.skipped.push("מחיר שלא נאמר");
   if(d.payStatus==="paid"||d.payStatus==="debt") out.payStatus=d.payStatus;
   const PMRX=/מזומן|cash|ביט|\bbit\b|פייבוקס|paybox|העברה|transfer|אשראי|כרטיס|credit|צ'ק|צ׳ק|cheque|check/i;
@@ -2943,6 +2945,7 @@ function aiNorm(d,chems=[],text=""){
   out.notes=/הער|תרשום|תכתוב|לרשום/.test(T)?String(d.notes||"").trim():"";
   if(out.notes) out.found.push("הערות");
   const allI=AI_INSTR_ALL(); out.instructions=arr(d.instructions).filter(x=>allI.includes(x));
+  out.instrGeneric=/הנחיות\s+(ל|של|רגילות|כרגיל)/.test(T);
   if(out.instructions.length) out.found.push("הנחיות");
   out.wantAppt=!!d.wantAppt;
   out.newName=String(d.newName||"").trim(); out.newPhone=String(d.newPhone||"").replace(/\D/g,""); out.newAddress=String(d.newAddress||"").trim();
@@ -2977,7 +2980,7 @@ async function aiAssist(text,{appts=[],chems=[],custs=[],mode=""}={}){
     if(r.status===401) throw new Error(/מפתח/.test(m)?m:"צריך להתחבר מחדש למערכת");
     if(/quota|429/i.test(m)) throw new Error("הגעת למכסה — נסה שוב בעוד דקה");
     throw new Error(m.slice(0,100)); }
-  return aiNorm(j.data,chems,text);
+  return {...aiNorm(j.data,chems,text),_said:text};
 }
 // התאמת לקוח לטקסט: כמה מילים מהשם / העסק / המקום / איש הקשר מופיעות במשפט (+ טלפון)
 const AI_STOP=new Set(["ללא","אין","עם","של","את","אחריות","בוגרים","חומר","מילוי","תיבות","חשבונית","קבלה","יומן","ביצוע","הדברה","הדברת","ריסוס","טיפול","שקלים","שקל","כולל","לקוח","בית","דירה","משרד","בניין","קומה","קומות","כלל","רחוב","יום","שעה","בצהריים","בבוקר","בערב","מחר","היום","תור","חצר","מטבח","מחיר","סוכם","עבודה","הזמנת","כניסה","ועד","מלון","מסעדה","גן","עסק"]);
@@ -3061,7 +3064,7 @@ function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); c
   </div>; }
 // ✅/⬜ מה העוזר מילא ומה לא נאמר — בראש הטיוטה
 function AiFillSummary({r,kind="log",said=""}){ const [showSaid,setShowSaid]=useState(false); if(!r||!r.ai) return null;
-  const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["רמת נגיעות",r.level],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
+  const rows=kind==="log"?[["מזיקים",(r.pests||[]).length],["רמת נגיעות",r.level],["ממצאי ניטור",r.monitor&&Object.keys(r.monitor).length],["חומרים",(r.materials||[]).length],["זמן מחוץ לבית",r.reentry0||r.reentryAdults||r.reentryBabies||r.reentryAnimals],["הנחיות",(r.instructions||[]).length],["מחיר / תשלום",r.price||r.payMethod||r.payStatus],["אחריות",r.warranty],["הערות",r.notes]]
     :[["סכום",r.price],["סוג מסמך",r.docType],["אמצעי תשלום",r.payMethod],["פירוט",r.invoiceDesc]];
   const ok=rows.filter(x=>x[1]).map(x=>x[0]), no=rows.filter(x=>!x[1]).map(x=>x[0]);
   return <div style={{background:"#faf5ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"8px 12px",marginBottom:10,fontSize:13.5,lineHeight:1.6}}>
@@ -3364,7 +3367,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [aiSum,setAiSum]=useState(null);
   const applySmart=r=>{ if(r&&r.ai) setAiSum(r);
     const regBy={}; regAll.forEach(x=>{regBy[x[0]]=x;});
-    if(r.reentry0||r.reentryAdults) touched.current.reentry=true;
+    if(r.reentry0||r.reentryAdults||r.reentryBabies||r.reentryAnimals) touched.current.reentry=true;
     setF(x=>{ const nx={...x,exterminate:true};
       if(r.pests){ const known=r.pests.filter(p=>PEST_TYPES_LOG.includes(p)), other=r.pests.filter(p=>!PEST_TYPES_LOG.includes(p));
         nx.pest=[...new Set([...x.pest,...known])]; if(other.length) nx.customPest=[x.customPest,...other.filter(o=>!String(x.customPest||"").includes(o))].filter(Boolean).join(", ");
@@ -3385,7 +3388,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           put("תיבת האכלה כולל רעלים",r.boxesNew); } }
       if((r.spots||[]).length) devices=devices.map(d=>/תיבת (?:האכלה|הכלה)|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
       nx.materials=mats; nx.devices=devices;
-      if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"}; else if(r.reentryAdults) nx.reentry={...x.reentry,adults:r.reentryAdults};
+      if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"};
+      else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) nx.reentry={...x.reentry,...(r.reentryAdults?{adults:r.reentryAdults}:{}),...(r.reentryBabies?{babies:r.reentryBabies}:{}),...(r.reentryAnimals?{animals:r.reentryAnimals}:{})};
+      // שם שנאמר ("שם הלקוח יוסי") — נכנס כשאין שם אמיתי בכרטיס/בתור
+      if(r.ai&&r.customerName){ const ph=/^(|ללא שם|לא צוין|לקוח|—|-)$/.test(String(x.clientName||"").trim()); if(ph||/שם\s*(ה)?לקוח|קוראים ל|שמו |שמה /.test(String(r._said||""))){ if(x.contactName&&!ph) nx.contactName=r.customerName; else nx.clientName=r.customerName; } }
       if(r.price){ nx.agreedPrice=r.price; }
       if(r.payStatus==="paid"){ nx.paymentStatus="paid"; nx.paymentDone=true; nx.paymentAmount=r.price||x.paymentAmount||x.agreedPrice; if(r.payMethod) nx.paymentMethod=r.payMethod; }
       else if(r.payStatus==="debt"){ nx.paymentStatus="debt"; nx.paymentDone=false; nx.paymentDebt=r.price||x.paymentDebt||x.agreedPrice; }
@@ -3396,7 +3402,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
       if(r.notes) nx.notes=x.notes?x.notes.replace(/\s+$/,"")+"\n"+r.notes:r.notes;
       return nx; });
     // הנחיות שנאמרו לעוזר — רק הן (בלי ברירות מחדל), כדי שלא ייכנס מה שלא ביקשת
-    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
+    if((r.instructions||[]).length) setTimeout(()=>{ touched.current.instr=true; setF(x=>({...x,instructions:r.ai&&!r.instrGeneric?[...new Set(r.instructions)]:[...new Set([...(x.instructions||[]),...r.instructions])]})); },700);
     setTimeout(()=>showToast("✨ מולא: "+(r.found.join(", ")||"הערות")+" — בדוק ועדכן אם צריך"),30);
   };
   // טיוטה מהעוזר החכם — ממלאים פעם אחת כשהיומן נפתח
