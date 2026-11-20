@@ -28,6 +28,8 @@ All text in the UI is Hebrew (RTL). Mobile-first, white with sky-blue/green.
   `AiFillSummary` (filled / not said box in drafts), history: `aiHistAdd`, `aiHistUpd`, `AssistantHistory` (tab `aihist`, stored per device in localStorage `h360_ai_hist`).
 - Server: `supabase/functions/assistant/index.ts` — Gemini Flash, JSON schema output, needs a logged-in user.
   Key is the Supabase secret `GEMINI_API_KEY` (never in code). Only sends today's appointments + ≤15 matching customers + lists; no chat history.
+- Opened from anywhere: event `h360aiopen` (button `AiAssistBtn` next to every 🧠 smart fill — `SmartTitle`); App renders `AssistantModal`; drafts are opened in the calendar via event `h360aiact` (log / inv / appt). Shared memory `AI_MEM`.
+- Explanations use class `h360-hint` (shown only when the 💡 lamp is on).
 - Rule: the assistant **never saves or sends** — it only opens drafts; the user approves.
 - Rule: **zero guessing** — a field is filled only if it was said (warranty only with the word "אחריות", price only if the number was said, notes only after "הערות").
 

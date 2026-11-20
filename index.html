@@ -2992,7 +2992,7 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
           {h.wantLog&&<span style={{fontSize:12.5,color:lg?"#1d4ed8":"#94a3b8"}}>📋 יומן: {lg?(lg.draft?"טיוטה":"נשמר #"+lg.docNum):"לא נשמר"}</span>}
           {h.wantInvoice&&<span style={{fontSize:12.5,color:doc?"#0f766e":"#94a3b8"}}>🧾 חשבונית: {doc?(doc.official?"הופקה "+(doc.invoiceNum||""):"נשמרה כטיוטה"):"לא הופקה"}</span>}
           {lg&&h.wantInvoice&&!doc&&<button type="button" onClick={()=>go("execlog",{type:"view",id:lg.id})} style={{border:"none",background:"#0f766e",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>🧾 המשך לחשבונית</button>}
-          {!lg&&!doc&&h.res&&<button type="button" onClick={()=>{ onNav&&onNav(); window.__h360Nav&&window.__h360Nav("calendar"); setTimeout(()=>{ try{ window.dispatchEvent(new CustomEvent("h360airesume",{detail:h})); }catch(e){} },350); }} style={{border:"none",background:"#7c3aed",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>↩ המשך מאיפה שעצרתי</button>}
+          {!lg&&!doc&&h.res&&<button type="button" onClick={()=>{ onNav&&onNav(); setTimeout(()=>{ try{ window.dispatchEvent(new CustomEvent("h360airesume",{detail:h})); }catch(e){} },80); }} style={{border:"none",background:"#7c3aed",color:"#fff",borderRadius:10,padding:"6px 12px",fontSize:13.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>↩ המשך מאיפה שעצרתי</button>}
         </div>; })()}
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4}}>
         {lg?<><button type="button" onClick={()=>go("execlog",{type:"edit",id:lg.id})} style={ib("#eff6ff","#1d4ed8")}>✏️ ערוך יומן {lg.docNum?"#"+lg.docNum:""}{lg.draft?" (טיוטה)":""}</button>
@@ -3003,6 +3003,9 @@ function AssistantHistory({execLogs=[],finance=[],compact=false,onNav}){
       </div>
     </div>; })}</div>;
 }
+// העוזר פתוח מכל מקום במערכת (App), והטיוטות נפתחות ביומן. זיכרון הבקשה האחרונה משותף:
+const AI_MEM={current:null};
+const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }catch(e){} };
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
@@ -3012,7 +3015,8 @@ const AI_SCRIPTS={
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
     s:[["👤","לקוח","שם / עסק / טלפון — לקוח חדש: גם טלפון וכתובת"],["📅","מתי","'מחר בעשר' / 'יום שלישי ב-14:00'"],["🐛","מזיק","'תיקנים', 'עכברים'"],["💰","מחיר שסוכם","אם יש"],["📝","הערות","אם יש"]]},
 };
-function AiScript({mode}){ const S=AI_SCRIPTS[mode]; if(!S) return null;
+function AiScript({mode}){ const S=AI_SCRIPTS[mode]; const [hints]=useHints(); const [show,setShow]=useState(false); if(!S) return null;
+  if(!hints&&!show) return <button type="button" onClick={()=>setShow(true)} style={{border:"none",background:"none",color:"#6d28d9",fontSize:13.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"0 2px 8px"}}>📜 מה להגיד? (לחץ)</button>;
   return <div style={{background:"#f1f5f9",borderRadius:14,padding:"10px",marginBottom:10}}>
     <div style={{fontSize:13,fontWeight:800,color:"#334155",margin:"0 4px 8px"}}>מה להגיד — לפי הסדר (מה שלא נאמר נשאר ריק):</div>
     <div style={{display:"flex",flexDirection:"column",gap:6}}>{S.s.map(([ic,h,d],i)=><div key={i} style={{background:"#fff",borderRadius:12,padding:"8px 12px",display:"flex",gap:10,alignItems:"center",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
@@ -3105,7 +3109,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     {showH?<><AssistantHistory execLogs={execLogs} finance={finance} onNav={onClose}/>
       <button type="button" onClick={()=>{ onClose(); window.__h360Nav&&window.__h360Nav("aihist"); }} style={{width:"100%",marginTop:10,padding:"10px",borderRadius:10,border:"1.5px dashed #c4b5fd",background:"#fff",color:"#6d28d9",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>פתח את כל ההיסטוריה בעמוד מלא</button></>:<>
     <div style={{display:"flex",gap:6,marginBottom:8}}>{[["log","📋 יומן ביצוע"],["invoice","🧾 חשבונית"],["appt","📅 קביעת תור"]].map(([k,l])=><button key={k} type="button" onClick={()=>setMode(m=>m===k?"":k)} style={{flex:1,padding:"10px 4px",borderRadius:12,border:"2px solid "+(mode===k?"#7c3aed":"#e2e8f0"),background:mode===k?"#ede9fe":"#fff",color:mode===k?"#5b21b6":"#475569",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>)}</div>
-    {mode?<AiScript mode={mode}/>:<div style={{fontSize:13.5,color:"#475569",marginBottom:8,lineHeight:1.5}}>בחר למעלה מה לעשות כדי לראות מה להגיד — או פשוט תגיד מה עשית ולמי.</div>}
+    {mode?<AiScript key={mode} mode={mode}/>:<div className="h360-hint" style={{fontSize:13.5,color:"#475569",marginBottom:8,lineHeight:1.5}}>בחר למעלה מה לעשות כדי לראות מה להגיד — או פשוט תגיד מה עשית ולמי.</div>}
     <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder="מה עשית ולמי…" style={{width:"100%",boxSizing:"border-box",padding:"12px",borderRadius:12,border:"1.5px solid #c4b5fd",fontSize:16,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,marginTop:8,alignItems:"flex-start",flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t)}/>
@@ -3115,7 +3119,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
     {res&&<div style={{marginTop:12,border:"1.5px solid #ddd6fe",background:"#faf5ff",borderRadius:12,padding:12}}>
       <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}>{res.summary?<div style={{fontSize:14.5,color:"#4c1d95",fontWeight:700,marginBottom:8}}>🤖 {res.summary}</div>:<span/>}
         <button type="button" onClick={reset} style={{border:"none",background:"none",color:"#7c3aed",fontSize:12.5,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",padding:0}}>🧹 התחל מחדש</button></div>
-      {res.ai&&<div style={{fontSize:12.5,color:"#6d28d9",marginBottom:8}}>חסר משהו? תוסיף למעלה (למשל "שילם במזומן") ולחץ שוב "🤖 מלא ופתח טיוטה".</div>}
+      {res.ai&&<div className="h360-hint" style={{fontSize:12.5,color:"#6d28d9",marginBottom:8}}>חסר משהו? תוסיף למעלה (למשל "שילם במזומן") ולחץ שוב "🤖 מלא ופתח טיוטה".</div>}
       {res._appt?<div>
         <div style={{fontSize:15,fontWeight:800,marginBottom:6}}>📅 {res.apptDate?fmtDate(res.apptDate):<span style={{color:"#b45309"}}>לא נאמר תאריך</span>}{" · "}{res.apptTime||<span style={{color:"#b45309"}}>לא נאמרה שעה</span>}</div>
         {(res._conf||[]).length>0&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 10px",fontSize:13.5,marginBottom:8}}>⚠️ <b>יש כבר תור קרוב באותה שעה:</b> {appointments.filter(a=>(res._conf||[]).includes(a.id)).map(a=>a.time+" "+(a.customerName||"")).join(" · ")}</div>}
@@ -3125,7 +3129,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
         </select>
         {apptSel==="new"&&<div style={{fontSize:13,color:"#475569",marginBottom:8}}>לקוח חדש: {[res.newName||res.customerName,res.newPhone,res.newAddress].filter(Boolean).join(" · ")||"—"}{(!res.newPhone||!res.newAddress)&&<span style={{color:"#b45309"}}> · חסר {[!res.newPhone&&"טלפון",!res.newAddress&&"כתובת"].filter(Boolean).join(" ו")} — תשלים בטופס</span>}</div>}
         <button type="button" onClick={()=>goAppt(res,apptSel)} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>{(res._conf||[]).length?"📅 קבע בכל זאת — פתח טיוטה":"📅 פתח טיוטת תור"}</button>
-        <div style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>התור נקבע רק אחרי שתלחץ "שמור ושגר" בטופס.</div>
+        <div className="h360-hint" style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>התור נקבע רק אחרי שתלחץ "שמור ושגר" בטופס.</div>
       </div>:<>
       {apptSel==="new"&&<div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>👇 לא מצאתי תור היום ללקוח הזה — בחר מהרשימה או המשך בלי תור</div>}
       <div style={{fontSize:13,fontWeight:800,color:"#334155",marginBottom:4}}>👤 ללקוח:</div>
@@ -3140,7 +3144,7 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
         <button type="button" onClick={()=>setDoInv(v=>!v)} style={tb(doInv,"#0f766e")}>{doInv?"✓ ":""}🧾 חשבונית</button>
       </div>
       <button type="button" disabled={!doLog&&!doInv} onClick={()=>go()} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:!doLog&&!doInv?"#94a3b8":"#16a34a",color:"#fff",fontSize:17,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>✓ פתח טיוטה לבדיקה</button>
-      <div style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>שום דבר לא נשמר ולא נשלח עד שתבדוק ותאשר.{doLog&&doInv?" אחרי שמירת היומן — החשבונית נפתחת לבד.":""}</div>
+      <div className="h360-hint" style={{fontSize:12,color:"#6d28d9",marginTop:6,textAlign:"center"}}>שום דבר לא נשמר ולא נשלח עד שתבדוק ותאשר.{doLog&&doInv?" אחרי שמירת היומן — החשבונית נפתחת לבד.":""}</div>
     </>}</div>}</>}
   </Modal>;
 }
@@ -3152,21 +3156,21 @@ function ExecSmartFill({onApply,chemNames,memory,value,onChange}){
     try{ const ai=await aiAssist(txt,{chems:aiChemList(chemNames,memory)}); onApply(aiMerge(ai,r)); }
     catch(e){ showToast("⚠️ העוזר החכם לא זמין ("+(e.message||"")+") — מילאתי לפי הזיהוי הרגיל"); onApply(r); }
     setAiBusy(false); };
-  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid #7c3aed",background:"#f5f3ff",color:"#5b21b6",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>✨ מילוי חכם — ספר מה עשית 🎤</button>;
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>🧠 מילוי חכם — ספר מה עשית 🎤</button>;
   const chips=r?[r.pests&&"🐛 "+r.pests.join(", ")+(r.level?" ("+r.level+")":""),r.placeType&&"🏠 "+[r.placeType,r.rooms?r.rooms+" חד׳":"",r.floor?"קומה "+r.floor:""].filter(Boolean).join(" · "),(r.extras||[]).length&&"➕ "+r.extras.join(", "),r.materials&&"🧪 "+r.materials.join(", ")+(r.methodHint?" · "+r.methodHint:""),(r.areas||[]).length&&"📍 "+r.areas.join(", "),(r.boxesNew||r.boxesRefill)&&"🪤 "+[r.boxesNew?r.boxesNew+" תיבות חדשות":"",r.boxesRefill?"מילוי "+r.boxesRefill:""].filter(Boolean).join(" + ")+(r.spots.length?" · "+r.spots.join(", "):""),r.reentry0&&"⏱️ אין צורך לצאת",r.reentryAdults&&"⏱️ "+hrsLabel(r.reentryAdults)+" מחוץ למקום",(r.price||r.payMethod||r.payStatus)&&"💳 "+[r.price?"₪"+r.price:"",r.payStatus==="debt"?"חוב":r.payStatus==="paid"?"שולם":"",r.payMethod].filter(Boolean).join(" "),r.warranty&&"🛡️ אחריות "+r.warranty+" חו׳"].filter(Boolean):[];
-  return <div className="h360-intake" style={{border:"2px solid #7c3aed",background:"#f5f3ff",borderRadius:12,padding:12,marginBottom:12}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><b style={{color:"#5b21b6",fontSize:15}}>📝 כתוב חופשי · ✨ מילוי חכם</b><button type="button" onClick={()=>setOpen(false)} title="הסתר (הטקסט נשמר)" style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>▲</button></div>
-    <div style={{fontSize:12,color:"#6d28d9",marginBottom:6}}>ספר במילים שלך מה עשית — מזיק, רמת נגיעות, חומר, איפה, כמה תיבות (חדשות / מילוי), אם צריך לצאת, כמה שולם ואיך, אחריות.</div>
-    <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder={"למשל: חולדות, נגיעות בינונית. שמתי רטרים בלוק, ארבע תיבות חדשות שהבאתי מהבית בחצר הבניין ומילאתי שתי תיבות קיימות. אין צורך לצאת. שילם 600 במזומן. אחריות 3 חודשים."} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #c4b5fd",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
+  return <div className="h360-intake" style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:12}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><b style={{color:"#166534",fontSize:15}}>🧠 מילוי חכם</b><AiAssistBtn/></div><button type="button" onClick={()=>setOpen(false)} title="הסתר (הטקסט נשמר)" style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>▲</button></div>
+    <div className="h360-hint" style={{fontSize:12,color:"#166534",marginBottom:6}}>ספר במילים שלך מה עשית — מזיק, רמת נגיעות, חומר, איפה, כמה תיבות (חדשות / מילוי), אם צריך לצאת, כמה שולם ואיך, אחריות.</div>
+    <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder={"למשל: חולדות, נגיעות בינונית. שמתי רטרים בלוק, ארבע תיבות חדשות שהבאתי מהבית בחצר הבניין ומילאתי שתי תיבות קיימות. אין צורך לצאת. שילם 600 במזומן. אחריות 3 חודשים."} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #86efac",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t)}/>
-      {!txt&&<button type="button" onClick={async()=>{try{const t=await navigator.clipboard.readText();if(t)setTxt(t);}catch(e){alert("הדבק ידנית בתיבה");}}} style={{border:"1.5px solid #c4b5fd",background:"#fff",color:"#5b21b6",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>}
+      {!txt&&<button type="button" onClick={async()=>{try{const t=await navigator.clipboard.readText();if(t)setTxt(t);}catch(e){alert("הדבק ידנית בתיבה");}}} style={{border:"1px solid #86efac",background:"#fff",color:"#166534",borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>📥 הדבק</button>}
     </div>
     {r&&<div style={{marginTop:8}}>
-      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #ddd6fe",borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}
-        {!chips.length&&<span style={{fontSize:13,color:"#6d28d9"}}>עדיין לא זיהיתי פרטים — המשך לספר…</span>}</div>
-      <button type="button" disabled={aiBusy} onClick={runFill} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:aiBusy?"#a78bfa":"#7c3aed",color:"#fff",fontSize:16,fontWeight:800,cursor:aiBusy?"wait":"pointer",fontFamily:"inherit"}}>{aiBusy?"🤖 מבין את הטקסט…":"✨ מלא את יומן הביצוע מהטקסט"}</button>
-      <div style={{fontSize:11,color:"#6d28d9",marginTop:4,textAlign:"center"}}>הטקסט נשאר שמור ביומן הביצוע כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{chips.map((c,i)=><span key={i} style={{background:"#fff",border:"1px solid #bbf7d0",borderRadius:20,padding:"4px 10px",fontSize:13}}>{c}</span>)}
+        {!chips.length&&<span style={{fontSize:13,color:"#166534"}}>עדיין לא זיהיתי פרטים — המשך לספר…</span>}</div>
+      <button type="button" disabled={aiBusy} onClick={runFill} style={{width:"100%",padding:"12px",borderRadius:10,border:"none",background:aiBusy?"#86efac":"#16a34a",color:"#fff",fontSize:16,fontWeight:800,cursor:aiBusy?"wait":"pointer",fontFamily:"inherit"}}>{aiBusy?"🧠 מבין את הטקסט…":"✨ מלא את יומן הביצוע מהטקסט"}</button>
+      <div className="h360-hint" style={{fontSize:11,color:"#64748b",marginTop:4,textAlign:"center"}}>הטקסט נשאר שמור ביומן הביצוע כמו שהוא. אפשר לתקן כל שדה אחרי המילוי.</div>
     </div>}
   </div>;
 }
@@ -3539,8 +3543,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
             return {...x,[k]:nv,instructions:[...new Set(ins)]}; }); }}
           style={{flex:"1 1 150px",padding:"11px 10px",borderRadius:12,border:"2px solid "+(on?"#0284c7":"#cbd5e1"),background:on?"#e0f2fe":"#fff",color:on?"#0369a1":"#334155",fontSize:15,fontWeight:on?800:600,cursor:"pointer",fontFamily:"inherit"}}>{on?"✓ ":""}{l}</button>; })}
       </div>
-      {(f.hasPets||f.hasBaby)&&<div style={{fontSize:12.5,color:"#0369a1",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"7px 10px",marginBottom:8}}>הוחלף "לא לשטוף 24 שעות" בהנחיות לשטוף, לייבש ולאוורר לפני שהם נכנסים. אפשר לשנות כל הנחיה.</div>}
-      <div style={{fontSize:12,color:CLR.muted,marginBottom:6}}>מוצגות ההנחיות שמתאימות ל{allPests.length?allPests.join(", "):"טיפול"}{hasSpray?" · ריסוס":""}{hasBait?" · תיבות/מלכודות":""}. השאר — ב"עוד הנחיות".</div>
+      {(f.hasPets||f.hasBaby)&&<div className="h360-hint" style={{fontSize:12.5,color:"#0369a1",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"7px 10px",marginBottom:8}}>הוחלף "לא לשטוף 24 שעות" בהנחיות לשטוף, לייבש ולאוורר לפני שהם נכנסים. אפשר לשנות כל הנחיה.</div>}
+      <div className="h360-hint" style={{fontSize:12,color:CLR.muted,marginBottom:6}}>מוצגות ההנחיות שמתאימות ל{allPests.length?allPests.join(", "):"טיפול"}{hasSpray?" · ריסוס":""}{hasBait?" · תיבות/מלכודות":""}. השאר — ב"עוד הנחיות".</div>
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
         {(()=>{const rel=[...new Set([...f.instructions,...instrForPests(allPests),...(rodentNow&&hasBait&&!hasSpray?INSTR_RODENT_BAIT:[]),...(hasSpray?INSTR_SPRAY:[]),...(hasBait?INSTR_TRAPS:[]),...(hasSpray&&isInsect(allPests)?[INSTR_BASE[5]]:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])])].filter(t=>!((f.hasPets||f.hasBaby)&&INSTR_NO_WASH.includes(t)&&!f.instructions.includes(t)));
           const rest=[...new Set([...INSTR_BASE,...(rodentNow?INSTR_RODENT_BAIT:[])])].filter(t=>!rel.includes(t));
@@ -3560,7 +3564,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     <div style={{marginBottom:14}}>
       {prefillAppt?.notes&&<div style={{background:"#f8fafc",border:"1px dashed #cbd5e1",borderRadius:8,padding:"7px 10px",marginBottom:8,fontSize:13,color:"#475569"}}>📌 <b>הערות מההזמנה (פנימי — לא נשלח ללקוח):</b> {prefillAppt.notes}</div>}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-        <label style={{fontSize:12,color:CLR.muted,fontWeight:600}}>📝 הערות / תיאור הטיפול <span style={{fontWeight:400}}>(מופיע במסמך ללקוח)</span></label>
+        <label style={{fontSize:12,color:CLR.muted,fontWeight:600}}>📝 הערות / תיאור הטיפול <span className="h360-hint" style={{fontWeight:400}}>(מופיע במסמך ללקוח)</span></label>
         <MicButton onText={t=>setF(x=>({...x,notes:(x.notes?x.notes.replace(/\s+$/,"")+" ":"")+t}))}/>
       </div>
       <textarea value={f.notes} onChange={e=>set("notes",e.target.value)} rows={5} placeholder="למשל: ביצעתי ריסוס בפנלים כנגד תיקנים ונמלים, הונח ג'ל במטבח..." style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.6,resize:"vertical",minHeight:120}}/>
@@ -5291,6 +5295,7 @@ function FreeNoteForm({prefill={},workers=[],customers=[],currentUser,onSave,onC
   };
   const chips=r?[known&&"✅ לקוח קיים: "+custDocName(known),r.bizName&&"🏪 "+r.bizName,r.name&&"👤 "+r.name,r.phone&&"📞 "+r.phone,(r.street||r.city)&&"📍 "+[[r.street,r.buildingNum].filter(Boolean).join(" "),r.city].filter(Boolean).join(", "),(r.pests||[]).length&&"🐛 "+r.pests.join(", "),r.price&&"₪"+r.price].filter(Boolean):[];
   return <div>
+    <SmartTitle/>
     <div className="h360-hint" style={{fontSize:12,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"8px 12px",marginBottom:10}}>✍️ כתוב או הקלט חופשי — כמו ביומן גוגל. נכנס ליומן בשעה שבחרת. אפשר להשלים להזמנה מסודרת אחר כך מתוך התור.</div>
     <textarea ref={ta} value={txt} onChange={e=>setTxt(e.target.value)} rows={6} placeholder={"למשל: דיברתי עם רונית, הרצל 12 רמת גן, ג'וקים, 350, 0521234567, לחייג חצי שעה לפני"} style={{...fld,fontSize:16,resize:"vertical",marginBottom:6}}/>
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
@@ -5623,7 +5628,7 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
   React.useEffect(()=>{ if(voice.current&&trig&&r&&!fired.current&&!done){ fired.current=true; const t=setTimeout(insert,700); return()=>clearTimeout(t); } },[txt]);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ voice.current=false; setTxt(t); } }catch(e){ alert("הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
   const chip=(on,c)=>({flex:1,padding:"9px 6px",borderRadius:10,border:"1.5px solid "+(on?c:"#e2e8f0"),background:on?c+"18":"#fff",color:on?c:"#475569",fontWeight:on?800:500,fontSize:15,cursor:"pointer",fontFamily:"inherit"});
-  if(done) return <Modal title="✨ מילוי חכם ליומן" onClose={onClose} width={480}>
+  if(done) return <Modal title="🧠 מילוי חכם ליומן" onClose={onClose} width={480}>
     <div style={{textAlign:"center",padding:"10px 0 4px"}}>
       <div style={{fontSize:44}}>✅</div>
       <div style={{fontWeight:800,fontSize:18,margin:"6px 0"}}>נכנס ליומן{w?" של "+w.name:""}</div>
@@ -5636,7 +5641,8 @@ function QuickAddModal({workers,currentUser,customers,onClose,onSaveJob,onSaveTa
       </div>
     </div>
   </Modal>;
-  return <Modal title="✨ מילוי חכם ליומן" onClose={onClose} width={520}>
+  return <Modal title="🧠 מילוי חכם ליומן" onClose={onClose} width={520}>
+    <SmartTitle/>
     <div className="h360-hint" style={{fontSize:13,color:CLR.muted,marginBottom:8}}>הדבק הודעה, הקלד, או לחץ 🎤 ודבר. אפשר לסיים ב: <b>"הכנס ליומן של {me?me.name:"..."}"</b> — וזה נכנס לבד.</div>
     <textarea value={txt} onChange={e=>{voice.current=false;setTxt(e.target.value);}} rows={5} placeholder={"למשל:\nפרעושים, נחמני 54 תל אביב קומת קרקע, 500 שח, 0528285665, מחר בין 10 ל12\n— או —\nמחר ב-9 לקחת צ'ק מוועד הבית בהרצל"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+CLR.border,fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical"}}/>
     <div style={{display:"flex",gap:8,margin:"8px 0 12px",flexWrap:"wrap"}}>
@@ -5690,8 +5696,16 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const [monthYear,setMonthYear]=useState(()=>{const n=new Date();return{y:n.getFullYear(),m:n.getMonth()};});
   const [invAppt,setInvAppt]=useState(null);
   const [detailAppt,setDetailAppt]=useState(null);
-  const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false); const [aiOpen,setAiOpen]=useState(false); const [aiDraft,setAiDraft]=useState(null); const aiMem=React.useRef(null); const aiApptHid=React.useRef(null);
-  React.useEffect(()=>{ const f=e=>{ const h=e.detail||{}; aiMem.current={txt:h.text||"",res:h.res||null,apptSel:h.apptSel||"",doLog:h.wantLog!==false,doInv:!!h.wantInvoice,hid:h.id}; setLogAppt(null); setInvAppt(null); setAiOpen(true); }; window.addEventListener("h360airesume",f); return()=>window.removeEventListener("h360airesume",f); },[]);
+  const [logAppt,setLogAppt]=useState(null); const [logEdit,setLogEdit]=useState(false); const [aiDraft,setAiDraft]=useState(null); const aiMem=AI_MEM; const aiApptHid=React.useRef(null); const setAiOpen=v=>{ if(v) aiOpenGlobal(); };
+  // פעולות שהעוזר (שפתוח מכל מקום) מבקש מהיומן: לפתוח טיוטת יומן ביצוע / חשבונית / תור
+  React.useEffect(()=>{ const f=e=>{ const {kind,p}=e.detail||{};
+      if(kind==="log"){ setAiDraft(p.d); setLogEdit(false); setLogAppt(p.a); }
+      else if(kind==="inv"){ setInvAppt(p.a); }
+      else if(kind==="appt"){ const {cust,r,hid}=p; aiApptHid.current=hid; window.__h360PendingOrder=cust?{...cust}:null;
+        setPrefill({date:r.apptDate||"",time:r.apptTime||"",workerId:currentUser.id});
+        const lines=[!cust&&(r.newName||r.customerName),!cust&&r.newPhone,!cust&&r.newAddress,(r.pests||[]).join(", "),r.price?r.price+" ₪":"",r.notes].filter(Boolean).join("\n");
+        setFullText(lines?{text:lines,n:Date.now()}:null); setConvertId(null); setNewKind("job"); setShowNew(true); } };
+    window.addEventListener("h360aiact",f); return()=>window.removeEventListener("h360aiact",f); },[]);
   const aiBackTo=hid=>{ if(!hid) return; const h=aiHistGet().find(x=>x.id===hid); if(!h) return; const done=(!h.wantLog||h.logId!=null)&&(!h.wantInvoice||h.docId!=null); if(done){ aiMem.current=null; return; } setTimeout(()=>setAiOpen(true),60); };
   const [draggedId,setDraggedId]=useState(null);
   const [dropTarget,setDropTarget]=useState(null);
@@ -5811,7 +5825,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
       <Btn sm onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("job");setShowNew(true);}}>+ תור חדש</Btn>
       <Btn sm style={{background:PERSONAL_CLR}} onClick={()=>{setPrefill(calMode==="day"||calMode==="3day"?{date:toISO(dayDate)}:{});setNewKind("personal");setShowNew(true);}}>📌 + משימה</Btn>
-      <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>✨ מילוי חכם</Btn>
+      <Btn sm style={{background:"#0f766e"}} onClick={()=>setShowQuick(true)}>🧠 מילוי חכם</Btn>
       {narrow&&<button type="button" onClick={()=>setMoreTools(v=>!v)} style={{border:"1px solid "+CLR.border,background:moreTools?"#f1f5f9":"#fff",borderRadius:8,padding:"6px 11px",fontSize:13,cursor:"pointer",fontFamily:"inherit",color:"#334155"}}>{moreTools?"✕ סגור":"⋯ עוד"}</button>}
       {(!narrow||moreTools)&&<>
       <Btn sm v="secondary" onClick={()=>setShowRoute(true)}>🗺️ מסלול</Btn>
@@ -6046,13 +6060,7 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
     {dupAppt&&<NewApptModal customers={customers} workers={workers} collabs={collabs} prefill={dupAppt}
       onClose={()=>setDupAppt(null)}
       onSave={a=>{setAppointments(as=>[...as,{...a,id:nextId(as)}]);setDupAppt(null);alert("✅ תור שוכפל!");}}/> }
-    {!logAppt&&!invAppt&&!aiOpen&&<button type="button" onClick={()=>setAiOpen(true)} title="העוזר החכם — יומן ביצוע / חשבונית מדיבור" style={{position:"fixed",left:14,bottom:"calc(84px + env(safe-area-inset-bottom))",zIndex:60,height:52,padding:"0 18px",borderRadius:26,border:"none",background:"linear-gradient(135deg,#7c3aed,#2563eb)",color:"#fff",fontSize:16,fontWeight:800,boxShadow:"0 6px 18px rgba(79,70,229,.4)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>🎙️ עוזר</button>}
-    {aiOpen&&<AssistantModal mem={aiMem} appointments={appointments} customers={customers} execLogs={execLogs} finance={finance} currentUser={currentUser} onClose={()=>setAiOpen(false)}
-      onOpenLog={(a,d)=>{setAiOpen(false);setAiDraft(d);setLogEdit(false);setLogAppt(a);}} onOpenInvoice={a=>{setAiOpen(false);setInvAppt(a);}}
-      onOpenAppt={({cust,r,hid})=>{ setAiOpen(false); aiApptHid.current=hid; window.__h360PendingOrder=cust?{...cust}:null;
-        setPrefill({date:r.apptDate||"",time:r.apptTime||"",workerId:currentUser.id});
-        const lines=[!cust&&(r.newName||r.customerName),!cust&&r.newPhone,!cust&&r.newAddress,(r.pests||[]).join(", "),r.price?r.price+" ₪":"",r.notes].filter(Boolean).join("\n");
-        setFullText(lines?{text:lines,n:Date.now()}:null); setConvertId(null); setNewKind("job"); setShowNew(true); }}/>}
+    {!logAppt&&!invAppt&&<button type="button" onClick={aiOpenGlobal} title="העוזר החכם — יומן ביצוע / חשבונית מדיבור" style={{position:"fixed",left:14,bottom:"calc(84px + env(safe-area-inset-bottom))",zIndex:60,height:52,padding:"0 18px",borderRadius:26,border:"none",background:"linear-gradient(135deg,#7c3aed,#2563eb)",color:"#fff",fontSize:16,fontWeight:800,boxShadow:"0 6px 18px rgba(79,70,229,.4)",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>🎙️ עוזר</button>}
     {logAppt&&<ExecLogModalInline aiDraft={aiDraft} key={logAppt.id+(logEdit?"e":"v")} startEdit={logEdit} appt={logAppt} worker={workers.find(w=>w.id===logAppt.workerId)||workerObj}
       currentUser={currentUser} workers={workers} customers={customers} execLogs={execLogs} maintenance={maintenance} finance={finance} appointments={appointments}
       onClose={()=>{ const _hid=aiDraft&&aiDraft.hid; setLogAppt(null);setAiDraft(null);setDetailAppt(null);backIfReq(); aiBackTo(_hid); }} onSave={saveLog} onSaveInvoice={saveInvoiceFromLog} onOpenInvoice={a=>{setLogAppt(null);setInvAppt(a);}}/>}
@@ -7057,20 +7065,22 @@ function parseFin(raw,{customers=[]}={}){
   return out;
 }
 
+// 🧠 מילוי חכם — כותרת ועיצוב אחידים בכל המערכת (כמו בהזמנת עבודה) + כפתור "עוזר חכם"
+function AiAssistBtn(){ return <button type="button" onClick={e=>{ e.preventDefault(); e.stopPropagation(); try{ window.dispatchEvent(new Event("h360aiopen")); }catch(_){} }} title="העוזר החכם — יומן ביצוע, חשבונית או תור מדיבור" style={{border:"1.5px solid #c4b5fd",background:"#fff",color:"#6d28d9",borderRadius:20,padding:"4px 11px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>🤖 עוזר חכם</button>; }
+function SmartTitle({right=null}){ return <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:6}}>
+  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><b style={{color:"#166534",fontSize:15}}>🧠 מילוי חכם</b><AiAssistBtn/></div>{right}</div>; }
+const SF_OPEN_BTN={width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:12};
 // ── תיבת "מילוי חכם" כללית לכל טופס: מדברים / מקלידים / מדביקים → בודקים → ממלאים. אפשר לחזור ולהשלים.
-function SmartBox({parse,chips,onApply,hint,placeholder,contacts=false,color="#16a34a",bg="#f0fdf4",border="#86efac"}){
+function SmartBox({parse,chips,onApply,hint,placeholder,contacts=false}){ const color="#16a34a",bg="#f0fdf4",border="#86efac";
   const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [n,setN]=useState(0);
   const r=React.useMemo(()=>{ try{ return txt.trim()?parse(txt):null; }catch(e){ console.error(e); return null; } },[txt]);
   const add=t=>setTxt(x=>(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":" "):"")+t);
   const pill={border:"1.5px solid "+border,background:"#fff",color,borderRadius:20,padding:"7px 14px",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"};
-  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid "+color,background:bg,color,fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{n?"✨ השלם / הוסף פרטים — דבר או הקלד 🎤":"✨ מילוי חכם — דבר, הקלד או הדבק 🎤"}</button>;
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"12px",borderRadius:12,border:"2px solid #25D366",background:bg,color:"#166534",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{n?"🧠 השלם / הוסף פרטים — דבר או הקלד 🎤":"🧠 מילוי חכם — דבר, הקלד או הדבק 🎤"}</button>;
   const list=r?(chips(r)||[]).filter(Boolean):[];
-  return <div style={{border:"2px solid "+color,background:bg,borderRadius:12,padding:12,marginBottom:14}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-      <b style={{color,fontSize:15}}>✨ {n?"השלמה במילוי חכם":"מילוי חכם"}</b>
-      <button type="button" onClick={()=>{setOpen(false);setTxt("");}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>
-    </div>
-    {hint&&<div style={{fontSize:12,color:"#475569",marginBottom:6}}>{n?"תגיד רק מה להוסיף או לשנות — מה שכבר מילאת נשאר.":hint}</div>}
+  return <div className="h360-intake" style={{border:"2px solid #25D366",background:bg,borderRadius:12,padding:12,marginBottom:14}}>
+    <SmartTitle right={<button type="button" onClick={()=>{setOpen(false);setTxt("");}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>}/>
+    {hint&&<div className="h360-hint" style={{fontSize:12,color:"#475569",marginBottom:6}}>{n?"תגיד רק מה להוסיף או לשנות — מה שכבר מילאת נשאר.":hint}</div>}
     <textarea value={txt} onChange={e=>setTxt(e.target.value)} rows={4} placeholder={placeholder} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid "+border,fontSize:15,fontFamily:"inherit",resize:"vertical",direction:"rtl"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
       <MicButton label="🎤 דבר" onText={add}/>
@@ -7148,7 +7158,7 @@ function IntakeTextBox({value,onChange,onFill,cityNames,custOnly,onContact}){
     ...(res.contacts||[]).filter((c,i)=>i>0||c.role).map(c=>"👥 "+[c.role,c.name].filter(Boolean).join(" ")+(c.phone?": "+c.phone:"")),
     ...(res.notes||[]).filter(cleanNote).map(n=>"📝 הערה: "+n)].filter(Boolean):[];
   return <div className="h360-intake" style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
-    <b style={{color:"#166534",fontSize:15}}>📝 כתוב חופשי · ✨ מילוי חכם</b>
+    <SmartTitle/>
     <div className="h360-hint" style={{fontSize:12,color:"#166534",margin:"2px 0 8px"}}>נשמר כמו שהוא, וכולם רואים אותו — גם המדביר בשטח. אפשר לשמור רק את זה, ולהשלים את השדות למטה מתי שנוח.</div>
     <textarea value={value||""} onChange={e=>upd(e.target.value)} rows={4} placeholder={"למשל: יובל משווארמה שמש, 0521234567, הרצל 12 ראשון לציון, ג׳וקים במטבח, לבוא ביום שלישי בבוקר"} style={{width:"100%",boxSizing:"border-box",padding:"10px",borderRadius:10,border:"1px solid #86efac",fontSize:15,fontFamily:"inherit",resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap",alignItems:"center"}}>
@@ -7168,12 +7178,9 @@ function WAPasteBox({onApply,cityNames}){
   const [open,setOpen]=useState(false); const [txt,setTxt]=useState(""); const [res,setRes]=useState(null); const [nApplied,setNApplied]=useState(0);
   const paste=async()=>{ try{ const t=await navigator.clipboard.readText(); if(t){ setTxt(t); setRes(waParse(t,cityNames)); } }catch(e){ alert("לא הצלחתי לקרוא מהלוח — הדבק ידנית בתיבה (לחיצה ארוכה ← הדבק)"); } };
   const LBL={name:"שם",phone:"טלפון",city:"עיר",street:"רחוב",buildingNum:"מספר",aptNum:"דירה",entrance:"כניסה",propertyType:"סוג נכס",rooms:"חדרים",floor:"קומה",hasYard:"חצר",pests:"מזיק",price:"מחיר",prefDate:"תאריך",timeFrom:"משעה",timeTo:"עד שעה"};
-  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{nApplied?"✨ השלם / הוסף פרטים להזמנה — דבר או הקלד 🎤":"✨ מילוי חכם — הדבק הודעה, הקלד או דבר 🎤"}</button>;
+  if(!open) return <button type="button" onClick={()=>setOpen(true)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:12,border:"2px solid #25D366",background:"#f0fdf4",color:"#166534",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14}}>{nApplied?"🧠 השלם / הוסף פרטים להזמנה — דבר או הקלד 🎤":"🧠 מילוי חכם — הדבק הודעה, הקלד או דבר 🎤"}</button>;
   return <div style={{border:"2px solid #25D366",background:"#f0fdf4",borderRadius:12,padding:12,marginBottom:14}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <b style={{color:"#166534",fontSize:15}}>✨ מילוי חכם — הדבק, הקלד או דבר</b>
-      <button type="button" onClick={()=>{setOpen(false);setTxt("");setRes(null);}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>
-    </div>
+    <SmartTitle right={<button type="button" onClick={()=>{setOpen(false);setTxt("");setRes(null);}} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#64748b"}}>✕</button>}/>
     <textarea value={txt} onChange={e=>{setTxt(e.target.value);setRes(e.target.value.trim()?waParse(e.target.value,cityNames):null);}} rows={5} placeholder={"הדבק כאן את ההודעה, למשל:\nהדברת פרעושים, דירת 4 חדרים ללא חצר, קומת קרקע\n550 ש\"ח\nהרצל 12 רמת גן\n054-1234567\nמחר בין 8 ל-10"} style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:"1.5px solid #86efac",fontSize:15,fontFamily:"inherit",lineHeight:1.5,resize:"vertical",background:"#fff"}}/>
     <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}><MicButton label="🎤 דבר" onText={t2=>setTxt(x=>{const v=(x?x.replace(/\s+$/,"")+" ":"")+t2; setRes(waParse(v,cityNames)); return v;})}/>
     <ContactPickBtn onPick={c=>setTxt(x=>{const v=(x?x.replace(/\s+$/,"")+(/[.,]$/.test(x.trim())?" ":", "):"")+contactLine(c); setRes(waParse(v,cityNames)); return v;})}/>
@@ -9454,7 +9461,7 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
     {!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
     </div>}
-    <div style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:8}}>💡 {T.help}</div>
+    <div className="h360-hint" style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:8}}>💡 {T.help}</div>
     {!(official&&T.accounting)&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:8,padding:"6px 12px",fontSize:12,marginBottom:12}}>מצב טיוטה — לבדיקה בלבד, עד שמפעילים מצב רשמי.</div>}
 
     {/* ── לקוח ── */}
@@ -12136,7 +12143,7 @@ function WorkerFieldView({currentUser, appointments, setAppointments, customers,
 
       <button onClick={()=>setFvRoute(true)} style={{width:"100%",padding:"11px",borderRadius:14,border:"1.5px solid #cbd5e1",background:"#fff",color:"#0f172a",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>🗺️ המסלול שלי היום — ניווט לכל העצירות</button>
       {fvRoute&&<RoutePlanner appointments={appointments} setAppointments={setAppointments} workers={workers} currentUser={currentUser} onClose={()=>setFvRoute(false)}/>}
-      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>✨ מילוי חכם ליומן — 🎤 דבר · 📋 הדבק · ⌨️ הקלד</button>}
+      {onQuickAdd&&<button onClick={onQuickAdd} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px",borderRadius:14,border:"none",background:"#0f766e",color:"#fff",fontSize:16,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:14,boxShadow:"0 4px 14px rgba(15,118,110,.25)"}}>🧠 מילוי חכם ליומן — 🎤 דבר · 📋 הדבק · ⌨️ הקלד</button>}
       {/* משימות אישיות של היום */}
       {myPersonal.length>0&&<div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:14,padding:"10px 12px",marginBottom:14}}>
         <div style={{fontWeight:800,fontSize:14,color:PERSONAL_CLR,marginBottom:6}}>📌 משימות אישיות היום</div>
@@ -14425,6 +14432,15 @@ function App(){
     nv.forEach(x=>{ if(x.virtual) return; if(x.rollCopy){ const k=String(x.id); if(real.has(k)||seen.has(k)) return; seen.add(k); const {rollCopy,...y}=x; outA.push(y); return; } outA.push(x); });
     return outA; }),[]);
   React.useEffect(()=>{ window.__h360Nav=t=>setTab(t); },[]);
+  // 🤖 העוזר החכם — נפתח מכל מקום ("🤖 עוזר חכם" ליד המילוי החכם, או הכפתור ביומן)
+  const [aiOpenG,setAiOpenG]=useState(false);
+  React.useEffect(()=>{ const o=()=>setAiOpenG(true);
+    const r=e=>{ const h=e.detail||{}; AI_MEM.current={txt:h.text||"",res:h.res||null,apptSel:h.apptSel||"",doLog:h.wantLog!==false,doInv:!!h.wantInvoice,hid:h.id}; setAiOpenG(true); };
+    window.addEventListener("h360aiopen",o); window.addEventListener("h360airesume",r);
+    return()=>{ window.removeEventListener("h360aiopen",o); window.removeEventListener("h360airesume",r); }; },[]);
+  const tabRef0=React.useRef(tab); tabRef0.current=tab;
+  const aiAct=(kind,p)=>{ setAiOpenG(false); const fire=()=>{ try{ window.dispatchEvent(new CustomEvent("h360aiact",{detail:{kind,p}})); }catch(e){} };
+    if(tabRef0.current!=="calendar"){ setTab("calendar"); setTimeout(fire,450); } else fire(); };
   // ⬅️ חזור — היסטוריית מסכים + כפתור "חזור" של הטלפון (לא יוצא מהמערכת בטעות)
   const navStack=React.useRef([]); const navBackFlag=React.useRef(false); const prevTabRef=React.useRef(tab); const [canBack,setCanBack]=useState(false);
   React.useEffect(()=>{ if(prevTabRef.current!==tab){ if(!navBackFlag.current){ navStack.current.push(prevTabRef.current); if(navStack.current.length>30) navStack.current.shift(); } navBackFlag.current=false; prevTabRef.current=tab; setCanBack(navStack.current.length>0); } },[tab]);
@@ -14767,7 +14783,9 @@ function App(){
             {tab==="invoices"&&(()=>{ const own=permOf(authUser,"invoices")==="own"; const meW=myWorkerFor(user,activeWorkers); return <Invoices mineOnly={own?{id:authUser.id,workerName:meW?meW.name:authUser.name}:null} finance={activeFinance} setFinance={setFinance} customers={customers} setCustomers={setCustomers} appointments={jobAppointments} execLogs={own?execLogs.filter(l=>l.workerName===(meW?meW.name:authUser.name)):execLogs} setExecLogs={setExecLogs}/>; })()}
             {tab==="maintenance"&&<Maintenance maintenance={activeMaintenance} setMaintenance={setMaintenance} customers={customers} setCustomers={setCustomers} appointments={appointments.filter(a=>!isPersonal(a))} setAppointments={setAppointments} workers={activeWorkers} execLogs={execLogs} setExecLogs={setExecLogs}/>}
             {tab==="projects"&&<Projects projects={activeProjects} setProjects={setProjects} workers={activeWorkers} appointments={jobAppointments} setAppointments={setAppointments} customers={customers} setCustomers={setCustomers}/>}
-            {tab==="aihist"&&<div style={{maxWidth:640,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
+            {aiOpenG&&user&&<AssistantModal mem={AI_MEM} appointments={appointments} customers={customers} execLogs={execLogs} finance={activeFinance} currentUser={user} onClose={()=>setAiOpenG(false)}
+              onOpenLog={(a,d)=>aiAct("log",{a,d})} onOpenInvoice={a=>aiAct("inv",{a})} onOpenAppt={p=>aiAct("appt",p)}/>}
+            {tab==="aihist"&&<div style={{maxWidth:640,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}
             {tab==="scheduler"&&<ScheduledMsgs scheduled={activeScheduledMsgs} setScheduled={setScheduledMsgs} customers={customers} appointments={jobAppointments} templates={msgTemplates}/>}
