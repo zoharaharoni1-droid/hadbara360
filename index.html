@@ -909,6 +909,33 @@ function termsTpl(){ try{ const o=JSON.parse(localStorage.getItem("h360_terms_tp
 async function loadTermsTpl(){ if(!sb) return termsTpl(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const f=(data||[]).filter(x=>/^terms-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return termsTpl();
   const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return termsTpl(); const v=termsMigrate(JSON.parse(await r.data.text())); if(Array.isArray(v)&&v.length){ localStorage.setItem("h360_terms_tpl",JSON.stringify(v)); return v; } }catch(e){} return termsTpl(); }
 async function saveTermsTpl(list){ localStorage.setItem("h360_terms_tpl",JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-terms")); }catch(e){} if(!sb) return; const n="company/terms-"+String(Date.now()).padStart(15,"0")+".json"; await sb.storage.from('contracts').upload(n,new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
+
+// ── 🧩 חלקי הנחיות: כל שורה מופיעה רק כשמה שהיא מתארת נעשה ביומן (מקום · שיטה · מזיק) ──
+const BLK_PLACES=[["in","מבנה"],["yard","חצר"],["common","חדר מדרגות / שטחים משותפים"]];
+const BLK_METHODS=[["spray","ריסוס"],["gel","ג'ל"],["granules","גרגירים"],["dust","אבקה"],["traps","מלכודות / ניטור"],["bait","תחנות האכלה / רעל"]];
+const BLK_DEFAULT=[{"id": "g_spray_0", "g": "g_spray", "text": "הטיפול כולל ריסוס יסודי לאורך הפאנלים, ספי הדלתות, הצוקל במטבח ופתחי הניקוז הגלויים. החומר נצמד למשטחים וקוטל חרקים שבאים איתו במגע.", "st": "ok", "m": ["spray"], "pl": ["in"]}, {"id": "g_spray_1", "g": "g_spray", "text": "הריסוס אינו מחסום פיזי: חרק מעופף שנכנס מחלון או ממרפסת פתוחים ימות רק אחרי שינחת על משטח מטופל.", "st": "ok", "m": ["spray"]}, {"id": "g_spray_2", "g": "g_spray", "text": "הטיפול מתבצע באזורים הרגילים, אלא אם תואם אחרת מראש לפי מידע שמסר הלקוח. מקומות נסתרים ולא שגרתיים — כמו פתחי מיזוג, תקרות גבס עם מערכות חשמל, שקעים וצנרת פנימית — שלא צוינו מראש אינם כלולים בטיפול. טיפול בהם בתקופת האחריות יינתן בעלות מוזלת, ואחרי תום תקופת האחריות — כהזמנת שירות חדשה.", "st": "ok", "m": ["spray"]}, {"id": "g_safety_0", "g": "g_safety", "text": "יש לשהות מחוץ למקום שרוסס עד שהחומר מתייבש והמקום מאוורר — לפי הזמן שמופיע ביומן הביצוע ב\"זמן מחוץ למקום\" (בדרך כלל כשעה). אין לחזור לפני הזמן שנתן המדביר.", "st": "ok", "m": ["spray"]}, {"id": "g_safety_1", "g": "g_safety", "text": "אם בתום הזמן המקום יבש, אבל נשארו פה ושם כתמים קטנים רטובים — אפשר לנגב אותם בנייר סופג, מגבת או סמרטוט חד־פעמי, לזרוק מיד לפח (לא להשתמש בהם לשום דבר אחר), לאוורר היטב ולחזור לשגרה.", "st": "ok", "m": ["spray"], "pl": ["in"]}, {"id": "g_safety_2", "g": "g_safety", "text": "משטחי עבודה שרוססו, כמו שיש וכיורים — יש לשטוף במים וסבון לפני השימוש, גם אם עברה רק שעה מההדברה.", "st": "ok", "m": ["spray"], "pl": ["in"]}, {"id": "g_safety_3", "g": "g_safety", "text": "רצוי לא לשטוף את הרצפה ב-24 השעות הראשונות: בזמן הזה החומר מתייבש ונקלט היטב במשטחים, וכך הוא פועל הכי טוב.", "st": "ok", "m": ["spray"], "pl": ["in"]}, {"id": "g_safety_4", "g": "g_safety", "text": "בבית עם תינוקות זוחלים או בעלי חיים (גם של אורחים): יש לשטוף במים וסבון את הרצפה והפאנלים באזורים שרוססו בתוך המבנה, לפני שהם נכנסים (את הרצפה בחצר אין צורך לשטוף). אחרי שהחומר התייבש הוא כבר נקלט בחריצים ובסדקים שבהם מסתתרים החרקים, וממשיך לפעול שם — ולכן השטיפה לא מבטלת את הטיפול.", "st": "ok", "m": ["spray"], "pl": ["in"]}, {"id": "d6_g_safety", "g": "g_safety", "text": "בחדר המדרגות ובשטחים המשותפים אין צורך בשטיפה — מספיק שהחומר יתייבש ושהמקום יאוורר.", "st": "draft", "m": ["spray"], "pl": ["common"]}, {"id": "p_american_0", "g": "p_american", "text": "החומר על הפאנלים פועל במגע. התיקן מת תוך כמה דקות ועד כחצי שעה מהמגע בחומר. בזמן הזה הוא עלול להתרוצץ מהר או לפרפר — זה סימן שהחומר עובד.", "st": "ok", "m": ["spray"]}, {"id": "p_american_1", "g": "p_american", "text": "הניקוזים מרוססים ישירות, כדי לקטול את האוכלוסייה שבתוכם. שימוש שוטף במים (מקלחות, כיורים) מדלל עם הזמן את החומר בצנרת, ולכן הופעה של תיקנים קטנים מהצנרת אחרי כמה שבועות מגיעה מתשתית הבניין ולא מכשל בטיפול. חידוש החומר בניקוזים בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — כהזמנה חדשה.", "st": "ok", "m": ["spray"]}, {"id": "p_american_2", "g": "p_american", "text": "קומות ראשונות מחוברות ישירות לקו הביוב הראשי — מומלץ שוועד הבית יבצע הדברה תקופתית לבורות הבניין. בדירות קרקע הטיפול כולל גם את שוחות הביוב הצמודות לדירה, כדי לחסום את המעבר פנימה.", "st": "ok", "m": ["spray"]}, {"id": "p_american_3", "g": "p_american", "text": "הצפה או עליית מי שפכים בשוחת הביוב שוטפות את החומר ומבטלות את פעולתו. טיפול חוזר בשוחות אחרי הצפה אינו כלול באחריות ויחויב בתשלום.", "st": "ok", "m": ["spray"]}, {"id": "p_american_4", "g": "p_american", "text": "אם ידוע לכם על מקום מסוים שממנו יוצאים תיקנים (פתח מזגן, תקרה מונמכת) — ספרו למדביר בזמן הטיפול, כדי שיתאים את הטיפול.", "st": "ok"}, {"id": "p_german_0", "g": "p_german", "text": "הטיפול נעשה בנקודות ג'ל ובמלכודות ניטור במקומות המסתור — מנועי מכשירי חשמל, צירי ארונות וכד'.", "st": "ok", "m": ["gel", "traps"], "all": true}, {"id": "p_german_1", "g": "p_german", "text": "אין לשטוף, לנגב או לרסס חומרים ביתיים על נקודות הג'ל. התיקנים אוכלים את הפיתיון ומעבירים אותו למחבוא — כך מחוסלת המושבה.", "st": "ok", "m": ["gel"]}, {"id": "p_german_2", "g": "p_german", "text": "בגלל עמידות המזיק וקצב הבקיעה מתיקי הביצים, ייתכן שיידרש ביקור נוסף להשלמת הטיפול וחידוש הפיתיונות. ביקור כזה בתקופת האחריות — בעלות מוזלת (הגעה וחומרים בלבד); אחרי תום תקופת האחריות — טיפול חדש במחיר מלא.", "st": "ok"}, {"id": "d0_p_german", "g": "p_german", "text": "הטיפול נעשה בנקודות ג'ל במקומות המסתור — מנועי מכשירי חשמל, צירי ארונות וכד'.", "st": "draft", "m": ["gel"], "nm": ["traps"]}, {"id": "d1_p_german", "g": "p_german", "text": "במקומות המסתור הוצבו גם מלכודות ניטור (מלכודות דבק) — אין להזיז או לגעת בהן.", "st": "draft", "m": ["traps"], "nm": ["gel"]}, {"id": "p_ants_0", "g": "p_ants", "text": "הטיפול משלב ריסוס לאורך הפאנלים ופיתיונות ג'ל שהפועלות מעבירות לקן — לחיסול המושבה והמלכה. התהליך נמשך מכמה ימים ועד שבועיים.", "st": "ok", "m": ["spray", "gel"], "all": true}, {"id": "p_ants_1", "g": "p_ants", "text": "הריסוס דורש גישה חופשית לפאנלים. אזור שהיה חסום או עמוס בזמן הטיפול ולא רוסס — יטופל בביקור נפרד, בתקופת האחריות בעלות מוזלת.", "st": "ok", "m": ["spray"]}, {"id": "p_ants_2", "g": "p_ants", "text": "נמלים שיוצאות ממקומות פנימיים — גופי תאורה, שקעים, סדקים בתקרה — מגיעות מתשתית שלא ניתן לאתר מראש. בתקופת האחריות יינתן טיפול נקודתי בעלות מוזלת (הגעה וחומרים); אחרי תום תקופת האחריות — כהזמנה חדשה.", "st": "ok"}, {"id": "d2_p_ants", "g": "p_ants", "text": "הטיפול נעשה בפיתיונות ג'ל שהפועלות מעבירות לקן — לחיסול המושבה והמלכה. התהליך נמשך מכמה ימים ועד שבועיים.", "st": "draft", "m": ["gel"], "nm": ["spray"]}, {"id": "d3_p_ants", "g": "p_ants", "text": "הטיפול כולל ריסוס לאורך הפאנלים ובמסלולי התנועה של הנמלים.", "st": "draft", "m": ["spray"], "nm": ["gel"]}, {"id": "d4_p_ants", "g": "p_ants", "text": "בחצר פוזרו גרגירי פיתיון לאורך מסלולי הנמלים וליד פתחי הקנים. הנמלים אוספות אותם ומעבירות לקן.", "st": "draft", "m": ["granules"], "pl": ["yard"]}, {"id": "p_fireant_0", "g": "p_fireant", "text": "נמלת האש חיה במושבות ענק עם הרבה מלכות, ונכנסת גם מדירות ומחצרות סמוכות. מגע בפאנלים המרוססים קוטל אותן — ולכן נמלים מתות ליד הקירות (נראות כמו גרגירי חול) הן סימן שהחומר עובד.", "st": "ok", "m": ["spray"]}, {"id": "p_fireant_1", "g": "p_fireant", "text": "החצר פתוחה לחדירה מגינות סמוכות. בחצר מתבצע ריסוס ופיזור בכל השטח, אבל אין אחריות על חדירה חוזרת לחצר. טיפול חוזר בחצר — גם בתקופת האחריות של הבית — הוא הזמנה נפרדת במחיר מלא.", "st": "ok", "pl": ["yard"]}, {"id": "p_fleas_0", "g": "p_fleas", "text": "הריסוס על הרצפה קוטל מיד את הפרעושים הבוגרים ומאפס את השטח.", "st": "ok", "m": ["spray"]}, {"id": "p_fleas_1", "g": "p_fleas", "text": "החומר לא נשאר פעיל לאורך זמן ולא חודר לגלמים שבתוך בדים. לכן האחריות מותנית בטיפול מלא במקור: טיפול וטרינרי בחיות המחמד, פינוי גורי חתולים או פגרים מהסביבה, כביסת מצעים ב-60 מעלות ושאיבה יסודית של ספות, מזרנים ושטיחים שלא ניתן לרסס.", "st": "ok"}, {"id": "p_fleas_2", "g": "p_fleas", "text": "התפרצות שנובעת ממקור שלא טופל אינה כלולה באחריות, והגעה חוזרת תחויב בתשלום.", "st": "ok"}, {"id": "d5_p_fleas", "g": "p_fleas", "text": "במבנה — חובה לבצע שטיפה יסודית של הרצפה במים וסבון לפני שמחזירים את בעלי החיים.", "st": "draft", "m": ["spray"], "pl": ["in"]}, {"id": "p_food_0", "g": "p_food", "text": "הטיפול כולל ריסוס וניטור בארונות המטבח והמזווה, ומותנה בבדיקה יסודית וזריקה של כל מוצרי המזון היבש שפתוחים או נגועים (קטניות, קמחים, תבלינים וכד').", "st": "ok", "m": ["spray"]}, {"id": "p_food_1", "g": "p_food", "text": "המשך פעילות ממקור שלא אותר — כמו שקי מזון לבעלי חיים, או מוצרים סגורים שחוררו על ידי המזיק — אינו כלול באחריות. ביקור נוסף לסריקה והשלמת טיפול בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — במחיר מלא.", "st": "ok"}, {"id": "p_silverfish_0", "g": "p_silverfish", "text": "דג הכסף מסתתר בסדקים, מאחורי ארונות ופאנלים ובמקומות לחים. הטיפול מתבצע בריסוס בכל המקומות הנגישים — ככל שיותר מקומות פנויים ונגישים לריסוס, התוצאה טובה יותר.", "st": "ok", "m": ["spray"]}, {"id": "p_silverfish_1", "g": "p_silverfish", "text": "החומר לא נשאר פעיל לזמן רב, ולכן ייתכן שיידרש טיפול נוסף. טיפול נוסף בתקופת האחריות — בעלות מוזלת; אחרי תום תקופת האחריות — כהזמנה חדשה.", "st": "ok"}, {"id": "p_silverfish_2", "g": "p_silverfish", "text": "מומלץ לצמצם לחות — לאוורר חדרים רטובים ולתקן נזילות. זה מקטין מאוד את הסיכוי שיחזור.", "st": "ok"}, {"id": "p_rodent_in_0", "g": "p_rodent_in", "text": "מכרסמים חשדנים מטבעם — בימים הראשונים הם עלולים לעקוף מלכודות או לגעת בהן בלי להיתפס.", "st": "ok", "m": ["traps"], "pl": ["in"]}, {"id": "p_rodent_in_1", "g": "p_rodent_in", "text": "הרעל בתיבות ההאכלה פועל בהשהיה של כמה ימים, כדי ששאר המכרסמים לא יחשדו בפיתיון. לכן מכרסם חי בימים שאחרי ההצבה — צפוי ותקין.", "st": "ok", "m": ["bait"], "pl": ["in"]}, {"id": "p_rodent_in_2", "g": "p_rodent_in", "text": "ביקור לבדיקת מלכודות, דריכה מחדש או פינוי מכרסם שנלכד — בתקופת האחריות בעלות מוזלת עבור ההגעה; אחרי תום תקופת האחריות — כהזמנה חדשה.", "st": "ok", "m": ["traps"], "pl": ["in"]}, {"id": "p_rodent_out_0", "g": "p_rodent_out", "text": "תיבות ההאכלה מוצבות סביב המבנה, בחצר ובנקודות המעבר של המכרסמים, ובמידת הצורך גם בבורות ביוב ובמחילות.", "st": "ok", "m": ["bait"], "pl": ["yard", "common"]}, {"id": "p_rodent_out_1", "g": "p_rodent_out", "text": "הרעל פועל בהשהיה של כמה ימים, וירידה בפעילות נראית בדרך כלל תוך 7–14 ימים. מכרסם חי בימים הראשונים — צפוי ותקין.", "st": "ok", "m": ["bait"], "pl": ["yard", "common"]}, {"id": "p_rodent_out_2", "g": "p_rodent_out", "text": "אין להזיז, לפתוח או להרים את התיבות. תיבה שנפגעה או נעלמה — יש לעדכן אותנו.", "st": "ok", "m": ["bait"], "pl": ["yard", "common"]}, {"id": "p_rodent_out_3", "g": "p_rodent_out", "text": "שטחים פתוחים, גינות סמוכות ובורות ביוב משותפים הם מקור לחדירה חוזרת. טיפול חד-פעמי לא מונע הגעה של מכרסמים חדשים מבחוץ, ולכן מומלץ טיפול תקופתי (אחזקה).", "st": "ok", "pl": ["yard", "common"]}, {"id": "p_rodent_out_4", "g": "p_rodent_out", "text": "מזון זמין — אשפה פתוחה, מזון לחיות, פירות שנפלו — מושך מכרסמים. מומלץ לסגור ולפנות.", "st": "ok", "pl": ["yard", "common"]}, {"id": "p_wasps_0", "g": "p_wasps", "text": "הקן מטופל ישירות. פועלות שהיו מחוץ לקן בזמן הטיפול ימשיכו להגיע לאזור עוד 2–3 ימים, עד שהן מבינות שהמלכה חוסלה ומפסיקות לחזור לקן.", "st": "ok"}, {"id": "p_wasps_1", "g": "p_wasps", "text": "אין להתקרב לאזור הקן ואין להסיר אותו לפחות 3 ימים.", "st": "ok"}, {"id": "p_wasps_2", "g": "p_wasps", "text": "אם אחרי 3 ימים עדיין יש פעילות ערה ליד הקן — יש לעדכן אותנו ונגיע לטיפול חוזר.", "st": "ok"}, {"id": "p_flies_0", "g": "p_flies", "text": "הטיפול כולל ריסוס של משטחי הנחיתה ומקומות ההתרבות, ורוב הזבובים שבמקום ימותו בעקבותיו.", "st": "ok", "m": ["spray"]}, {"id": "p_flies_1", "g": "p_flies", "text": "זבובים מגיעים מבחוץ וממשיכים להיכנס מחלונות ודלתות פתוחים, ולכן אין אחריות על חרקים מעופפים.", "st": "ok"}, {"id": "p_flies_2", "g": "p_flies", "text": "הכי חשוב לטפל במקור: לסגור פחי אשפה ולפנות אותם באופן קבוע. אם יש חדר אשפה או פח מתחת לחלון (למשל בקומה ראשונה) — יש לדאוג שגם הוא ייסגר ויטופל.", "st": "ok"}, {"id": "p_flies_3", "g": "p_flies", "text": "מומלץ להתקין רשתות בחלונות.", "st": "ok"}, {"id": "p_mosquito_0", "g": "p_mosquito", "text": "הטיפול כולל ריסוס של מקומות המנוחה של היתושים (קירות מוצלים, שיחים וצמחייה) ושל מקורות המים שנמצאו.", "st": "ok", "m": ["spray"]}, {"id": "p_mosquito_1", "g": "p_mosquito", "text": "יתושים מתרבים במים עומדים. כל עוד המקור לא טופל — בור ביוב סתום, בור משאבה שלא הייתה אליו גישה, עדנית או כלי מוסתר עם מים עומדים — הטיפול יעזור לכמה ימים בלבד.", "st": "ok"}, {"id": "p_mosquito_2", "g": "p_mosquito", "text": "טיפול במקור פותר את הבעיה, אלא אם המקור נמצא אצל שכנים. לכן אין אחריות על יתושים.", "st": "ok"}, {"id": "p_mosquito_3", "g": "p_mosquito", "text": "יש לרוקן מים עומדים בחצר, בעציצים, במרזבים ובכלים פתוחים.", "st": "ok"}, {"id": "p_bedbugs_0", "g": "p_bedbugs", "text": "הטיפול כולל ריסוס יסודי של המיטות, המזרנים, מסגרות המיטה, הספות והסדקים סביבם.", "st": "ok", "m": ["spray"]}, {"id": "p_bedbugs_1", "g": "p_bedbugs", "text": "יש לכבס מצעים ובגדים ב-60 מעלות לפחות, ולייבש במייבש בחום גבוה.", "st": "ok"}, {"id": "p_bedbugs_2", "g": "p_bedbugs", "text": "פשפש המיטה עמיד, וביצים שבוקעות אחרי הטיפול מחייבות בדרך כלל טיפול נוסף כעבור כשבועיים.", "st": "ok"}, {"id": "p_bedbugs_3", "g": "p_bedbugs", "text": "אין להעביר רהיטים, מזרנים או בגדים מהבית המטופל למקום אחר — זה מפיץ את הנגיעות.", "st": "ok"}];
+const BLK_KEY="h360_instr_blk";
+const blkGet=()=>{ try{ const a=JSON.parse(localStorage.getItem(BLK_KEY)||"null"); return Array.isArray(a)&&a.length?a:BLK_DEFAULT; }catch(e){ return BLK_DEFAULT; } };
+async function blkLoad(){ if(!sb) return blkGet(); try{ const {data}=await sb.storage.from('contracts').list('company',{limit:100,sortBy:{column:'name',order:'desc'}}); const f=(data||[]).filter(x=>/^instrblk-\d+\.json$/.test(x.name)).sort((a,b)=>b.name.localeCompare(a.name))[0]; if(!f) return blkGet();
+  const r=await sb.storage.from('contracts').download('company/'+f.name); if(r.error) return blkGet(); const v=JSON.parse(await r.data.text()); if(Array.isArray(v)&&v.length){ localStorage.setItem(BLK_KEY,JSON.stringify(v)); return v; } }catch(e){} return blkGet(); }
+async function blkSave(list){ localStorage.setItem(BLK_KEY,JSON.stringify(list)); try{ window.dispatchEvent(new Event("h360-blk")); }catch(e){} if(!sb) return; await sb.storage.from('contracts').upload("company/instrblk-"+String(Date.now()).padStart(15,"0")+".json",new Blob([JSON.stringify(list)],{type:"application/json"}),{contentType:"application/json",upsert:false}); }
+function useBlk(){ const [l,setL]=useState(()=>blkGet()); React.useEffect(()=>{ let on=true; blkLoad().then(v=>on&&setL(v)); const h=()=>setL(blkGet()); window.addEventListener("h360-blk",h); return ()=>{on=false;window.removeEventListener("h360-blk",h);}; },[]); return l; }
+// מה נעשה ביומן: שיטות, מקומות, מזיקים
+function blkCtx(f){ const m=new Set(), pl=new Set();
+  (f.materials||[]).forEach(x=>{ const t=String(x.method||""); if(!t||/ריסוס|ערפול/.test(t)) m.add("spray"); if(/ג['׳]ל/.test(t)) m.add("gel"); if(/גרגיר/.test(t)) m.add("granules"); if(/אבק/.test(t)) m.add("dust"); if(/תחנת האכלה/.test(t)) m.add("bait"); });
+  (f.devices||[]).forEach(d=>{ const t=String(d.type||""); if(/תיבת האכלה|תחנת האכלה/.test(t)) m.add("bait"); else if(/מלכוד|ניטור/.test(t)) m.add("traps"); });
+  const pt=String((f.place||{}).type||""); const areas=[...(((f.place||{}).extras)||[]),...(f.materials||[]).flatMap(x=>x.areas||[])].join(" ");
+  if(!pt||!/בניין משותף|חצר/.test(pt)) pl.add("in"); if(/בניין משותף/.test(pt)||/מדרגות|לובי|שטחים משותפים/.test(areas)) pl.add("common"); if(/חצר|גינה|היקף|גדר|שוח|בורות|דשא/.test(areas+" "+pt)) pl.add("yard");
+  const P=[...(f.pest||[]),...String(f.customPest||"").split(",").map(x=>x.trim()).filter(Boolean)]; return {m,pl,P}; }
+const blkGroupOn=(gid,ctx)=>{ if(/^g_/.test(gid)) return true; const d=TERMS_DEFAULT.find(x=>x.id===gid); if(!d) return false; const P=hebFin(ctx.P.join(" ")); return (d.m||[]).some(k=>P.includes(hebFin(k)))&&!(d.not||[]).some(k=>P.includes(hebFin(k))); };
+const blkLineOn=(b,ctx)=>{ if(b.st!=="ok"||b.deleted) return false; const m=b.m||[], nm=b.nm||[], pl=b.pl||[];
+  if(m.length&&!(b.all?m.every(x=>ctx.m.has(x)):m.some(x=>ctx.m.has(x)))) return false; if(nm.some(x=>ctx.m.has(x))) return false; if(pl.length&&!pl.some(x=>ctx.pl.has(x))) return false; return true; };
+// בונה את "מהות הטיפול" מהחלקים המתאימים — אותם מזהים כמו הנוסחים המוכנים (g_spray, g_safety, p_…)
+function blkAssemble(blocks,f){ const ctx=blkCtx(f); const out=[]; const gids=[...new Set(blocks.map(b=>b.g))];
+  gids.forEach(g=>{ if(!blkGroupOn(g,ctx)) return; const L=blocks.filter(b=>b.g===g&&blkLineOn(b,ctx)); if(!L.length) return; const d=TERMS_DEFAULT.find(x=>x.id===g)||{};
+    out.push({id:g,title:d.title||g,text:L.map(b=>"• "+b.text).join("\n")}); }); return out; }
+const blkCondTxt=b=>{ const M=Object.fromEntries(BLK_METHODS), PL=Object.fromEntries(BLK_PLACES); const a=[];
+  if((b.m||[]).length) a.push((b.m||[]).map(x=>M[x]).join(b.all?" + ":" / ")); if((b.nm||[]).length) a.push("בלי "+(b.nm||[]).map(x=>M[x]).join(" / ")); if((b.pl||[]).length) a.push((b.pl||[]).map(x=>PL[x]).join(" / ")); return a.length?a.join(" · "):"תמיד (כשהמזיק מסומן)"; };
 function useTermsTpl(){ const [l,setL]=useState(()=>termsTpl()); React.useEffect(()=>{ let on=true; loadTermsTpl().then(v=>on&&setL(v)); const h=()=>setL(termsTpl()); window.addEventListener("h360-terms",h); return ()=>{on=false;window.removeEventListener("h360-terms",h);}; },[]); return l; }
 // 📜 בחירה אוטומטית לפי המזיק: למכרסמים — "בתוך הבית" בדירה, "חצר/בניין/עסק" בשאר
 const termsAuto=(tpl,pests,hasSpray,place)=>{ const pt=String((place&&place.type)||""), ex=JSON.stringify((place&&place.extras)||[]); const out=/בניין|עסק|מחסן|מסעדה|משרד|גן/.test(pt)||/חצר|גינה/.test(ex);
@@ -1071,7 +1098,7 @@ function WarrantyPicker({f,setF,pests}){
     {mode==="per"&&<div className="h360-hint" style={{fontSize:12,color:"#64748b",marginTop:4}}>"לא להציג" = המזיק לא יופיע בכלל בשורת האחריות.</div>}
   </div>;
 }
-function TermsPicker({f,setF:setF0,pests,hasSpray,onTouch}){
+function TermsPicker({f,setF:setF0,pests,hasSpray,onTouch,onRebuild}){
   const setF=fn=>{ onTouch&&onTouch(); setF0(fn); };
   const tpl=useTermsTpl(); const [more,setMore]=useState(false);
   const rel=termsRelevant(tpl,pests,hasSpray); const chosen=f.terms||[];
@@ -1081,6 +1108,8 @@ function TermsPicker({f,setF:setF0,pests,hasSpray,onTouch}){
   const edit=(id,text)=>setF(x=>({...x,terms:(x.terms||[]).map(c=>c.id===id?{...c,text}:c)}));
   return <div>
     <div className="h360-hint" style={{fontSize:12,color:CLR.muted,marginBottom:8}}>נוסחים מוכנים לפי המזיקים{hasSpray?" והריסוס":""}. מה שמתאים למזיק מסומן לבד — אפשר להוריד V, להוסיף, ולשנות את הטקסט ללקוח הזה. מה שמסומן מופיע ביומן הביצוע ששולחים.</div>
+    {onRebuild&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}><button type="button" onClick={onRebuild} style={{padding:"6px 10px",borderRadius:10,border:"1.5px solid #0284c7",background:"#fff",color:"#0369a1",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🔄 בנה מחדש לפי מה שעשית</button>
+      <button type="button" onClick={()=>window.__h360Nav&&window.__h360Nav("instrblk")} style={{padding:"6px 10px",borderRadius:10,border:"1px solid #cbd5e1",background:"#fff",color:"#475569",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>🧩 חלקי הנחיות</button></div>}
     {!list.length&&<div style={{fontSize:13,color:"#94a3b8",marginBottom:6}}>אין נוסח מוכן למזיקים שנבחרו{hasSpray?"":" (הנוסחים הכלליים מופיעים כשיש ריסוס)"}.</div>}
     {list.map(t=>{ const on=isOn(t.id); const c=chosen.find(x=>x.id===t.id);
       return <div key={t.id} style={{border:"1.5px solid "+(on?"#16a34a":"#e2e8f0"),background:on?"#f0fdf4":"#fff",borderRadius:10,marginBottom:6}}>
@@ -3045,6 +3074,8 @@ function aiNorm(d,chems=[],text=""){
   const matsOk=mats.filter(m=>aiSaid(m,T)); if(matsOk.length<mats.length) out.skipped.push("חומר שלא נאמר: "+mats.filter(m=>!matsOk.includes(m)).join(", "));
   if(matsOk.length){ out.materials=matsOk; out.found.push("חומרים"); }
   out.matReplace=/(אחר|אחרים|אחרת|במקום|החלפתי|הפעם השתמשתי)/.test(T)&&!!matsOk.length;
+  out.noMethods=[]; if(/(בלי|ללא|לא עשיתי|לא ריססתי)\s*(ה)?ריסוס|לא ריססתי/.test(T)) out.noMethods.push("ריסוס"); if(/(בלי|ללא)\s*(ה)?ג.?ל(ים)?(?![א-ת])/.test(T)) out.noMethods.push("ג'ל"); if(/(בלי|ללא)\s*(ה)?גרגירים/.test(T)) out.noMethods.push("פיזור גרגירים");
+  if(/(בלי|ללא)\s*(ה)?מלכודות/.test(T)) out.noTraps=true; if(out.noMethods.length||out.noTraps) out.found.push("בלי: "+[...out.noMethods,...(out.noTraps?["מלכודות"]:[])].join(", "));
   out.devices=aiDevParse(T); if(out.devices.length) out.found.push("מוצרים: "+out.devices.map(x=>x.type+" × "+x.qty).join(", "));
   out.methodHint=AI_METHODS.includes(d.methodHint)?d.methodHint:"";
   out.areas=arr(d.areas); out.spots=arr(d.spots);
@@ -3188,7 +3219,7 @@ const aiOpenGlobal=()=>{ try{ window.dispatchEvent(new Event("h360aiopen")); }ca
 // 📜 תסריט הקראה — מה להגיד ובאיזה סדר, לפי סוג הפעולה
 const AI_SCRIPTS={
   log:{t:"📋 יומן ביצוע",ex:"שירי, תיקן גרמני נגיעות בינונית, ראיתי נימפות וצואה, ריססתי דלתא סופר במטבח ובשירותים, אין צורך לצאת, לא לשטוף 24 שעות, בהערות תרשום שצריך לסגור את הסדק מתחת לכיור, 400 במזומן",
-    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית 1 של תיקן גרמני בפיצריה' — ממלא הכול ומשנה רק את המקום. 'השתמשתי בחומר אחר, ברקת' — מחליף. כמה ביחד: 'תבנית אמריקאי דירה ותבנית גרמני ג׳ל'"],["🪤","מלכודות","'שמתי 5 מלכודות ניטור לתיקנים' — נכנס למוצרים + הנחיה לא לגעת במלכודות"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
+    s:[["👤","לקוח","שם / עסק / כתובת — אם זה לא התור של עכשיו"],["📌","תבנית","'תבנית 1 של תיקן גרמני בפיצריה' — ממלא הכול ומשנה רק את המקום. 'השתמשתי בחומר אחר, ברקת' — מחליף. כמה ביחד: 'תבנית אמריקאי דירה ותבנית גרמני ג׳ל'"],["🪤","מלכודות","'שמתי 5 מלכודות ניטור לתיקנים' — נכנס למוצרים + הנחיה לא לגעת במלכודות"],["➖","בלי","'תבנית גרמני, בלי ריסוס' / 'בלי ג׳ל' / 'בלי מלכודות' — מוריד, וההנחיות מתעדכנות לבד"],["🐛","מזיק ורמת נגיעות","'תיקן גרמני, נגיעות בינונית'"],["🔎","ממצאי ניטור","מה ראית: גללים, בוגרים, נימפות, צואה…"],["🧪","חומר ואיפה","'ריססתי דלתא סופר במטבח' / '3 תיבות האכלה בחצר'"],["🚪","יציאה מהבית","'אין צורך לצאת' / 'לצאת לשעתיים'. בריסוס בלי זמן: מבוגרים שעה, תינוקות 3, בעלי חיים 4"],["🐕","בעלי חיים / תינוק","רק אם יש"],["📌","הנחיות","'הנחיות 1, 3, 5' — לפי המספרים ברשימה למטה, או במילים: 'לאוורר'"],["📜","מהות הטיפול","נבחרת לבד לפי המזיק. לא צריך? 'בלי מהות הטיפול'"],["🛡️","אחריות","רק אם יש: 'אחריות 3 חודשים' / 'אחריות עד 1/4'. תיקן אמריקאי: 'אחריות' = עד 1/4 בשנה הבאה"],["📝","הערות","'בהערות תרשום ש…' — ינוסח יפה"],["💰","מחיר ותשלום","'400 במזומן' / 'לא שילם'"],["🧾","חשבונית?","'וגם חשבונית' — תיפתח אחרי שמירת היומן"]]},
   invoice:{t:"🧾 חשבונית",ex:"חשבונית מס קבלה למלון אלכסנדר, איש קשר דימה, הדברת תיקנים, 1,500 כולל מע״מ, שילם בהעברה",
     s:[["👤","לקוח","שם / עסק / איש קשר"],["🧾","סוג","'חשבונית מס' / 'חשבונית מס קבלה' / 'קבלה'"],["📄","על מה","'הדברת תיקנים' (לא חובה)"],["💰","סכום","'1,500 כולל מע״מ' / 'פלוס מע״מ'"],["💳","תשלום","מזומן / ביט / העברה / צ'ק — לחשבונית מס קבלה"]]},
   appt:{t:"📅 קביעת תור",ex:"תקבע לדימה ממלון אלכסנדר מחר בעשר, תיקנים במטבח, 600 שקל",
@@ -3343,6 +3374,53 @@ function AssistantModal({appointments=[],customers=[],execLogs=[],finance=[],cur
   </Modal>;
 }
 
+
+// 🧩 מסך חלקי ההנחיות — לעבור, לתקן, לאשר טיוטות, ולבדוק מה ייצא
+function BlkScreen(){
+  const blocks=useBlk(); const wide=useWide(); const [ed,setEd]=useState(null); const [busy,setBusy]=useState(false);
+  const [tP,setTP]=useState("תיקן גרמני"); const [tM,setTM]=useState(["gel","spray"]); const [tPl,setTPl]=useState(["in"]);
+  const live=blocks.filter(b=>!b.deleted); const drafts=live.filter(b=>b.st==="draft");
+  const save=async L=>{ setBusy(true); try{ await blkSave(L); }catch(e){ alert("שמירה נכשלה: "+(e.message||e)); } setBusy(false); };
+  const upd=(id,p)=>save(blocks.map(b=>b.id===id?{...b,...p}:b));
+  const gids=[...new Set(live.map(b=>b.g))]; const gTitle=g=>(TERMS_DEFAULT.find(x=>x.id===g)||{}).title||g;
+  const testF={pest:[tP],materials:tM.filter(x=>!["traps","bait"].includes(x)).map(x=>({method:{spray:"ריסוס",gel:"ג'ל",granules:"פיזור גרגירים",dust:"אבקה"}[x],areas:tPl.includes("yard")?["חצר"]:[]})),devices:[...(tM.includes("traps")?[{type:"מלכודת דבק"}]:[]),...(tM.includes("bait")?[{type:"תיבת האכלה כולל רעלים"}]:[])],place:{type:tPl.includes("in")?"דירה":tPl.includes("common")?"בניין משותף":"חצר",extras:[...(tPl.includes("yard")?["חצר / גינה"]:[]),...(tPl.includes("common")&&tPl.includes("in")?["חדר מדרגות"]:[])]}};
+  const res=blkAssemble(blocks,testF);
+  const chip=(on,l,fn,col)=><button type="button" onClick={fn} style={{padding:"5px 10px",borderRadius:16,border:"1.5px solid "+(on?(col||"#16a34a"):"#cbd5e1"),background:on?(col==="#dc2626"?"#fef2f2":"#dcfce7"):"#fff",color:on?(col||"#166534"):"#475569",fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit"}}>{l}</button>;
+  const tog=(arr,x)=>arr.includes(x)?arr.filter(y=>y!==x):[...arr,x];
+  return <div style={{maxWidth:wide?1150:640,margin:"0 auto",padding:"4px 2px"}}>
+    <h2 style={{margin:"0 0 4px",fontSize:20}}>🧩 חלקי הנחיות</h2>
+    <div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:10}}>כל שורה מופיעה ביומן רק כשמה שהיא מתארת באמת נעשה: שיטה (ריסוס, ג'ל, מלכודות…), מקום (מבנה, חצר, חדר מדרגות) ומזיק. אין ג'ל ביומן — לא יהיה כתוב ג'ל. מה שמסומן "⏳ טיוטה" לא נכנס לשום יומן עד שתאשר.</div>
+    {drafts.length>0&&<div style={{background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:12,padding:"8px 12px",marginBottom:10,fontWeight:700,color:"#713f12",fontSize:14}}>⏳ {drafts.length} שורות חדשות מחכות לאישור שלך — מסומנות בצהוב למטה.</div>}
+    <div style={{display:"grid",gridTemplateColumns:wide?"1fr 1.3fr":"1fr",gap:12,alignItems:"start"}}>
+    <div style={{background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:14,padding:10,position:wide?"sticky":"static",top:80}}>
+      <b style={{color:"#0369a1"}}>👁️ בדיקה: מה ייצא ביומן?</b>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0"}}>{[...new Set(TERMS_DEFAULT.filter(t=>/^p_/.test(t.id)).map(t=>t.title.replace(/ בתוך הבית$| בחצר.*$/,"")))].map(x=>chip(tP===x,x,()=>setTP(x)))}</div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0"}}>{BLK_METHODS.map(([k,l])=>chip(tM.includes(k),l,()=>setTM(tog(tM,k))))}</div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0"}}>{BLK_PLACES.map(([k,l])=>chip(tPl.includes(k),l,()=>setTPl(tog(tPl,k))))}</div>
+      <div style={{background:"#fff",borderRadius:10,padding:"8px 10px",fontSize:13,lineHeight:1.6,maxHeight:wide?"60vh":340,overflowY:"auto"}}>{res.length?res.map(t=><div key={t.id} style={{marginBottom:8}}><b style={{color:"#1a5c3a"}}>{termTitleFor(t,{pest:[tP],materials:testF.materials})}</b><div style={{whiteSpace:"pre-wrap"}}>{t.text}</div></div>):<span style={{color:"#94a3b8"}}>אין שורות למצב הזה</span>}</div>
+    </div>
+    <div>{gids.map(g=><div key={g} style={{marginBottom:12}}>
+      <div style={{fontSize:15.5,fontWeight:800,color:"#0369a1",margin:"6px 2px"}}>{/^g_/.test(g)?"📜 ":"🐛 "}{gTitle(g)}</div>
+      {live.filter(b=>b.g===g).map(b=>{ const e=ed&&ed.id===b.id; const dr=b.st==="draft";
+        return <div key={b.id} style={{background:dr?"#fefce8":"#fff",border:"1.5px solid "+(dr?"#fde047":"#e2e8f0"),borderRadius:12,padding:"8px 10px",marginBottom:6}}>
+          {e?<div>
+            <textarea value={ed.text} onChange={x=>setEd({...ed,text:x.target.value})} rows={4} style={{width:"100%",boxSizing:"border-box",padding:"7px 9px",borderRadius:8,border:"1.5px solid #0284c7",fontSize:14,fontFamily:"inherit",lineHeight:1.5}}/>
+            <div style={{fontSize:12,color:"#475569",margin:"6px 0 3px"}}>מופיע כשיש (לחיצה: ✓ צריך · ✗ בלי):</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{BLK_METHODS.map(([k,l])=>{ const st=ed.m.includes(k)?1:ed.nm.includes(k)?2:0; return chip(st>0,(st===2?"✗ ":st===1?"✓ ":"")+l,()=>setEd({...ed,m:st===0?[...ed.m,k]:ed.m.filter(x=>x!==k),nm:st===1?[...ed.nm,k]:ed.nm.filter(x=>x!==k)}),st===2?"#dc2626":null); })}
+              {ed.m.length>1&&chip(ed.all,"צריך את כולן",()=>setEd({...ed,all:!ed.all}),"#0369a1")}</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:5}}>{BLK_PLACES.map(([k,l])=>chip(ed.pl.includes(k),l,()=>setEd({...ed,pl:tog(ed.pl,k)})))}<span style={{fontSize:11.5,color:"#94a3b8",alignSelf:"center"}}>בלי סימון = בכל מקום</span></div>
+            <div style={{display:"flex",gap:6,marginTop:8}}><button type="button" disabled={busy} onClick={async()=>{ const t=String(ed.text||"").replace(/\s+/g," ").trim(); if(!t) return; await upd(b.id,{text:t,m:ed.m,nm:ed.nm,pl:ed.pl,all:!!ed.all&&ed.m.length>1}); setEd(null); }} style={{flex:1,padding:8,borderRadius:8,border:"none",background:"#0284c7",color:"#fff",fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>💾 שמור</button>
+              <button type="button" onClick={()=>setEd(null)} style={{padding:"8px 12px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",cursor:"pointer",fontFamily:"inherit"}}>ביטול</button></div>
+          </div>:<>
+            <div style={{fontSize:14,lineHeight:1.55,userSelect:"text"}}>{dr&&<b style={{color:"#a16207"}}>⏳ טיוטה · </b>}{b.text}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}><span style={{fontSize:12,color:"#0369a1",background:"#f0f9ff",borderRadius:10,padding:"2px 8px",flex:1}}>מופיע כש: {blkCondTxt(b)}</span>
+              {dr&&<button type="button" disabled={busy} onClick={()=>upd(b.id,{st:"ok"})} style={{padding:"4px 10px",borderRadius:8,border:"none",background:"#16a34a",color:"#fff",fontWeight:800,fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>✅ אשר</button>}
+              <button type="button" onClick={()=>setEd({id:b.id,text:b.text,m:[...(b.m||[])],nm:[...(b.nm||[])],pl:[...(b.pl||[])],all:!!b.all})} style={{padding:"4px 9px",borderRadius:8,border:"1px solid #cbd5e1",background:"#fff",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>✏️</button>
+              <button type="button" onClick={()=>{ if(confirm("למחוק את השורה?")) upd(b.id,{deleted:true}); }} style={{padding:"4px 9px",borderRadius:8,border:"1px solid #fecaca",background:"#fff",color:"#dc2626",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>🗑️</button></div></>}
+        </div>; })}
+      <button type="button" onClick={async()=>{ const id="u"+Date.now(); await save([...blocks,{id,g,text:"שורה חדשה — לחץ ✏️ לכתוב",st:"ok"}]); setEd({id,text:"",m:[],nm:[],pl:[],all:false}); }} style={{border:"1.5px dashed #cbd5e1",background:"#fff",borderRadius:10,padding:"6px 10px",fontSize:13,color:"#475569",cursor:"pointer",fontFamily:"inherit"}}>+ שורה ל"{gTitle(g)}"</button>
+    </div>)}</div></div>
+  </div>; }
 // ✏️ פרטי תבנית: שם, "למה מתאימה", מספר שבוחרים, מחיקה
 function LogTplDetails({t,all,onDone}){
   const [nm,setNm]=useState(t.name); const [ds,setDs]=useState(t.desc||""); const [num,setNum]=useState(String(logTplNum(all,t))); const [busy,setBusy]=useState(false);
@@ -3585,10 +3663,11 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     const allKnown=new Set([...INSTR_BASE,...INSTR_BY_PEST.flatMap(x=>x.t),...INSTR_RODENT_BAIT,...INSTR_PETS,...INSTR_BABY]);
     if(!touched.current.instr){
       let ins=prev&&(prev.instructions||[]).length?prev.instructions.filter(t=>relSet.has(t)):null;
-      const safetyOn=touched.current.terms?(f.terms||[]).some(t=>t.id==="g_safety"):termsAuto(termsTplL,allP,hasSpray,f.place).some(t=>t.id==="g_safety");
+      const safetyOn=touched.current.terms?(f.terms||[]).some(t=>t.id==="g_safety"):blkAssemble(blocksL,f).some(t=>t.id==="g_safety");
       if(!ins||!ins.length){ ins=[...(hasSpray&&!safetyOn?[INSTR_BASE[0],INSTR_BASE[1],INSTR_BASE[3]]:[]),...(hasSpray&&isInsect(allP)?[INSTR_BASE[5]]:[]),...(hasBait?INSTR_TRAPS:[]),...(rodentNow&&!hasSpray&&hasBait?[INSTR_RODENT_BAIT[0],"לדווח לנו על פגרים או ריח"]:[])]; }
       if(f.hasPets||f.hasBaby) ins=ins.concat([...(!safetyOn?[INSTR_BASE[1]]:[]),...(f.hasPets?INSTR_PETS:[]),...(f.hasBaby?INSTR_BABY:[])]);
       if(safetyOn) ins=ins.filter(t=>!INSTR_IN_SAFETY.includes(t));
+      { const cx=blkCtx(f); ins=ins.filter(t=>!(/ג['׳]ל/.test(t)&&!cx.m.has("gel"))&&!(/מלכוד/.test(t)&&!cx.m.has("traps")&&!cx.m.has("bait"))&&!(/גרגיר/.test(t)&&!cx.m.has("granules"))&&!(/תחנ|תיב/.test(t)&&!cx.m.has("bait")&&!cx.m.has("traps"))); }
       ins=[...new Set(ins)].filter(t=>!instrHiddenGet().includes(t));
       setF(x=>({...x,instructions:ins}));
     } else {
@@ -3610,9 +3689,10 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
   const [instrHidden,setInstrHidden]=useState(instrHiddenGet);
   // 📜 מהות הטיפול — נבחרת לבד לפי המזיק והריסוס (עד שנוגעים בה ידנית)
   const termsTplL=useTermsTpl(); const placeKey=JSON.stringify(f.place||{});
-  React.useEffect(()=>{ if(touched.current.terms) return; const allP=[...f.pest,f.customPest].filter(Boolean); const rel=termsAuto(termsTplL,allP,hasSpray,f.place);
-    setF(x=>{ const keep=(x.terms||[]).filter(t=>t.id==="nowarr"); const nt=[...rel.map(t=>{ const c=(x.terms||[]).find(y=>y.id===t.id); return c||{id:t.id,title:t.title,text:t.text}; }),...keep];
-      return JSON.stringify(nt)===JSON.stringify(x.terms||[])?x:{...x,terms:nt}; }); },[pestKey,hasSpray,placeKey,termsTplL]);
+  const blocksL=useBlk();
+  const rebuildTerms=()=>setF(x=>{ const keep=(x.terms||[]).filter(t=>t.id==="nowarr"); const nt=[...blkAssemble(blocksL,x),...keep]; return JSON.stringify(nt)===JSON.stringify(x.terms||[])?x:{...x,terms:nt}; });
+  // 📜 מהות הטיפול נבנית מחלקי ההנחיות לפי מה שנעשה (מזיק · שיטה · מקום) — עד שנוגעים בה ידנית
+  React.useEffect(()=>{ if(touched.current.terms) return; rebuildTerms(); },[pestKey,matKey,placeKey,blocksL]);
   // תיבות האכלה חדשות / מילוי → נכנסות אוטומטית ל"מוצרי הדברה"
   const spotTotals=RODENT_SPOTS.map(([k])=>f.materials.reduce((s0,m)=>s0+(parseInt(m[k])||0),0));
   const newBoxes=spotTotals[0], refillBoxes=spotTotals[1];
@@ -3676,6 +3756,8 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
           put("תיבת האכלה כולל רעלים",r.boxesNew); } }
       if((r.spots||[]).length) devices=devices.map(d=>/תיבת (?:האכלה|הכלה)|מילוי רעל/.test(d.type)&&!d.location?{...d,location:r.spots.join(", ")}:d);
       (r.devices||[]).forEach(dv=>{ const k=devices.findIndex(z=>z.type===dv.type); if(k>=0) devices[k]={...devices[k],qty:dv.qty,auto:false}; else devices.push({type:dv.type,qty:dv.qty,location:""}); });
+      if((r.noMethods||[]).length) mats=mats.filter(m=>!(r.noMethods.includes(m.method)||(!m.method&&r.noMethods.includes("ריסוס")))||(r.materials||[]).includes(m.name));
+      if(r.noTraps) devices=devices.filter(d=>!/מלכוד|ניטור/.test(d.type||""));
       nx.materials=mats; nx.devices=devices;
       if(r.reentry0) nx.reentry={adults:"0",babies:"0",animals:"0"};
       else if(r.reentryAdults||r.reentryBabies||r.reentryAnimals) nx.reentry={...x.reentry,...(r.reentryAdults?{adults:r.reentryAdults}:{}),...(r.reentryBabies?{babies:r.reentryBabies}:{}),...(r.reentryAnimals?{animals:r.reentryAnimals}:{})};
@@ -3926,7 +4008,7 @@ function ExecLogForm({worker,prefillAppt,initialData,onPreview,workers=[],appoin
     </div>
 
     </>)}
-    {sec("terms","📜","מהות הטיפול",f.terms.length?f.terms.map(t=>t.title).join(" · "):"לא חובה",f.terms.length?"ok":"opt",<TermsPicker f={f} setF={setF} pests={allPests} hasSpray={hasSpray} onTouch={()=>{touched.current.terms=true;}}/>)}
+    {sec("terms","📜","מהות הטיפול",f.terms.length?f.terms.map(t=>t.title).join(" · "):"לא חובה",f.terms.length?"ok":"opt",<TermsPicker f={f} setF={setF} pests={allPests} hasSpray={hasSpray} onTouch={()=>{touched.current.terms=true;}} onRebuild={()=>{ touched.current.terms=false; rebuildTerms(); showToast("🧩 מהות הטיפול נבנתה מחדש לפי מה שעשית"); }}/>)}
     {sec("warranty","🛡️","אחריות",warrShort(f)||"בלי אחריות — לא מופיע במסמך",warrShort(f)?"ok":"opt",<WarrantyPicker f={f} setF={setF} pests={allPests}/>)}
     {sec("notes","📝","הערות",[f.notes?f.notes.slice(0,40)+(f.notes.length>40?"…":""):""].filter(Boolean).join(" · "),f.notes?"ok":"opt",<>
     <div style={{marginBottom:14}}>
@@ -8485,7 +8567,7 @@ function permOf(u,id){
   if(!u||!u.role) return true;
   if(u.role==="מנהל"||id==="settings") return true;
   if(id==="debts") return permOf(u,"invoices")===true;
-  if(id==="aihist"||id==="logtpl") return permOf(u,"execlog")===true;
+  if(id==="aihist"||id==="logtpl"||id==="instrblk") return permOf(u,"execlog")===true;
   const p=u.permissions||{};
   if(p[id]!==undefined&&p[id]!==null) return p[id];
   return (ROLE_PERMS[u.role]||ROLE_PERMS["פקידה"])[id]||false;
@@ -14606,7 +14688,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "249";
+const APP_BUILD = "250";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -14987,6 +15069,7 @@ function App(){
     {id:"execlog",label:"📋 יומן ביצוע",short:"📋"},
     {id:"aihist",label:"🤖 היסטוריית עוזר",short:"🤖"},
     {id:"logtpl",label:"📌 תבניות יומן",short:"📌"},
+    {id:"instrblk",label:"🧩 חלקי הנחיות",short:"🧩"},
     {id:"mychems",label:"🧪 החומרים שלי",short:"🧪"},
     {id:"invoices",label:"🧾 חשבוניות",short:"🧾",hideFor:"מדביר"},
     {id:"debts",label:"💳 חובות",short:"💳",hideFor:"מדביר"},
@@ -15025,7 +15108,7 @@ function App(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",aihist:"היסטוריית עוזר",logtpl:"תבניות יומן",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים",mychems:"החומרים שלי",trash:"סל מחזור"};
+  const tabLabel={settings:"הגדרות",fieldview:"המשימות שלי",dashboard:"דשבורד",neworder:"הזמנת עבודה",customers:"לקוחות",leads:"לידים מהאתר",calendar:"יומן עבודה",execlog:"יומן ביצוע",aihist:"היסטוריית עוזר",logtpl:"תבניות יומן",instrblk:"חלקי הנחיות",invoices:"חשבוניות",debts:"חובות",expenses:"הוצאות",maintenance:"אחזקות",projects:"פרויקטים",notes:"הערות",templates:"תבניות הודעה",scheduler:"הודעות מתוזמנות",regional:"ניתוח אזורי",finance:"כספים",collabs:"שיתופי פעולה",workers:"עובדים",mychems:"החומרים שלי",trash:"סל מחזור"};
 
   if(!authUser) return <LoginScreen onLogin={doLogin}/>;
 
@@ -15047,7 +15130,7 @@ function App(){
         <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
           {[
             {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות",hide:null},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"logtpl",icon:"📌",name:"תבניות יומן",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+            {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה",hide:null},{id:"execlog",icon:"📋",name:"יומן ביצוע",hide:null},{id:"logtpl",icon:"📌",name:"תבניות יומן",hide:null},{id:"instrblk",icon:"🧩",name:"חלקי הנחיות",hide:null},{id:"mychems",icon:"🧪",name:"החומרים שלי",hide:null},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
             {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות",hide:null},{id:"finance",icon:"💰",name:"כספים",hide:null}]},
             {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
             {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות",hide:null},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות",hide:null}]},
@@ -15151,7 +15234,7 @@ function App(){
             <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
               {(()=>{ const groups=[
                 {lbl:"ראשי",items:[{id:"fieldview",icon:"📋",name:"המשימות שלי",workerOnly:true},{id:"dashboard",icon:"📊",name:"דשבורד",hide:"מדביר"},{id:"neworder",icon:"📝",name:"הזמנת עבודה"+(hasOrderDraft?" ✏️":""),hide:"מדביר"},{id:"customers",icon:"👤",name:"לקוחות"},{id:"leads",icon:"🌐",name:"לידים מהאתר"+(newLeadsCount?` (${newLeadsCount})`:""),hide:"מדביר"}]},
-                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"logtpl",icon:"📌",name:"תבניות יומן"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
+                {lbl:"עבודה",items:[{id:"calendar",icon:"📅",name:"יומן עבודה"},{id:"execlog",icon:"📋",name:"יומן ביצוע"},{id:"logtpl",icon:"📌",name:"תבניות יומן"},{id:"instrblk",icon:"🧩",name:"חלקי הנחיות"},{id:"mychems",icon:"🧪",name:"החומרים שלי"},{id:"maintenance",icon:"🔁",name:"אחזקות",hide:"מדביר"},{id:"projects",icon:"🏗️",name:"פרויקטים",hide:"מדביר"}]},
                 {lbl:"כספים",items:[{id:"invoices",icon:"🧾",name:"חשבוניות",hide:"מדביר"},{id:"debts",icon:"💳",name:"חובות"+(debtCount?" ("+debtCount+")":""),hide:"מדביר"},{id:"expenses",icon:"💸",name:"הוצאות"},{id:"finance",icon:"💰",name:"כספים"}]},
                 {lbl:"תקשורת",items:[{id:"templates",icon:"💬",name:"תבניות הודעה",hide:"מדביר"},{id:"scheduler",icon:"⏰",name:"הודעות מתוזמנות",hide:"מדביר"},{id:"collabs",icon:"🤝",name:"שיתופי פעולה",hide:"מדביר"}]},
                 {lbl:"ניהול",items:[{id:"notes",icon:"📓",name:"הערות"},{id:"regional",icon:"🗺️",name:"ניתוח אזורי",hide:"מדביר"},{id:"workers",icon:"👥",name:"עובדים",admin:true},{id:"trash",icon:"🗑️",name:"סל מחזור",admin:true},{id:"settings",icon:"⚙️",name:"הגדרות"}]},
@@ -15221,6 +15304,7 @@ function App(){
             {aiOpenG&&user&&<AssistantModal mem={AI_MEM} appointments={appointments} customers={customers} execLogs={execLogs} finance={activeFinance} currentUser={user} onClose={()=>setAiOpenG(false)}
               onOpenLog={(a,d)=>aiAct("log",{a,d})} onOpenInvoice={a=>aiAct("inv",{a})} onOpenAppt={p=>aiAct("appt",p)}/>}
             {tab==="logtpl"&&<LogTplScreen/>}
+            {tab==="instrblk"&&<BlkScreen/>}
             {tab==="aihist"&&<div style={{maxWidth:isMobile?640:1100,margin:"0 auto",padding:"4px 2px"}}><h2 style={{margin:"0 0 4px",fontSize:20}}>🤖 היסטוריית עוזר</h2><div className="h360-hint" style={{fontSize:13.5,color:"#64748b",marginBottom:12}}>כל מה שביקשת מהעוזר, מהחדש לישן. לחץ "ערוך" כדי לתקן את היומן או לצפות בחשבונית. (נשמר במכשיר הזה)</div><AssistantHistory execLogs={execLogs} finance={activeFinance}/></div>}
             {tab==="notes"&&<Notes notes={activeNotes} setNotes={setNotes} currentUser={user} workers={activeWorkers}/>}
             {tab==="templates"&&<MsgTemplates templates={msgTemplates} setTemplates={setMsgTemplates} customers={customers} appointments={jobAppointments}/>}
