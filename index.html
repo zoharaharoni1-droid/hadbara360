@@ -2100,8 +2100,10 @@ function SendModal({log,doc,phone,customers=[],saved,onClose}){
   const name=(log&&log.clientName)||(doc&&(doc.customer||(doc.cust&&doc.cust.name)))||"";
   const what=log&&doc?"יומן ביצוע + "+doc.docType:log?"יומן ביצוע "+(log.docNum||""):doc.docType;
   const okPh=ph.replace(/\D/g,"").length>=9, okEm=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.trim());
-  const L=ready?sendLinks(ph,em.trim(),ready):null;
-  const done=()=>{ try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); if(doc) window.__h360MarkDocSent&&window.__h360MarkDocSent(doc); }catch(_){} setTimeout(onClose,300); };
+  const [rev,setRev]=useState(false);
+  const withRev=t=>{ const add="⭐ אם הייתם מרוצים, נשמח מאוד לביקורת קצרה בגוגל — זה עוזר לנו מאוד:\n"+googleReviewUrl(); return t.includes("תודה רבה! 🙏")?t.replace("תודה רבה! 🙏",add+"\n\nתודה רבה! 🙏"):t+"\n\n"+add; };
+  const L=ready?sendLinks(ph,em.trim(),rev&&log?{...ready,text:withRev(ready.text)}:ready):null;
+  const done=()=>{ try{ if(log) window.__h360MarkLogSent&&window.__h360MarkLogSent(log); if(doc) window.__h360MarkDocSent&&window.__h360MarkDocSent(doc); if(rev&&log) window.__h360MarkReview&&window.__h360MarkReview(log); }catch(_){} setTimeout(onClose,300); };
   const chBtn=(href,label,bg,fg,ok,need,extra={})=>ok&&L?<a href={href} target={/^https?:/.test(href)?"_blank":undefined} rel="noopener" onClick={done} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 10px",borderRadius:12,background:bg,color:fg,fontWeight:700,fontSize:15,textDecoration:"none",border:extra.border||"none"}}>{label}</a>
     :<button type="button" onClick={()=>alert(!L?"רגע — מכין את הקישור…":need)} style={{padding:"12px 10px",borderRadius:12,background:"#f1f5f9",color:"#94a3b8",fontWeight:700,fontSize:15,border:"none",fontFamily:"inherit",cursor:"pointer"}}>{label}</button>;
   const lab={fontSize:13,fontWeight:700,color:"#334155",display:"block",marginBottom:4};
@@ -2117,6 +2119,10 @@ function SendModal({log,doc,phone,customers=[],saved,onClose}){
       <button type="button" onClick={()=>{setOther(true);setPh("");}} style={chip(other)}>✏️ מספר אחר</button>
     </div>
     {other&&<input autoFocus value={ph} onChange={e=>setPh(e.target.value)} inputMode="tel" placeholder="050-1234567" style={{...inp,marginBottom:6}}/>}
+    {log&&<label style={{display:"flex",alignItems:"center",gap:8,margin:"10px 0 2px",padding:"9px 11px",borderRadius:10,background:rev?"#fef9c3":"#f8fafc",border:"1px solid "+(rev?"#facc15":"#e2e8f0"),cursor:"pointer",fontSize:14,fontWeight:700,color:"#854d0e"}}>
+      <input type="checkbox" checked={rev} onChange={e=>setRev(e.target.checked)} style={{width:18,height:18}}/>
+      <span>⭐ להוסיף בקשה לביקורת בגוגל{log.reviewRequestedAt?<span style={{fontWeight:400,color:"#64748b",fontSize:12}}> · כבר נשלחה ב־{fmtDate(String(log.reviewRequestedAt).slice(0,10))}</span>:null}</span>
+    </label>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,margin:"8px 0 14px"}}>
       {chBtn(L&&L.wa,"💬 וואטסאפ","#25D366","#fff",okPh,"כתוב מספר טלפון תקין")}
       {chBtn(L&&L.wab,"💼 וואטסאפ ביזנס","#075E54","#fff",okPh,"כתוב מספר טלפון תקין")}
@@ -14718,7 +14724,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "253";
+const APP_BUILD = "254";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -15077,6 +15083,7 @@ function App(){
   const [sendReq,setSendReq]=useState(null);
   React.useEffect(()=>{ window.__h360Send=r=>setSendReq(r); return ()=>{ if(window.__h360Send) delete window.__h360Send; }; },[]);
   React.useEffect(()=>{ window.__h360MarkDocSent=doc=>{ if(!doc) return; setFinance(fs=>fs.map(f=>((doc.id!=null&&String(f.id)===String(doc.id))||(doc.invoiceNum&&f.invoiceNum===doc.invoiceNum))&&!f.sentAt?{...f,sentAt:new Date().toISOString()}:f)); }; },[]);
+  React.useEffect(()=>{ window.__h360MarkReview=log=>{ if(!log) return; setExecLogs(ls=>ls.map(l=>((log.id!=null&&String(l.id)===String(log.id))||(log.docNum&&String(l.docNum)===String(log.docNum)))?{...l,reviewRequestedAt:todayStr()}:l)); }; return ()=>{ delete window.__h360MarkReview; }; },[]);
   React.useEffect(()=>{ window.__h360MarkLogSent=log=>{ if(!log) return; try{ window.dispatchEvent(new CustomEvent("h360-logsent",{detail:{id:log.id,docNum:log.docNum}})); }catch(_){} setExecLogs(ls=>ls.map(l=>((log.id!=null&&String(l.id)===String(log.id))||(log.docNum&&String(l.docNum)===String(log.docNum)))&&!l.sentAt?{...l,sentAt:new Date().toISOString()}:l)); }; },[]);
   // One-time: give old logs (EL-xxxxxx) simple serial numbers starting at 1001, in creation order
   React.useEffect(()=>{
