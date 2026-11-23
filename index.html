@@ -1804,9 +1804,14 @@ async function htmlPdfBlob(innerHtml,opts){
       cuts.add(Math.round(b)); cuts.add(Math.round(t));
       // לא חותכים באמצע שורה של טבלה, שורת טקסט, תמונה או בלוק קטן
       if(r.height<PAGE_H*0.35||/^(TR|IMG|SVG|LI|P|H1|H2|H3|H4|SPAN|B|A)$/i.test(el.tagName)) atoms.push([t+1,b-1]); });
+    // שורות טקסט בתוך פסקה ארוכה: חותכים רק בין שורות, אף פעם לא באמצע שורה
+    const lines=[]; const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const rg=document.createRange();
+    for(let n=tw.nextNode();n;n=tw.nextNode()){ if(!n.nodeValue.trim()) continue; rg.selectNodeContents(n);
+      for(const r of rg.getClientRects()){ if(!(r.height>0)) continue; const t=r.top-top0, b=r.bottom-top0; lines.push([t+0.5,b-0.5]); cuts.add(Math.round(b)+1); cuts.add(Math.floor(t)-1); } }
     const sorted=[...cuts].filter(c=>c>0&&c<=H).sort((a,b)=>a-b);
-    const okCut=c=>!atoms.some(([t,b])=>c>t&&c<b);
-    const valid=sorted.filter(okCut);
+    const inLine=c=>lines.some(([t,b])=>c>t&&c<b);
+    const okCut=c=>!inLine(c)&&!atoms.some(([t,b])=>c>t&&c<b);
+    const valid=sorted.filter(okCut), lineSafe=sorted.filter(c=>!inLine(c));
     // ציור ל-SVG
     const xhtml=new XMLSerializer().serializeToString(root);
     const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xhtml}</foreignObject></svg>`;
@@ -1820,7 +1825,7 @@ async function htmlPdfBlob(innerHtml,opts){
     while(y<H-2){
       const avail=PAGE_H-(page>0?TOPP:0)-BOT; let end;
       if(y+avail>=H) end=H;
-      else { const lo=y+avail*0.35, hi=y+avail; let c=valid.filter(c=>c>lo&&c<=hi); if(!c.length) c=sorted.filter(c=>c>lo&&c<=hi); end=c.length?c[c.length-1]:hi; }
+      else { const lo=y+avail*0.35, hi=y+avail; let c=valid.filter(c=>c>lo&&c<=hi); if(!c.length) c=lineSafe.filter(c=>c>y+avail*0.1&&c<=hi); if(!c.length) c=sorted.filter(c=>c>lo&&c<=hi); end=c.length?c[c.length-1]:hi; }
       const sliceH=end-y; const pc=document.createElement('canvas'); pc.width=W*SC; pc.height=sliceH*SC;
       const px=pc.getContext('2d'); px.fillStyle="#fff"; px.fillRect(0,0,pc.width,pc.height); px.drawImage(full,0,y*SC,W*SC,sliceH*SC,0,0,W*SC,sliceH*SC);
       if(page>0) pdf.addPage();
@@ -14742,7 +14747,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "256";
+const APP_BUILD = "257";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
