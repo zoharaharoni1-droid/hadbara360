@@ -14747,7 +14747,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "257";
+const APP_BUILD = "258";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -15376,7 +15376,7 @@ function App(){
             {tab==="collabs"&&<Collabs collabs={collabs} setCollabs={setCollabs} appointments={jobAppointments}/>}
             {tab==="workers"&&<Workers workers={activeWorkers} setWorkers={setWorkers} appointments={jobAppointments} execLogs={execLogs} finance={activeFinance}/>}
             {tab==="trash"&&<TrashBin items={trashItems} currentUser={user}/>}
-            {sendReq&&<SendModal log={sendReq.log} doc={sendReq.doc} phone={sendReq.phone} customers={customers} onClose={()=>setSendReq(null)}/>}
+            {sendReq&&ReactDOM.createPortal(<div style={{position:"relative",zIndex:9500}}><SendModal log={sendReq.log} doc={sendReq.doc} phone={sendReq.phone} customers={customers} onClose={()=>setSendReq(null)}/></div>,document.body)}
             </div>
 
         
