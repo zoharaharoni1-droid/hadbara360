@@ -8787,7 +8787,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
   const setEC=(k,v)=>setEditCustData(x=>({...x,[k]:v}));
   const [showNew,setShowNew]=useState(false);
   const [nextFor,setNextFor]=useState(null);
-  const [showImport,setShowImport]=useState(false);
+  const [showImport,setShowImport]=useState(false); const [showYesh,setShowYesh]=useState(false); const yeshArch=YESH_STORE.use();
   React.useEffect(()=>{ const id=window.__h360OpenCustomer; if(id==null) return; window.__h360OpenCustomer=null; const c=customers.find(x=>String(x.id)===String(id)); if(c) setSel(c); },[]);
   const [showCalc,setShowCalc]=useState(false);
   const [invAppt,setInvAppt]=useState(null); const [invLog,setInvLog]=useState(null);
@@ -8846,6 +8846,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       <Btn v="accent" sm onClick={()=>setShowCalc(true)}>🧮 מחשבון</Btn>
       <Btn sm v="secondary" onClick={()=>exportCustomers(customers)}>📥 ייצא Excel</Btn>
       {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowImport(true)}>📂 ייבוא לקוחות</Btn>}
+      {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowYesh(true)}>📁 מסמכים מיש חשבונית</Btn>}
       <button onClick={()=>setShowArchive(a=>!a)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(showArchive?"#f59e0b":CLR.border),background:showArchive?"#fef9c3":"transparent",color:showArchive?"#92400e":CLR.muted,cursor:"pointer",fontSize:13,fontWeight:showArchive?700:400}}>
         {showArchive?"← חזור לפעילים":"📦 ארכיון ("+archivedCustomers.length+")"}
       </button>
@@ -8857,6 +8858,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       <Btn v="accent" sm onClick={()=>setShowCalc(true)}>🧮 מחשבון</Btn>
       <Btn sm v="secondary" onClick={()=>exportCustomers(customers)}>📥 ייצא Excel</Btn>
       {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowImport(true)}>📂 ייבוא לקוחות</Btn>}
+      {isAdminUser()&&<Btn sm v="secondary" onClick={()=>setShowYesh(true)}>📁 מסמכים מיש חשבונית</Btn>}
       <button onClick={()=>setShowArchive(a=>!a)} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(showArchive?"#f59e0b":CLR.border),background:showArchive?"#fef9c3":"transparent",color:showArchive?"#92400e":CLR.muted,cursor:"pointer",fontSize:13,fontWeight:showArchive?700:400}}>
         {showArchive?"← חזור לפעילים":"📦 ארכיון ("+archivedCustomers.length+")"}
       </button>
@@ -9036,6 +9038,8 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           </div>}
         </>;
       })()}
+      {(()=>{ const L=(yeshArch||[]).filter(x=>String(x.custId)===String(sel.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date))); if(!L.length) return null;
+        return <details style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 12px",margin:"8px 0"}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700}}>📁 מסמכים מיש חשבונית ({L.length})</summary>{L.map(x=><YeshDocRow key={x.k} x={x}/>)}</details>; })()}
       {sel.notes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>⚠️ <b>הערות:</b> {sel.notes}</div>}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"16px 0 8px"}}>
         <h3 style={{fontSize:14,color:CLR.primary,margin:0}}>📋 ציר זמן טיפולים</h3>
@@ -9141,6 +9145,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
       </div>
     </Modal>}
     {showImport&&<CustomerImport customers={customers} setCustomers={setCustomers} onClose={()=>setShowImport(false)}/>}
+    {showYesh&&<YeshDocsImport customers={customers} setCustomers={setCustomers} onClose={()=>setShowYesh(false)}/>}
       {showNew&&<NewCustomerModal onCreated={c=>setNextFor(c)} onClose={()=>setShowNew(false)} workers={workers} customers={customers}
       onSave={c=>upsertCustomerRec(c,customers,setCustomers)}
       onSchedule={appt=>setAppointments(as=>[...as,{...appt,id:nextId(as)}])}/>}
@@ -9758,7 +9763,7 @@ function SignSetupModal({onClose}){
   </Modal>;
 }
 
-async function nextOfficialSeq(type){ const st=docSet(); const {data,error}=await sb.rpc('next_doc_seq',{p_type:type,p_min:parseInt((st.start||{})[type])||1}); if(error) throw new Error(error.message||"שגיאת מספור"); if(!(data>0)) throw new Error("לא התקבל מספר מהשרת"); return data; }
+async function nextOfficialSeq(type){ const st=docSet(); const {data,error}=await sb.rpc('next_doc_seq',{p_type:type,p_min:Math.max(parseInt((st.start||{})[type])||1,yeshMaxNum(type)+1)}); if(error) throw new Error(error.message||"שגיאת מספור"); if(!(data>0)) throw new Error("לא התקבל מספר מהשרת"); return data; }
 const PAY_METHODS_DOC = ["מזומן","ביט","פייבוקס","העברה בנקאית","צ׳ק","כרטיס אשראי","ניכוי במקור","אחר"];
 const PAY_ICON = {"מזומן":"💵","ביט":"🅑","פייבוקס":"🅿️","העברה בנקאית":"🏦","צ׳ק":"🧾","כרטיס אשראי":"💳","ניכוי במקור":"📉","אחר":"…"};
 const DOC_ITEM_DEFAULTS = ["הדברת תיקן אמריקאי – ריסוס פנלים וניקוזים","הדברת תיקן גרמני – ג׳לים ומלכודות","הדברת נמלים","הדברת פרעושים","לכידת מכרסמים","הסרת קן צרעות","הדברת פשפש מיטה","הדברת בניין – חדר מדרגות, חצר וביובים","אחזקה חודשית – הדברה משולבת","ביקור חוזר / טיפול המשך"];
@@ -9779,8 +9784,12 @@ function docTotals(lines, inclVat, discount, roundTotal){
   before=r2(before); total=r2(total);
   return {gross:r2(gross),disc,before,vat:r2(total-before),total};
 }
+// 📁 ארכיון "יש חשבונית": המסמכים שהופקו שם (PDF בענן + פרטים), כדי שיהיו בכרטיס הלקוח והמספור ימשיך מהם
+const YESH_STORE=makeCompanyStore("yesharch","h360_yesh_arch",()=>[],"h360-yesharch");
+const yeshMaxNum=type=>Math.max(0,...(YESH_STORE.get()||[]).filter(x=>x&&x.type===type).map(x=>parseInt(x.num)||0));
+async function yeshOpenPdf(x){ const w=window.open("","_blank"); try{ const {data,error}=await sb.storage.from('contracts').createSignedUrl(x.path,3600); if(error) throw error; if(w) w.location.href=data.signedUrl; else window.open(data.signedUrl,"_blank"); }catch(e){ try{ w&&w.close(); }catch(_){} alert("לא הצלחתי לפתוח את הקובץ: "+(e.message||e)); } }
 function nextDocNum(finance, type){
-  const nums=(finance||[]).filter(f=>isDocRec(f)&&docTypeOf(f)===type).map(f=>parseInt(f.docSeq)||0);
+  const nums=(finance||[]).filter(f=>isDocRec(f)&&docTypeOf(f)===type).map(f=>parseInt(f.docSeq)||0); nums.push(yeshMaxNum(type));
   return (nums.length?Math.max(...nums):0)+1;
 }
 function needsAllocation(type, beforeVat, custTaxId){
@@ -10354,7 +10363,7 @@ function NumberingSetupModal({onClose}){
 function GoLiveModal({finance,onClose}){
   const [chk,setChk]=useState(""); const [busy,setBusy]=useState(false);
   const TYPES=["חשבונית מס/קבלה","חשבונית מס","קבלה","חשבונית זיכוי"];
-  const [start,setStart]=useState(()=>Object.fromEntries(TYPES.map(t=>[t,"1"])));
+  const [start,setStart]=useState(()=>Object.fromEntries(TYPES.map(t=>[t,String(yeshMaxNum(t)+1)])));
   const [ok,setOk]=useState({company:false,accountant:false});
   const check=async()=>{ setChk("בודק…"); setChk(await checkDocNumbering()); }; React.useEffect(()=>{ check(); },[]);
   const activate=async()=>{ if(!/✅/.test(chk)) return alert("קודם צריך להריץ את קוד ה-SQL ולבדוק שהוא מוכן (שלב 1)."); if(!ok.company||!ok.accountant) return alert("סמן את שני האישורים");
@@ -13305,6 +13314,57 @@ function loadXlsx(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(__x
 const IMP_FIELDS=[["name","שם לקוח",/^(שם( ה)?לקוח|שם|לקוח|customer|name)$/i],["docName","שם על המסמך",/שם על (ה)?מסמך|שם לחשבונית/],["phone","טלפון",/נייד|טלפון|טל[׳']?|phone|mobile/i],["phone2","טלפון נוסף",/טלפון (נוסף|2)|טל[׳'] נוסף|קווי/],["email","אימייל",/מייל|email|e-mail|דוא/i],["address","כתובת",/כתובת|רחוב|address/i],["city","עיר",/^עיר|ישוב|יישוב|city/i],["taxId","ח.פ / ע.מ / ת.ז",/ח\.?פ|ע\.?מ|ת\.?ז|מספר עוסק|עוסק|tax/i],["contactName","איש קשר",/איש קשר|contact/i],["notes","הערות",/הער|notes/i]];
 const normPh=p=>String(p||"").replace(/\D/g,"").replace(/^972/,"0");
 function guessCustKind(name,taxId){ const n=String(name||""); if(/ועד\s+(ה)?בית/.test(n)) return "בניין משותף"; if(/^גן\s|גן ילדים|גני |בית ספר|ביה["״]ס|ישיבה|ישיבת|אולפנה|תלמוד תורה|מכללה/.test(n)) return "מוסד חינוך"; if(String(taxId||"").replace(/\D/g,"").length>=8||/בע["״]?מ|בעמ|ltd|inc|עמותה|שותפות|משרד/i.test(n)) return "עסק"; return ""; }
+
+// ═══ 📁 העברת כל המסמכים מ"יש חשבונית" ל-CRM (גיבוי + כרטיס לקוח + מספור) ═══
+function YeshDocsImport({customers,setCustomers,onClose}){
+  const arch=YESH_STORE.use(); const [st,setSt]=useState(null); const [q,setQ]=useState("");
+  const norm=t=>String(t||"").replace(/["'״׳`\s\-\.]/g,"").replace(/בע"?מ$/,"").toLowerCase();
+  const run=async file=>{ if(!file) return; try{
+    const rows=parseCsvText((await file.text()).replace(/^﻿/,'')); const h=(rows[0]||[]).map(x=>String(x).replace(/["\r]/g,"").trim());
+    const ix=k=>h.indexOf(k); const I={st:ix("סטטוס"),num:ix("מס'"),type:ix("סוג מסמך"),cust:ix("שם לקוח/ספק"),doc:ix("שם על המסמך"),tax:ix("תעודת זהות"),ph:ix("טלפון"),mob:ix("נייד"),addr:ix("כתובת"),city:ix("יישוב"),desc:ix("תיאור"),date:ix("תאריך"),total:ix("סכום"),alloc:ix("מס הקצאה"),url:ix("הורדה")};
+    if(I.url<0||I.num<0) return alert("זה לא קובץ המסמכים של יש חשבונית (חסרות עמודות).");
+    const g=(r,k)=>I[k]>=0?String(r[I[k]]||"").replace(/\r/g,"").trim():"";
+    const have=new Map((YESH_STORE.get()||[]).map(x=>[x.k,x]));
+    const list=rows.slice(1).filter(r=>/^https:\/\/api\.yeshinvoice\.co\.il\//.test(g(r,"url"))).map(r=>{ const d=g(r,"date").split("-"); return {k:g(r,"type")+"#"+g(r,"num"),num:g(r,"num"),type:g(r,"type"),status:g(r,"st"),cust:g(r,"cust"),docName:g(r,"doc"),taxId:g(r,"tax"),phone:g(r,"mob")||g(r,"ph"),address:[g(r,"addr"),g(r,"city")].filter(Boolean).join(", "),desc:g(r,"desc"),date:d.length===3?d[2]+"-"+d[1]+"-"+d[0]:"",total:parseFloat(g(r,"total"))||0,alloc:g(r,"alloc"),u:g(r,"url")}; });
+    // לקוחות: קיים לפי טלפון / שם — אחרת לקוח חדש
+    let cs=[...(customers||[])]; let nextId=Math.max(0,...cs.map(c=>+c.id||0))+1; const added=[];
+    const findC=x=>{ const ph=normPh(x.phone); const n1=norm(x.cust), n2=norm(x.docName);
+      return cs.find(c=>!c.deleted&&ph&&ph.length>=9&&[c.phone,c.phone2,c.extra].some(p=>normPh(p)===ph))||cs.find(c=>!c.deleted&&[c.name,c.bizName].some(n=>n&&(norm(n)===n1||norm(n)===n2))); };
+    list.forEach(x=>{ if(!x.cust||x.type==="הצעת מחיר") return; let c=findC(x);
+      if(!c){ c={id:nextId++,name:x.cust,bizName:x.docName&&x.docName!==x.cust?x.docName:"",phone:normPh(x.phone),address:x.address,taxId:x.taxId,notes:"נוסף מיש חשבונית",propertyType:guessCustKind(x.cust,x.taxId),createdAt:new Date().toISOString()}; cs.push(c); added.push(c); }
+      x.custId=c.id; });
+    if(added.length) setCustomers(cs);
+    // הורדה מיש חשבונית → העלאה לענן שלנו
+    const out=new Map(have); let done=0, fail=0; const todo=list.filter(x=>!(have.get(x.k)||{}).path);
+    setSt({done:0,total:todo.length,fail:0,added:added.length,skip:list.length-todo.length});
+    list.forEach(x=>{ const o=have.get(x.k); if(o&&o.path) out.set(x.k,{...o,custId:x.custId??o.custId,status:x.status}); });
+    let i=0; const worker=async()=>{ while(i<todo.length){ const x=todo[i++]; let ok=false;
+      for(let a=0;a<3&&!ok;a++){ try{ const r=await fetch(x.u); if(!r.ok) throw new Error(r.status); const b=await r.blob();
+        const path="yesh/"+x.type.replace(/[\/\s]+/g,"-")+"/"+x.num+".pdf"; const up=await sb.storage.from('contracts').upload(path,b,{contentType:'application/pdf',upsert:true}); if(up.error) throw up.error;
+        const {u,...rest}=x; out.set(x.k,{...rest,path}); ok=true; }catch(e){ await new Promise(r=>setTimeout(r,800)); } }
+      if(!ok){ fail++; const {u,...rest}=x; if(!out.has(x.k)) out.set(x.k,rest); } done++; setSt(s0=>({...s0,done,fail}));
+      if(done%250===0) await YESH_STORE.save([...out.values()]); } };
+    await Promise.all([1,2,3,4].map(worker));
+    await YESH_STORE.save([...out.values()]); setSt(s0=>({...s0,finished:true}));
+  }catch(e){ alert("שגיאה: "+(e.message||e)); } };
+  const byType={}; (arch||[]).forEach(x=>{ (byType[x.type]=byType[x.type]||[]).push(+x.num||0); });
+  const shown=(arch||[]).filter(x=>!q||[x.cust,x.docName,x.num,x.desc].some(v=>String(v||"").includes(q))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,60);
+  return <Modal title="📁 מסמכים מיש חשבונית → ל-CRM" onClose={onClose} width={620}>
+    <div style={{fontSize:13,color:"#475569",marginBottom:10,lineHeight:1.7}}>ביש חשבונית: <b>מסמכים</b> ← כפתור <b>הורדה</b> (⬇) ← "הורדת דוח" — יורד קובץ CSV. בוחרים אותו כאן, והמערכת: שומרת את כל ה-PDF בענן, מקשרת כל מסמך לכרטיס הלקוח (ומוסיפה לקוחות חסרים), וממשיכה את המספור מהמסמך האחרון. אפשר להריץ שוב בכל פעם — מסמכים שכבר נשמרו מדולגים.</div>
+    {!st&&<label style={{display:"inline-block",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px 16px",fontWeight:700,cursor:"pointer",marginBottom:10}}>📂 בחר את קובץ ה-CSV של המסמכים<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>run(e.target.files[0])}/></label>}
+    {st&&<div style={{fontSize:14,marginBottom:10}}>{st.finished?"✅ הסתיים":"⏳ שומר…"} {st.done} מתוך {st.total}{st.skip?" · "+st.skip+" כבר היו":""}{st.added?" · "+st.added+" לקוחות חדשים":""}{st.fail?<span style={{color:"#b91c1c"}}> · לא ירדו {st.fail} (אפשר להריץ שוב)</span>:""}
+      <div style={{height:8,background:"#e2e8f0",borderRadius:6,margin:"6px 0"}}><div style={{height:8,width:Math.round(100*st.done/Math.max(1,st.total))+"%",background:"#16a34a",borderRadius:6}}/></div>
+      {st.finished&&<Btn sm v="secondary" onClick={()=>setSt(null)}>📂 קובץ נוסף</Btn>}</div>}
+    {(arch||[]).length>0&&<>
+      <div style={{fontSize:13,fontWeight:700,margin:"6px 0"}}>בארכיון: {(arch||[]).length} מסמכים</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{Object.entries(byType).map(([t,n])=><span key={t} style={{fontSize:12,background:"#f1f5f9",borderRadius:20,padding:"3px 10px"}}>{t}: {n.length} · אחרון {Math.max(...n)}{["חשבונית מס","חשבונית מס/קבלה","קבלה","חשבונית זיכוי"].includes(t)?" → הבא ב-CRM "+(Math.max(...n)+1):""}</span>)}</div>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לפי לקוח / מספר / תיאור" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #cbd5e1",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
+      <div style={{maxHeight:300,overflow:"auto"}}>{shown.map(x=><YeshDocRow key={x.k} x={x}/>)}</div></>}
+  </Modal>;
+}
+function YeshDocRow({x}){ return <div onClick={()=>x.path?yeshOpenPdf(x):alert("הקובץ הזה עוד לא נשמר — הרץ שוב את ההעברה")} style={{display:"flex",gap:8,alignItems:"center",padding:"6px 4px",borderBottom:"1px solid #f1f5f9",fontSize:13,cursor:"pointer"}}>
+  <span style={{fontWeight:700,minWidth:62}}>{x.num}</span><span style={{flex:1}}>{x.type} · {x.cust}{x.desc?<span style={{color:"#64748b"}}> · {String(x.desc).slice(0,40)}</span>:null}</span>
+  <span style={{color:"#64748b",whiteSpace:"nowrap"}}>{x.date?fmtDate(x.date):""}</span><span style={{whiteSpace:"nowrap",fontWeight:700}}>{x.total?"₪"+Number(x.total).toLocaleString():""}</span><span>{x.path?"📄":"⏳"}</span></div>; }
 function CustomerImport({customers,setCustomers,onClose}){
   const [rows,setRows]=useState(null); const [head,setHead]=useState([]); const [map,setMap]=useState({}); const [busy,setBusy]=useState(""); const [done,setDone]=useState(null);
   const onFile=async f=>{ if(!f) return; setBusy("קורא את הקובץ…"); try{ const X=await loadXlsx(); const wb=X.read(await f.arrayBuffer(),{type:"array"}); const ws=wb.Sheets[wb.SheetNames[0]];
@@ -14750,7 +14810,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "259";
+const APP_BUILD = "260";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
