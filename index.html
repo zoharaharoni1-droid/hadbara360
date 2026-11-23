@@ -13341,7 +13341,7 @@ function YeshDocsImport({customers,setCustomers,onClose}){
     list.forEach(x=>{ const o=have.get(x.k); if(o&&o.path) out.set(x.k,{...o,custId:x.custId??o.custId,status:x.status}); });
     let i=0; const worker=async()=>{ while(i<todo.length){ const x=todo[i++]; let ok=false;
       for(let a=0;a<3&&!ok;a++){ try{ const r=await fetch(x.u); if(!r.ok) throw new Error(r.status); const b=await r.blob();
-        const path="yesh/"+x.type.replace(/[\/\s]+/g,"-")+"/"+x.num+".pdf"; const up=await sb.storage.from('contracts').upload(path,b,{contentType:'application/pdf',upsert:true}); if(up.error) throw up.error;
+        const path="yesh/"+({"חשבונית מס":"tax-invoice","חשבונית מס/קבלה":"invoice-receipt","קבלה":"receipt","חשבונית זיכוי":"credit","יומן ביצוע הדברה":"exec-log","הצעת מחיר":"quote","חשבון עסקה":"deal"}[x.type]||"other")+"/"+String(x.num).replace(/\D/g,"")+".pdf"; const up=await sb.storage.from('contracts').upload(path,b,{contentType:'application/pdf',upsert:true}); if(up.error) throw up.error;
         const {u,...rest}=x; out.set(x.k,{...rest,path}); ok=true; }catch(e){ await new Promise(r=>setTimeout(r,800)); } }
       if(!ok){ fail++; const {u,...rest}=x; if(!out.has(x.k)) out.set(x.k,rest); } done++; setSt(s0=>({...s0,done,fail}));
       if(done%250===0) await YESH_STORE.save([...out.values()]); } };
@@ -14812,7 +14812,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "261";
+const APP_BUILD = "262";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
