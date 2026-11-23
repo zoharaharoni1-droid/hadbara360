@@ -13349,7 +13349,7 @@ function YeshDocsImport({customers,setCustomers,onClose}){
     await YESH_STORE.save([...out.values()]); setSt(s0=>({...s0,finished:true}));
   }catch(e){ alert("שגיאה: "+(e.message||e)); } };
   const byType={}; (arch||[]).forEach(x=>{ (byType[x.type]=byType[x.type]||[]).push(+x.num||0); });
-  const shown=(arch||[]).filter(x=>!q||[x.cust,x.docName,x.num,x.desc].some(v=>String(v||"").includes(q))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,60);
+  const shown=(arch||[]).filter(x=>!q||[x.cust,x.docName,x.num,x.desc,x.address].some(v=>String(v||"").includes(q))).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,60);
   return <Modal title="📁 מסמכים מיש חשבונית → ל-CRM" onClose={onClose} width={620}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10,lineHeight:1.7}}>ביש חשבונית: <b>מסמכים</b> ← כפתור <b>הורדה</b> (⬇) ← "הורדת דוח" — יורד קובץ CSV. בוחרים אותו כאן, והמערכת: שומרת את כל ה-PDF בענן, מקשרת כל מסמך לכרטיס הלקוח (ומוסיפה לקוחות חסרים), וממשיכה את המספור מהמסמך האחרון. אפשר להריץ שוב בכל פעם — מסמכים שכבר נשמרו מדולגים.</div>
     {!st&&<label style={{display:"inline-block",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px 16px",fontWeight:700,cursor:"pointer",marginBottom:10}}>📂 בחר את קובץ ה-CSV של המסמכים<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>run(e.target.files[0])}/></label>}
@@ -13360,7 +13360,7 @@ function YeshDocsImport({customers,setCustomers,onClose}){
     {(arch||[]).length>0&&<>
       <div style={{fontSize:13,fontWeight:700,margin:"6px 0"}}>בארכיון: {(arch||[]).length} מסמכים</div>
       <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{Object.entries(byType).map(([t,n])=><span key={t} style={{fontSize:12,background:"#f1f5f9",borderRadius:20,padding:"3px 10px"}}>{t}: {n.length} · אחרון {Math.max(...n)}{["חשבונית מס","חשבונית מס/קבלה","קבלה","חשבונית זיכוי"].includes(t)?" → הבא ב-CRM "+(Math.max(...n)+1):""}</span>)}</div>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לפי לקוח / מספר / תיאור" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #cbd5e1",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="🔍 חיפוש לפי לקוח / כתובת / מספר / תיאור" style={{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid #cbd5e1",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
       <div style={{maxHeight:300,overflow:"auto"}}>{shown.map(x=><YeshDocRow key={x.k} x={x}/>)}</div></>}
   </Modal>;
 }
@@ -14812,7 +14812,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "262";
+const APP_BUILD = "263";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
