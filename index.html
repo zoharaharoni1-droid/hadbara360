@@ -5789,10 +5789,10 @@ function FreeNoteForm({prefill={},workers=[],customers=[],currentUser,onSave,onC
   const add=t=>setTxt(x=>(x?x.replace(/\s+$/,"")+" ":"")+t);
   const save=()=>{
     const text=txt.trim(); if(!text) return alert("כתוב משהו קודם");
-    if(!allDay&&to<=from) return alert("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+    const toE=(allDay||to>from)?to:addHour(from);
     const w=techs.find(x=>String(x.id)===String(wid));
     const first=text.split("\n")[0].replace(/\s+/g," ").trim(); const title=first.length>42?first.slice(0,40).replace(/\s+\S*$/,"")+"…":first;
-    const base={date,time:allDay?"07:00":from,timeWindow:allDay?ALL_DAY_TW:from+(to?"–"+to:""),allDay,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
+    const base={date,time:allDay?"07:00":from,timeWindow:allDay?ALL_DAY_TW:from+(toE?"–"+toE:""),allDay,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),status:"ממתין",updatedAt:new Date().toISOString()};
     if(kind==="personal"){ onSave({...base,kind:"personal",title,customerName:"📌 "+title,pestType:"משימה אישית",price:0,address:"",customerId:null,blockDay:false,notes:text}); return; }
     const p=r||{}; const street=[p.street,p.buildingNum].filter(Boolean).join(" "); const addr=[street,p.city].filter(Boolean).join(", ");
     const PK=(p.pests||[]).filter(x=>PEST_TYPES_CRM.includes(x));
@@ -5844,9 +5844,9 @@ function PersonalTaskForm({task,prefill={},workers=[],currentUser,onSave,onDelet
   const lbl={fontSize:13,color:CLR.muted,display:"block",marginBottom:4,fontWeight:500};
   const save=done=>{
     const t=title.trim(); if(!t) return alert("כתוב מה המשימה (למשל: לקחת צ'ק)");
-    if(!allDay&&to<=from) return alert("שעת הסיום צריכה להיות אחרי שעת ההתחלה");
+    const toE=(allDay||to>from)?to:addHour(from);
     const w=techs.find(x=>String(x.id)===String(wid));
-    const st=mode==="time"?from:"07:00", en=mode==="time"?to:"20:00";
+    const st=mode==="time"?from:"07:00", en=mode==="time"?toE:"20:00";
     const roll=mode==="roll"; const {rollCopy:_rc,...base}=task||{};
     onSave({...base,kind:"personal",title:t,customerName:"📌 "+(roll?"🔁 ":"")+t,pestType:roll?"משימה מתגלגלת":"משימה אישית",price:0,address:"",customerId:null,rolling:roll,
       date,time:st,timeWindow:(mode==="flex"||roll)?ALL_DAY_TW:st+"–"+en,allDay:mode!=="time",blockDay:mode==="block",notes,workerId:w?w.id:null,workerName:w?w.name:(currentUser?.name||""),
@@ -5968,7 +5968,10 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
   const layout=list=>{
     const ev=list.map(a=>{const [st,en]=apptRange(a);return {a,st:Math.max(st,H0*60),en:Math.min(Math.max(en,st+30),H1*60+60)};}).sort((x,y)=>x.st-y.st||y.en-x.en);
     const out=[]; let cluster=[], cEnd=-1;
-    const flush=()=>{ const cols=[]; cluster.forEach(e=>{ let c=cols.findIndex(end=>end<=e.st); if(c<0){c=cols.length;cols.push(0);} cols[c]=e.en; e.col=c; }); cluster.forEach(e=>{e.ncol=cols.length; out.push(e);}); cluster=[]; };
+    const flush=()=>{ const cols=[]; cluster.forEach(e=>{ let c=cols.findIndex(end=>end<=e.st); if(c<0){c=cols.length;cols.push(0);} cols[c]=e.en; e.col=c; }); cluster.forEach(e=>{e.ncol=cols.length;
+        // מתרחבים לעמודות פנויות (כמו בגוגל): רק אירוע שבאמת חופף בזמן "תופס" עמודה
+        const busy=new Set(cluster.filter(x=>x!==e&&x.st<e.en&&e.st<x.en).map(x=>x.col)); let lo=e.col, hi=e.col;
+        while(lo>0&&!busy.has(lo-1)) lo--; while(hi<cols.length-1&&!busy.has(hi+1)) hi++; e.c0=lo; e.span=hi-lo+1; out.push(e);}); cluster=[]; };
     ev.forEach(e=>{ if(cluster.length&&e.st>=cEnd){ flush(); cEnd=-1; } cluster.push(e); cEnd=Math.max(cEnd,e.en); });
     if(cluster.length) flush(); return out;
   };
@@ -6005,7 +6008,7 @@ function TimeGrid({days:allDays,items,workers,customers=[],execLogs,finance,onOp
     const compact=narrow&&n>3; const small=h<40&&!compact; const done=calIsDone(a,pr)&&a.status!=="בוטל";
     return <div key={a.id} {...cp} className={nudgeCls(cp,a)} draggable={!narrow} onDragStart={ev=>{setDraggedId&&setDraggedId(a.id);ev.dataTransfer.effectAllowed="move";}} onDragEnd={()=>{setDraggedId&&setDraggedId(null);setDropKey(null);}}
       onClick={ev=>{ev.stopPropagation();onOpen(a);}} title={(a.timeWindow||a.time)+" · "+a.customerName+(a.pestType&&!pers?" · "+a.pestType:"")}
-      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${e.col*w}% + 1px)`,width:`calc(${w}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:compact?"1px 2px":small?"1px 3px":"3px 5px",fontSize:compact?9:11,lineHeight:compact?1.15:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a"}}>
+      style={{...(cp.style||{}),position:"absolute",top,height:h,right:`calc(${(e.c0??e.col)*w}% + 1px)`,width:`calc(${w*(e.span||1)}% - 2px)`,...calCardStyle(a,pr,1.5,wColor),borderRadius:6,padding:compact?"1px 2px":small?"1px 3px":"3px 5px",fontSize:compact?9:11,lineHeight:compact?1.15:1.25,overflow:"hidden",cursor:"pointer",zIndex:2,boxSizing:"border-box",opacity:(tdrag&&tdrag.drag&&tdrag.drag.id===a.id)||draggedId===a.id?0.35:1,color:"#0f172a"}}>
       {done&&(()=>{ const full=pers||pr.closed; return <span title={full?"נסגר — הכל הושלם":"בוצע — חסר: "+(pr.next||"")} style={{position:"absolute",top:1,left:1,width:compact?11:14,height:compact?11:14,borderRadius:"50%",background:full?"#16a34a":"#f59e0b",color:"#fff",fontSize:compact?8:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{full?"✓":"!"}</span>; })()}
       {(()=>{ const cu=custById[String(a.customerId)]||{}; const who=pers?String(a.customerName||"").replace(/^📌\s*/,compact?"":"📌 "):(a.contactName||cu.contactName||a.customerName||"—"); const ph=pers?"":(cu.phone||a.phone||""); const L={whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"};
         const pestT=Array.isArray(a.pests)&&a.pests.length?a.pests.join(", "):a.pestType; const street=String(a.address||"").split(",")[0];
@@ -14747,7 +14750,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "258";
+const APP_BUILD = "259";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
