@@ -13319,8 +13319,9 @@ function guessCustKind(name,taxId){ const n=String(name||""); if(/ועד\s+(ה)?
 function YeshDocsImport({customers,setCustomers,onClose}){
   const arch=YESH_STORE.use(); const [st,setSt]=useState(null); const [q,setQ]=useState("");
   const norm=t=>String(t||"").replace(/["'״׳`\s\-\.]/g,"").replace(/בע"?מ$/,"").toLowerCase();
+  const [link,setLink]=useState("");
   const run=async file=>{ if(!file) return; try{
-    const rows=parseCsvText((await file.text()).replace(/^﻿/,'')); const h=(rows[0]||[]).map(x=>String(x).replace(/["\r]/g,"").trim());
+    const rows=parseCsvText((typeof file==="string"?await (async()=>{ const r=await fetch(file); if(!r.ok) throw new Error("הקישור לא נפתח ("+r.status+")"); return r.text(); })():await file.text()).replace(/^﻿/,'')); const h=(rows[0]||[]).map(x=>String(x).replace(/["\r]/g,"").trim());
     const ix=k=>h.indexOf(k); const I={st:ix("סטטוס"),num:ix("מס'"),type:ix("סוג מסמך"),cust:ix("שם לקוח/ספק"),doc:ix("שם על המסמך"),tax:ix("תעודת זהות"),ph:ix("טלפון"),mob:ix("נייד"),addr:ix("כתובת"),city:ix("יישוב"),desc:ix("תיאור"),date:ix("תאריך"),total:ix("סכום"),alloc:ix("מס הקצאה"),url:ix("הורדה")};
     if(I.url<0||I.num<0) return alert("זה לא קובץ המסמכים של יש חשבונית (חסרות עמודות).");
     const g=(r,k)=>I[k]>=0?String(r[I[k]]||"").replace(/\r/g,"").trim():"";
@@ -13352,6 +13353,7 @@ function YeshDocsImport({customers,setCustomers,onClose}){
   return <Modal title="📁 מסמכים מיש חשבונית → ל-CRM" onClose={onClose} width={620}>
     <div style={{fontSize:13,color:"#475569",marginBottom:10,lineHeight:1.7}}>ביש חשבונית: <b>מסמכים</b> ← כפתור <b>הורדה</b> (⬇) ← "הורדת דוח" — יורד קובץ CSV. בוחרים אותו כאן, והמערכת: שומרת את כל ה-PDF בענן, מקשרת כל מסמך לכרטיס הלקוח (ומוסיפה לקוחות חסרים), וממשיכה את המספור מהמסמך האחרון. אפשר להריץ שוב בכל פעם — מסמכים שכבר נשמרו מדולגים.</div>
     {!st&&<label style={{display:"inline-block",background:"#1a5c3a",color:"#fff",borderRadius:10,padding:"10px 16px",fontWeight:700,cursor:"pointer",marginBottom:10}}>📂 בחר את קובץ ה-CSV של המסמכים<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>run(e.target.files[0])}/></label>}
+    {!st&&<div style={{display:"flex",gap:6,marginBottom:10}}><input value={link} onChange={e=>setLink(e.target.value.trim())} placeholder="או הדבק את הקישור לקובץ ה-CSV מיש חשבונית" dir="ltr" style={{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid #cbd5e1",fontFamily:"inherit"}}/><Btn sm disabled={!/^https:\/\/\S+\.csv/.test(link)} onClick={()=>run(link)}>המשך</Btn></div>}
     {st&&<div style={{fontSize:14,marginBottom:10}}>{st.finished?"✅ הסתיים":"⏳ שומר…"} {st.done} מתוך {st.total}{st.skip?" · "+st.skip+" כבר היו":""}{st.added?" · "+st.added+" לקוחות חדשים":""}{st.fail?<span style={{color:"#b91c1c"}}> · לא ירדו {st.fail} (אפשר להריץ שוב)</span>:""}
       <div style={{height:8,background:"#e2e8f0",borderRadius:6,margin:"6px 0"}}><div style={{height:8,width:Math.round(100*st.done/Math.max(1,st.total))+"%",background:"#16a34a",borderRadius:6}}/></div>
       {st.finished&&<Btn sm v="secondary" onClick={()=>setSt(null)}>📂 קובץ נוסף</Btn>}</div>}
@@ -14810,7 +14812,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "260";
+const APP_BUILD = "261";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
