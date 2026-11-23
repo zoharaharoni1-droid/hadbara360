@@ -2374,7 +2374,7 @@ function h360CloseTop(){
   }catch(e){ return false; }
 }
 function Modal({title,onClose,children,width=520}){
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"8px 8px 0",overflowY:"auto"}} onClick={onClose}>
+  return <div data-h360modal="1" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"8px 8px 0",overflowY:"auto"}} onClick={onClose}>
     <div style={{background:CLR.white,borderRadius:16,padding:"20px 16px",width,maxWidth:"100%",maxHeight:"calc(100vh - 16px)",overflow:"auto",direction:"rtl",marginBottom:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <h2 style={{margin:0,color:CLR.primary,fontSize:18}}>{title}</h2>
@@ -14742,7 +14742,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "255";
+const APP_BUILD = "256";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -15518,6 +15518,36 @@ if('serviceWorker' in navigator){
     }
   });
 }
+
+// ── בדיקת גרסה עצמאית: משווה את הגרסה שרצה עכשיו לגרסה שבשרת ──
+// אם יש חדשה: כשלא באמצע מילוי טופס — מתעדכן לבד; אחרת — פס אדום קבוע למעלה עם כפתור עדכון.
+(function(){
+  let checking=false, lastCheck=0;
+  const busy=()=>!!document.querySelector('[data-h360modal],textarea:focus,input:focus,select:focus');
+  const bar=(cur,srv)=>{ let b=document.getElementById('h360-ver-bar'); if(!b){ b=document.createElement('div'); b.id='h360-ver-bar';
+      b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100000;background:#dc2626;color:#fff;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:inherit;font-size:15px;font-weight:700;direction:rtl;box-shadow:0 2px 12px rgba(0,0,0,.35)';
+      document.body.appendChild(b); }
+    b.innerHTML='<span>⚠️ אתה עובד על גרסה ישנה ('+cur+'). יש גרסה חדשה: '+srv+'</span><button style="background:#fff;color:#dc2626;border:none;padding:8px 16px;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;flex-shrink:0">עדכן עכשיו</button>';
+    b.querySelector('button').onclick=()=>{ try{ forceAppUpdate(); }catch(e){ location.replace('/hadbara360/?u='+Date.now()); } }; if(!window.__h360VerT) window.__h360VerT=setInterval(()=>check(true),60000); };
+  async function check(force){
+    if(checking||!navigator.onLine) return; if(!force&&Date.now()-lastCheck<45000) return;
+    checking=true; lastCheck=Date.now();
+    try{
+      const r=await fetch('/hadbara360/index.html?vc='+Date.now(),{cache:'no-store'}); if(!r.ok) return;
+      const m=(await r.text()).match(/const APP_BUILD = "(\d+)"/); if(!m) return;
+      const srv=+m[1], cur=+APP_BUILD; if(!(srv>cur)) return;
+      if(!busy()){ try{ sessionStorage.setItem('h360_autoupd',String(srv)); }catch(e){} try{ forceAppUpdate(); }catch(e){ location.replace('/hadbara360/?u='+Date.now()); } }
+      else bar(cur,srv);
+    }catch(e){} finally{ checking=false; }
+  }
+  window.__h360CheckVersion=check;
+  setTimeout(()=>{ try{ const u=sessionStorage.getItem('h360_autoupd'); if(u){ sessionStorage.removeItem('h360_autoupd'); showToast('✅ המערכת עודכנה לגרסה '+APP_BUILD); } }catch(e){} },3000);
+  setTimeout(()=>check(true),4000);
+  setInterval(()=>check(false),10*60*1000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') check(false); });
+  window.addEventListener('online',()=>check(true));
+  window.addEventListener('focus',()=>check(false));
+})();
 
 // PWA Install prompt
 let deferredPrompt = null;
