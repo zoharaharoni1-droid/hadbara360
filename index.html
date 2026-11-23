@@ -6300,7 +6300,8 @@ function WeekCalendar({appointments,setAppointments,customers,setCustomers,worke
   const slots=["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00"];
   const wColor=wid=>{const w=workers.find(x=>x.id===wid);return w?.color||CLR.primary;};
   const sBg={"ממתין":"#fef9c3","בוצע":"#dcfce7","בדרך":"#dbeafe","בוטל":"#f3f4f6"};
-  const filtered=appointments.filter(a=>{if(currentUser.role==="מדביר")return a.workerId===currentUser.id;if(viewWk!=="all")return a.workerId===parseInt(viewWk);return true;});
+  const noWorker=a=>a.workerId==null||a.workerId===""||!workers.some(w=>String(w.id)===String(a.workerId));
+  const filtered=appointments.filter(a=>{if(currentUser.role==="מדביר")return String(a.workerId)===String(currentUser.id);if(viewWk!=="all")return String(a.workerId)===String(viewWk)||(noWorker(a)&&!isPersonal(a));return true;});
   const slotHour=t=>parseInt((t||"0").split(":")[0]);
   const atSlot=(iso,t)=>filtered.filter(a=>a.date===iso&&!isAllDay(a)&&slotHour(a.time)===slotHour(t));
   const allDayAt=iso=>filtered.filter(a=>a.date===iso&&isAllDay(a));
@@ -13443,6 +13444,9 @@ function pendPush(key,tbl){
   if(dels.length){ jobs.push(sb.from(tbl).delete().in('id',dels).then(({error})=>{ if(error){ pendWarn(error); return; } dels.forEach(id=>delete p.dels[id]); pendSave(key); })); }
   return Promise.all(jobs).catch(e=>pendWarn(e));
 }
+// 🕒 שינויים מקומיים אחרונים (לפי מזהה) — כדי שסנכרון לא ידרוס אותם
+const __recent={};
+function recentOf(key){ if(!__recent[key]) __recent[key]={}; const R=__recent[key]; const lim=Date.now()-120000; Object.keys(R).forEach(id=>{ if(R[id]<lim) delete R[id]; }); return R; }
 const SOFT_TABLES=new Set(["appointments","exec_logs","finance","customers","maintenance","projects"]);
 function useLS(key, init){
   const tbl = SB_TABLES[key];
@@ -13469,6 +13473,7 @@ function useLS(key, init){
     const syncFromSupabase = async () => {
       const P=pendOf(key);
       if(Object.keys(P.rows).length||Object.keys(P.dels).length) await pendPush(key,tbl);
+      const fetchStart=Date.now();
       sbFetchAll(tbl,'*')
         .then(({data, error})=>{
           if(error || !data) return; // טבלה ריקה = אין נתונים (לא מציגים דוגמאות)
@@ -13477,10 +13482,20 @@ function useLS(key, init){
           const pr=Object.values(P.rows).map(x=>x.row); const dl=new Set(Object.keys(P.dels));
           if(pr.length||dl.size){ const m=new Map(sbRows.map(r=>[String(r.id),r])); pr.forEach(r=>m.set(String(r.id),r)); dl.forEach(id=>m.delete(id)); sbRows=[...m.values()]; }
           window.__h360Unsynced=Object.keys(P.rows).length>0||dl.size>0;
-          // החלף לגמרי במה שב-Supabase — הוא ה-source of truth
-          // הכתיבה שלנו כבר עלתה לשם, אז זה בטוח
-          setVal(sbRows);
-          try { localStorage.setItem('h360_' + key, JSON.stringify(sbRows)); } catch(e){}
+          // 🛡️ שינוי שנעשה במכשיר בזמן שהבקשה הייתה בדרך (או ב-30 השניות האחרונות) — לא נדרס ולא נעלם.
+          // בלי זה, עבודה שנשמרה ממש עכשיו יכלה "להיעלם" מהיומן עד הסנכרון הבא, ועריכה שנעשתה בזמן הזה הלכה לאיבוד.
+          const RW=recentOf(key);
+          setVal(cur=>{
+            let out=sbRows;
+            const keepIds=Object.keys(RW).filter(id=>RW[id]>=fetchStart-30000);
+            if(keepIds.length&&Array.isArray(cur)){
+              const m=new Map(sbRows.map(r=>[String(r.id),r]));
+              keepIds.forEach(id=>{ const loc=cur.find(r=>String(r.id)===id); if(loc) m.set(id,loc); });
+              out=[...m.values()];
+            }
+            try { localStorage.setItem('h360_' + key, JSON.stringify(out)); } catch(e){}
+            return out;
+          });
         });
     };
 
@@ -13518,6 +13533,7 @@ function useLS(key, init){
             logActivity(act+" "+(LOG_LABELS[tbl]||tbl), itemLabel(item));
           });
           const P=pendOf(key); const at=Date.now()+Math.random();
+          const RW=recentOf(key); changed.forEach(item=>{ RW[String(item.id)]=Date.now(); });
           changed.forEach(item=>{ P.rows[String(item.id)]={row:item,at}; delete P.dels[String(item.id)]; }); pendSave(key);
           sb.from(tbl).upsert(upsertData, {onConflict:'id'})
             .then(({error})=>{
@@ -13532,6 +13548,8 @@ function useLS(key, init){
         let deletedIds = [...prevIds].filter(id => !nextIds.has(id));
         const softIds = SOFT_TABLES.has(tbl) ? deletedIds.filter(id=>{ const r=prevRows.find(x=>String(x.id)===id); return r&&!r.deleted; }) : [];
         if(softIds.length){ deletedIds=deletedIds.filter(id=>!softIds.includes(id)); }
+        // 🛡️ בטבלאות החשובות אין מחיקה לצמיתות בכלל — גם פריט שכבר בסל נשאר בשרת
+        if(SOFT_TABLES.has(tbl) && deletedIds.length){ console.warn('[SB] hard delete blocked', tbl, deletedIds); deletedIds=[]; }
         if(softIds.length > 0){
           // 🛡️ בטבלאות החשובות לא מוחקים מהשרת — מסמנים "נמחק" (אפשר לשחזר מסל המחזור)
           const now=new Date().toISOString();
@@ -14724,7 +14742,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "254";
+const APP_BUILD = "255";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -14962,8 +14980,8 @@ function App(){
     const all=new Map(customers.map(c=>[String(c.id),c]));
     // תורים של לקוח שנמחק (או הועבר לסל) לא מוצגים; שחזור הלקוח מחזיר אותם
     // לקוח שלא נמצא — התור עדיין מוצג (לא מסתירים עבודה). לקוח שנמחק — מסתירים רק תורים שנקבעו לפני המחיקה
-    return live.filter(a=>{ if(a.customerId==null||a.customerId===""||a.projectId) return true; const c=all.get(String(a.customerId)); if(!c) return true; if(!c.deleted) return true;
-      const del=String(c.deletedAt||"").slice(0,10); return !!del&&String(a.date||"")>del&&String(a.updatedAt||a.date||"")>=del; });
+    // 🛡️ עבודה לא נעלמת מהיומן גם אם הלקוח הועבר לסל — היא נשארת גלויה
+    return live;
   },[appointments,customers]);
   const jobAppointments = React.useMemo(()=>activeAppointments.filter(a=>!isPersonal(a)),[activeAppointments]);
   // 🧪 תזכורת ב-1 לכל חודש: בדיקת / סנכרון אצוות חומרים (לא נשמרת כתור — מוצגת ביומן)

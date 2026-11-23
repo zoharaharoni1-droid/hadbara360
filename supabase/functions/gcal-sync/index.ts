@@ -99,7 +99,8 @@ async function syncOne(cfg, rows, status) {
     const sig = [e.summary, e.desc, e.loc, s.date, s.time, endT].join("|");
     const tw = s.allDay ? ALL_DAY_TW : (s.time + "–" + (endT || String(Math.min(23, parseInt(s.time) + 2)).padStart(2, "0") + s.time.slice(2)));
     const ex = byUid[iid];
-    const base = { date: s.date, time: s.allDay ? "07:00" : s.time, timeWindow: tw, allDay: !!s.allDay, gcalSig: sig, updatedAt: new Date().toISOString() };
+    const nowIso = new Date().toISOString();
+    const base = { date: s.date, time: s.allDay ? "07:00" : s.time, timeWindow: tw, allDay: !!s.allDay, gcalSig: sig, updatedAt: nowIso, gcalSyncedAt: nowIso };
     if (ex) {
       if (ex.gcalSig === sig && !(ex.deleted && ex.gcalRemoved)) continue;
       let nx;
@@ -112,7 +113,7 @@ async function syncOne(cfg, rows, status) {
     const title = (e.summary || text.split("\n")[0] || "אירוע מגוגל").slice(0, 60);
     const phone = phoneIn(text);
     const twin = rows.find(a => !a.deleted && !a.gcalUid && a.date === s.date && ((phone && String(a.phone || "").replace(/\D/g, "").endsWith(phone.slice(-9))) || (e.summary && a.customerName && String(e.summary).includes(a.customerName))));
-    if (twin) { ups.push({ ...twin, gcalUid: iid, gcalSig: sig }); updated++; continue; }
+    if (twin) { ups.push({ ...twin, gcalUid: iid, gcalSig: sig }); updated++; continue; } // (לא משנים updatedAt — הרישום נשאר "של המשתמש")
     const common = { ...base, id: idBase++, workerId: cfg.workerId || null, workerName: cfg.workerName || "", status: "ממתין", gcalUid: iid, source: "google" };
     if (cfg.kind === "personal") ups.push({ ...common, kind: "personal", title, customerName: "📌 " + title, pestType: "משימה אישית", price: 0, address: e.loc || "", customerId: null, blockDay: false, notes: text });
     else ups.push({ ...common, kind: "free", freeText: text, rawMsg: text, customerName: title, customerId: null, phone, address: e.loc || "", pestType: "", pests: [], price: 0, notes: "", executionLog: null, needsParse: true });
@@ -121,9 +122,21 @@ async function syncOne(cfg, rows, status) {
   // אירועים שנמחקו בגוגל — רק אם ההגדרה מאפשרת, רק רישומים שלא הפכו להזמנה, ורק אם הפיד נראה תקין
   const today = todayIL();
   const linkedFuture = rows.filter(a => a.gcalUid && String(a.gcalUid).startsWith(pre) && !a.deleted && a.date >= today);
-  const gone = linkedFuture.filter(a => !seen.has(a.gcalUid) && (a.kind === "free" || a.kind === "personal") && a.status !== "בוצע" && a.date >= from);
+  // 🛡️ רישום שמישהו נגע בו במערכת אחרי הסנכרון האחרון לא מועבר לסל, גם אם נמחק בגוגל
+  const untouched = (a) => !!a.gcalSyncedAt && String(a.updatedAt || "") <= String(a.gcalSyncedAt);
+  const gone = linkedFuture.filter(a => !seen.has(a.gcalUid) && (a.kind === "free" || a.kind === "personal") && a.status !== "בוצע" && a.date >= from && a.date <= isoOf(to) && untouched(a));
   const suspicious = evs.length === 0 && linkedFuture.length > 2 || (linkedFuture.length >= 5 && gone.length > linkedFuture.length * 0.6);
   if (cfg.syncDeletes !== false && !suspicious) gone.forEach(a => { ups.push({ ...a, deleted: true, deletedAt: new Date().toISOString(), gcalRemoved: true, updatedAt: new Date().toISOString() }); removed++; });
+  // 🛡️ לא דורסים שינוי שנעשה במערכת בזמן שהסנכרון רץ: בודקים שוב מול השרת ומדלגים על שורות שהשתנו בינתיים
+  if (ups.length) {
+    const before = new Map(rows.map(a => [String(a.id), String(a.updatedAt || "")]));
+    const ids = ups.map(a => String(a.id)).filter(id => before.has(id));
+    if (ids.length) {
+      const { data: fresh } = await sb.from("appointments").select("id,data").in("id", ids);
+      const changedNow = new Set((fresh || []).filter(r => String((r.data || {}).updatedAt || "") !== before.get(String(r.id))).map(r => String(r.id)));
+      if (changedNow.size) { for (let i = ups.length - 1; i >= 0; i--) if (changedNow.has(String(ups[i].id))) ups.splice(i, 1); }
+    }
+  }
   if (ups.length) {
     for (let i = 0; i < ups.length; i += 200) {
       const chunk = ups.slice(i, i + 200).map(a => ({ id: String(a.id), data: a, updated_at: new Date().toISOString() }));
