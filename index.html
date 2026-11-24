@@ -8941,17 +8941,15 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           {q("✏️","עריכה",null,()=>setEditingCust(true))}
         </div>; })()}
       {(()=>{ const c=sel; const has=v=>v!=null&&String(v).trim()!==""&&String(v)!=="—";
-        const row=(k,v,href)=>has(v)?<div key={k} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid #f1f5f9",fontSize:14}}><span style={{color:CLR.muted,flexShrink:0}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",textAlign:"left",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,textAlign:"left",wordBreak:"break-word"}}>{v}</span>}</div>:null;
-        const box=(t,rows)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:CLR.surface,borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:CLR.primary,margin:"4px 0 2px"}}>{t}</div>{r}</div>:null; };
+        const row=(k,v,href)=>has(v)?<div key={k} style={{display:"grid",gridTemplateColumns:"96px 1fr",gap:10,alignItems:"baseline",padding:"5px 0",fontSize:14}}><span style={{color:"#64748b",fontSize:13}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,color:"#0f172a",wordBreak:"break-word"}}>{v}</span>}</div>:null;
+        const box=(t,rows,extra)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontWeight:800,fontSize:13,color:"#334155",margin:"2px 0 4px"}}><span>{t}</span>{extra}</div>{r}</div>:null; };
         const tel=p=>"tel:"+String(p||"").replace(/[^\d+]/g,"");
         const isBizC=!!c.contactName; const docN=c.bizName||c.name;
         const unit=[c.entrance&&"כניסה "+c.entrance,c.floor&&(c.floor==="קרקע"?"קומת קרקע":String(c.floor).startsWith("-")?"קומה מינוס "+String(c.floor).slice(1):"קומה "+c.floor),c.aptNum&&((c.propertyType==="דירה"?"דירה ":"יחידה ")+c.aptNum)].filter(Boolean).join(" · ");
         const nav=navAddr(c.address||"");
         return <>
           {box(isBizC?"🏢 פרטי העסק / המוסד":"👤 פרטי הלקוח",[
-            row(isBizC?"שם המקום":"שם",c.name),
             isBizC&&row("איש קשר",c.contactName),
-            row("טלפון",c.phone,tel(c.phone)),
             row("אימייל",c.email,c.email?"mailto:"+c.email:null),
             isBizC&&docN!==c.name&&row("שם על המסמכים",docN),
             row("ח.פ / ע.מ",c.taxId),
@@ -8977,6 +8975,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         </>;
       })()}
       {(()=>{ const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const l=st.log;
+        if(!l&&!st.nextAppt&&!st.lastDate) return null;
         return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(st.need?"#38bdf8":l?"#16a34a":"#cbd5e1"),borderRadius:12,padding:"10px 14px",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:800,color:"#64748b",marginBottom:4}}>📌 מצב הטיפול</div>
           {l?<>
@@ -8989,15 +8988,15 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             {l&&!l.draft&&<button onClick={()=>sendExecLogWA(l,sel.phone)} style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח יומן ביצוע</button>}
           </div>}
         </div>; })()}
-      {(()=>{ const T={go:["#16a34a","#fff","#16a34a"],inv:["#0f766e","#fff","#0f766e"],sent:["#bbf7d0","#14532d","#4ade80"],plain:["#fff","#0f172a","#e2e8f0"]};
-        const tile=(icon,label,sub,on,tone)=>{ const c=T[tone||"plain"]; return <button key={label} type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:c[0],color:c[1],border:"1px solid "+c[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
-          <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span></button>; };
+      {(()=>{ const T={ok:["#dcfce7","#166534","#86efac"],sent:["#bbf7d0","#14532d","#4ade80"],plain:["#fff","#0f172a","#e2e8f0"]};
+        const tile=(icon,label,sub,on,tone,checks=0)=>{ const c=T[tone||"plain"]; return <button key={label} type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:c[0],color:c[1],border:"1px solid "+c[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
+          <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,lineHeight:1.3}}>{sub}</div>}</span>{checks>0&&<span title={checks>1?"מולא ונשלח":"מולא"} style={{flexShrink:0,background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:12,fontWeight:900,letterSpacing:-2}}>{checks>1?"✓✓":"✓"}</span>}</button>; };
         const mgr=currentUser.role!=="מדביר"; const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const rv=sel.reviewRequestedAt;
         return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-          {tile("📋","יומן ביצוע",st.log?"יומן ביצוע נוסף":"יומן ביצוע חדש",()=>goNewLog(sel),"go")}
-          {mgr&&tile("🧾","חשבונית / קבלה","הפקת מסמך ללקוח",()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""}),"inv")}
+          {(()=>{ const l=st.log&&!st.log.draft?st.log:null; const sn=!!(l&&l.sentAt); return l?tile("📋","יומן ביצוע",(l.docNum?"מס׳ "+l.docNum+" · ":"")+(sn?"נשלח":"לא נשלח"),()=>goNewLog(sel),sn?"sent":"ok",sn?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>goNewLog(sel)); })()}
+          {mgr&&(()=>{ const d0=(finance||[]).filter(f=>String(f.customerId)===String(sel.id)&&!f.deleted&&(f.invoiceNum||f.docSeq)).sort((x,y)=>String(y.date||"").localeCompare(String(x.date||"")))[0]; const dS=!!(d0&&d0.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||d0.docSeq||"")+" · "+(dS?"נשלחה":"לא נשלחה"),()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""}),dS?"sent":"ok",dS?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})); })()}
           {mgr&&tile("💳","קישור לתשלום","שליחת קישור בוואטסאפ",()=>setCustPayReq(true))}
-          {tile("⭐","ביקורת בגוגל",rv?"נשלחה · "+fmtDate(String(rv).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>{ if(!sel.phone) return alert("אין טלפון ללקוח הזה"); setCustRevReq(true); },rv?"sent":undefined)}
+          {tile("⭐","ביקורת בגוגל",rv?"נשלחה · "+fmtDate(String(rv).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>{ if(!sel.phone) return alert("אין טלפון ללקוח הזה"); setCustRevReq(true); },rv?"sent":undefined,rv?2:0)}
           {mgr&&tile("📅","שבץ תור","קביעת תור ביומן",()=>{setSchedFor(sel);setSel(null);})}
           {mgr&&tile("📝","הזמנת עבודה","פתיחת הזמנה חדשה",()=>{ window.__h360PendingOrder=sel; setSel(null); window.__h360Nav&&window.__h360Nav("neworder"); })}
         </div>; })()}
@@ -9008,16 +9007,14 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           cust={{name:custDocName(sel)||sel.name,contactName:sel.contactName||"",phone:sel.phone||"",email:sel.email||"",taxId:sel.taxId||"",address:sel.address||""}}
           onClose={()=>setCustPayReq(false)}/>; })()}
       {(()=>{ const c=sel; const has=v=>v!=null&&String(v).trim()!==""&&String(v)!=="—";
-        const row=(k,v,href)=>has(v)?<div key={k} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid #f1f5f9",fontSize:14}}><span style={{color:CLR.muted,flexShrink:0}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",textAlign:"left",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,textAlign:"left",wordBreak:"break-word"}}>{v}</span>}</div>:null;
-        const box=(t,rows)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:CLR.surface,borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:CLR.primary,margin:"4px 0 2px"}}>{t}</div>{r}</div>:null; };
+        const row=(k,v,href)=>has(v)?<div key={k} style={{display:"grid",gridTemplateColumns:"96px 1fr",gap:10,alignItems:"baseline",padding:"5px 0",fontSize:14}}><span style={{color:"#64748b",fontSize:13}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,color:"#0f172a",wordBreak:"break-word"}}>{v}</span>}</div>:null;
+        const box=(t,rows,extra)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,fontWeight:800,fontSize:13,color:"#334155",margin:"2px 0 4px"}}><span>{t}</span>{extra}</div>{r}</div>:null; };
         const tel=p=>"tel:"+String(p||"").replace(/[^\d+]/g,"");
         const isBizC=!!c.contactName; const docN=c.bizName||c.name;
         const unit=[c.entrance&&"כניסה "+c.entrance,c.floor&&(c.floor==="קרקע"?"קומת קרקע":String(c.floor).startsWith("-")?"קומה מינוס "+String(c.floor).slice(1):"קומה "+c.floor),c.aptNum&&((c.propertyType==="דירה"?"דירה ":"יחידה ")+c.aptNum)].filter(Boolean).join(" · ");
         const nav=navAddr(c.address||"");
         return <>
-          {box("📍 כתובת",[row("כתובת",c.address),row(isBizC||c.propertyType==="חנות"?"קומה / יחידה":"כניסה / קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":"")])}
-          {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}><a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#ecfdf5",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>🗺️ פתח במפה</a></div>}
-          {box("🏠 פרטי הנכס",[
+          {box("🏠 כתובת ופרטי הנכס",[row("כתובת",c.address),row("קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":""),
             row("סוג נכס",c.propertyType),
             row("חדרים",["דירה","בית פרטי"].includes(c.propertyType)?c.rooms:""),
             row("מפלסים",c.levels&&String(c.levels)!=="1"?c.levels:""),
@@ -9027,12 +9024,12 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             row("חצר",c.hasYard?"יש":""),
             row("אזורים לטיפול",(c.buildingAreas||[]).join(", ")),
             row("הערות על הנכס",c.propertyNotes),
-          ])}
+          ],has(c.address)?<a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{fontSize:12,fontWeight:700,color:"#166534",textDecoration:"none",background:"#ecfdf5",borderRadius:20,padding:"3px 10px"}}>🗺️ מפה</a>:null)}
           {box("🐛 טיפולים ותשלומים",[
             row("מזיק אחרון",c.pestType),
             row("מחיר אחרון",c.lastPrice?"₪"+c.lastPrice:""),
             row("טיפול אחרון",c.lastTreatment?fmtDate(c.lastTreatment):""),
-            row("סה״כ שולם","₪"+(c.totalPaid||0)),
+            row("סה״כ שולם",c.totalPaid?"₪"+c.totalPaid:""),
             row("איך הגיע",c.source),
           ])}
         </>; })()}
@@ -14831,7 +14828,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "264";
+const APP_BUILD = "265";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
