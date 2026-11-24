@@ -8782,7 +8782,7 @@ const NEED_TXT={log:"✏️ להשלים את יומן הביצוע",inv:"🧾 �
 function Customers({customers,setCustomers,appointments,setAppointments,workers,collabs=[],finance,setFinance,execLogs,setExecLogs,currentUser}){
   const [srch,setSrch]=useState("");
   const [sel,setSel]=useState(null);
-  const [editingCust,setEditingCust]=useState(false);
+  const [editingCust,setEditingCust]=useState(false); const [custPayReq,setCustPayReq]=useState(false); const [custRevReq,setCustRevReq]=useState(false);
   const [editCustData,setEditCustData]=useState({});
   const setEC=(k,v)=>setEditCustData(x=>({...x,[k]:v}));
   const [showNew,setShowNew]=useState(false);
@@ -8913,7 +8913,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
         onSave={c=>{ const up=upsertCustomerRec({...c,id:sel.id},customers,setCustomers); setSel(up); return up; }}
         onDone={()=>{ setEditingCust(false); showToast("✅ פרטי הלקוח עודכנו"); }} onCancel={()=>setEditingCust(false)}/>
     </Modal>}
-    {sel&&!editingCust&&<Modal title={`🗂️ תיק הדברה – ${sel.name}`} onClose={()=>setSel(null)} width={600}>
+    {sel&&!editingCust&&<Modal title={<span style={{display:"block"}}><span style={{display:"block",fontSize:20,fontWeight:800,color:"#0f172a"}}>{sel.name}</span>{[sel.address&&sel.address!=="—"?sel.address:"",sel.phone].filter(Boolean).length>0&&<span style={{display:"block",fontSize:13,fontWeight:500,color:"#64748b",marginTop:2}}>{[sel.address&&sel.address!=="—"?sel.address:"",sel.phone].filter(Boolean).join(" · ")}</span>}</span>} onClose={()=>setSel(null)} width={600}>
       {(()=>{ const nP=x=>String(x||"").replace(/\D/g,"").replace(/^972/,"0"); const nN=x=>String(x||"").replace(/\s+/g," ").trim();
         const ph=nP(sel.phone); const names=[sel.name,sel.placeName,sel.bizName].map(nN).filter(x=>x.length>=3);
         const dups=customers.filter(c=>!c.deleted&&String(c.id)!==String(sel.id)&&((ph.length>=9&&nP(c.phone)===ph)||[c.name,c.placeName,c.bizName].map(nN).some(n=>n&&names.includes(n))));
@@ -8932,57 +8932,14 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             <button type="button" onClick={()=>merge(o)} style={{border:"1px solid #f59e0b",background:"#fff",color:"#92400e",borderRadius:20,padding:"4px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>⇄ אחד לכרטיס אחד</button>
           </div>)}
         </div>; })()}
-      <CustHistory c={customers.find(x=>String(x.id)===String(sel.id))||sel} onRestore={(k,v)=>{ const cur=customers.find(x=>String(x.id)===String(sel.id))||sel; const lbl=CUST_HIST_FIELDS[k]||k;
-          if(!confirm(`להחזיר את "${lbl}" ל: ${v||"(ריק)"}?`)) return;
-          const val=v;
-          const up={...cur,[k]:val,updatedAt:new Date().toISOString(),__histNote:"שוחזר: "+lbl};
-          setCustomers(cs=>cs.map(x=>String(x.id)===String(cur.id)?up:x)); setSel({...up}); showToast("↩ "+lbl+" שוחזר"); }}/>
-      {(()=>{ const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const l=st.log;
-        return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(st.need?"#38bdf8":l?"#16a34a":"#cbd5e1"),borderRadius:12,padding:"12px 14px",marginBottom:12}}>
-          <div style={{fontWeight:800,fontSize:17}}>{sel.name}</div>
-          <div style={{fontSize:13,color:"#64748b",margin:"2px 0 8px"}}>{[sel.address,sel.phone].filter(Boolean).join(" · ")||"—"}</div>
-          {l?<>
-            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>הטיפול האחרון · {fmtDate(l.date)}{l.docNum?" · יומן ביצוע "+l.docNum:""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,3).join(", "):""}</div>
-            <JobSteps steps={st.steps}/>
-            {st.need&&<div style={{marginTop:8,fontSize:13,fontWeight:700,color:"#0369a1"}}>{NEED_TXT[st.need]}{st.need==="pay"&&st.debt?" — ₪"+st.debt:""}</div>}
-          </>:<div style={{fontSize:13,color:"#94a3b8"}}>{st.nextAppt?"📅 תור קרוב: "+fmtDate(st.nextAppt.date)+(st.nextAppt.time?" "+st.nextAppt.time:""):st.lastDate?"טופל ב-"+fmtDate(st.lastDate)+" (אין יומן ביצוע במערכת)":"עוד לא בוצע טיפול"}</div>}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6,marginTop:10}}>
-            {needBtn(sel,st)}
-            {l&&!l.draft&&<button onClick={()=>sendExecLogWA(l,sel.phone)} style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח יומן ביצוע</button>}
-            <button onClick={()=>goNewLog(sel)} style={{...ab,justifyContent:"center"}}>📋 יומן ביצוע {l?"נוסף":"חדש"}</button>
-            {sel.phone&&<a href={tel(sel.phone)} style={{...ab,justifyContent:"center"}}>📞 חייג</a>}
-            {sel.phone&&<a href={waL(sel.phone)} target="_blank" rel="noreferrer" style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>💬 וואטסאפ</a>}
-            {sel.address&&<a href={"https://waze.com/ul?q="+encodeURIComponent(navAddr(sel.address))+"&navigate=yes"} target="_blank" rel="noreferrer" style={{...ab,justifyContent:"center",color:"#0369a1"}}>🚙 ניווט</a>}
-          </div>
+      {(()=>{ const qs={flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"10px 4px",borderRadius:14,background:"#f8fafc",border:"1px solid #eef2f7",color:"#0f172a",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",textDecoration:"none"};
+        const q=(icon,label,href,on)=>{ const inner=<><span style={{fontSize:22,lineHeight:1}}>{icon}</span>{label}</>; return href?<a key={label} href={href} target={/^https?:/.test(href)?"_blank":undefined} rel="noreferrer" style={qs}>{inner}</a>:<button key={label} type="button" onClick={on} style={qs}>{inner}</button>; };
+        return <div style={{display:"flex",gap:8,marginBottom:12}}>
+          {sel.phone&&q("📞","חייג",tel(sel.phone))}
+          {sel.phone&&q("💬","וואטסאפ",waL(sel.phone))}
+          {sel.address&&sel.address!=="—"&&q("🚙","ניווט","https://waze.com/ul?q="+encodeURIComponent(navAddr(sel.address))+"&navigate=yes")}
+          {q("✏️","עריכה",null,()=>setEditingCust(true))}
         </div>; })()}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        {!editingCust
-          ? <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Btn sm onClick={()=>setEditingCust(true)}>✏️ ערוך פרטים</Btn>
-              {currentUser&&currentUser.role==="מנהל"&&<Btn sm v="ghost" onClick={()=>{ if(window.confirm(`למחוק את ${sel.name}?\nהלקוח יעבור לסל המחזור ואפשר יהיה לשחזר אותו.`)){ softDelete(setCustomers, sel.id); setSel(null); } }} style={{color:CLR.danger,border:`1px solid ${CLR.danger}`}}>🗑️ מחק לקוח</Btn>}</div>
-          : <div style={{display:"flex",gap:8}}>
-              <Btn sm onClick={()=>{setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,...editCustData}:c));setSel({...sel,...editCustData});setEditingCust(false);}}>✅ שמור</Btn>
-              <Btn sm v="ghost" onClick={()=>setEditingCust(false)}>ביטול</Btn>
-            </div>}
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
-        <Badge status={sel.status}/>
-        <span style={{fontSize:13,color:CLR.muted}}>{sel.phone}</span>
-        {sel.email&&<span style={{fontSize:13,color:CLR.muted}}>| {sel.email}</span>}
-        {isArchived(sel)&&<span style={{background:"#fef9c3",color:"#92400e",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>📦 בארכיון</span>}
-        {sel.source&&<span style={{background:"#ede9fe",color:"#6d28d9",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>📣 {sel.source}</span>}
-        <select value={sel.tag||""} onChange={e=>{const tag=e.target.value;setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,tag}:c));setSel({...sel,tag});}}
-          style={{padding:"2px 8px",borderRadius:20,border:"1px solid #e5e7eb",fontSize:11,cursor:"pointer",background:"#f9fafb"}}>
-          <option value="">🏷️ תגית</option>
-          <option value="vip">⭐ VIP</option>
-          <option value="new">🆕 חדש</option>
-          <option value="problem">⚠️ בעייתי</option>
-          <option value="loyal">💚 נאמן</option>
-        </select>
-        <button onClick={()=>{setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,archived:!isArchived(c)}:c));setSel(null);}}
-          style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+(isArchived(sel)?"#86efac":"#fcd34d"),background:isArchived(sel)?"#dcfce7":"#fef9c3",color:isArchived(sel)?"#166534":"#92400e",fontSize:11,cursor:"pointer",fontWeight:600}}>
-          {isArchived(sel)?"↩️ הוצא מארכיון":"📦 העבר לארכיון"}
-        </button>
-      </div>
       {(()=>{ const c=sel; const has=v=>v!=null&&String(v).trim()!==""&&String(v)!=="—";
         const row=(k,v,href)=>has(v)?<div key={k} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid #f1f5f9",fontSize:14}}><span style={{color:CLR.muted,flexShrink:0}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",textAlign:"left",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,textAlign:"left",wordBreak:"break-word"}}>{v}</span>}</div>:null;
         const box=(t,rows)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:CLR.surface,borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:CLR.primary,margin:"4px 0 2px"}}>{t}</div>{r}</div>:null; };
@@ -9001,6 +8958,63 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             ...(c.extraContacts||[]).filter(x=>x&&(x.name||x.phone)).map((x,i)=>row([x.role||"איש קשר נוסף",x.name].filter(Boolean).join(" · "),x.phone||"—",x.phone?tel(x.phone):null)),
           ])}
           {c.intakeText&&<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:"#166534",margin:"4px 0"}}>📝 הפרטים כפי שנרשמו</div><div style={{whiteSpace:"pre-wrap",fontSize:14}}>{c.intakeText}</div></div>}
+        </>; })()}
+      {sel.notes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>⚠️ <b>הערות:</b> {sel.notes}</div>}
+      {(()=>{
+        const custFinance=finance.filter(f=>f.customerId===sel.id);
+        const totalDebt=custFinance.filter(f=>f.status==="חוב").reduce((s,f)=>s+f.amount,0);
+        const pendingAppts=appointments.filter(a=>a.customerId===sel.id&&a.status!=="בוצע"&&a.status!=="בוטל");
+        const pendingValue=pendingAppts.reduce((s,a)=>s+a.price,0);
+        return <>
+          {totalDebt>0&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 14px",margin:"8px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>⚠️ <b>חוב פתוח:</b></span>
+            <span style={{fontWeight:700,color:CLR.danger,fontSize:15}}>₪{totalDebt.toLocaleString()}</span>
+          </div>}
+          {pendingValue>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"10px 14px",margin:"8px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>📅 <b>תורים עתידיים ({pendingAppts.length}):</b></span>
+            <span style={{fontWeight:700,color:CLR.info,fontSize:15}}>₪{pendingValue.toLocaleString()}</span>
+          </div>}
+        </>;
+      })()}
+      {(()=>{ const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const l=st.log;
+        return <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRight:"3px solid "+(st.need?"#38bdf8":l?"#16a34a":"#cbd5e1"),borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#64748b",marginBottom:4}}>📌 מצב הטיפול</div>
+          {l?<>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:5}}>הטיפול האחרון · {fmtDate(l.date)}{l.docNum?" · יומן ביצוע "+l.docNum:""}{(l.pest||[]).length?" · "+(l.pest||[]).slice(0,3).join(", "):""}</div>
+            <JobSteps steps={st.steps}/>
+            {st.need&&<div style={{marginTop:8,fontSize:13,fontWeight:700,color:"#0369a1"}}>{NEED_TXT[st.need]}{st.need==="pay"&&st.debt?" — ₪"+st.debt:""}</div>}
+          </>:<div style={{fontSize:13,color:"#94a3b8"}}>{st.nextAppt?"📅 תור קרוב: "+fmtDate(st.nextAppt.date)+(st.nextAppt.time?" "+st.nextAppt.time:""):st.lastDate?"טופל ב-"+fmtDate(st.lastDate)+" (אין יומן ביצוע במערכת)":"עוד לא בוצע טיפול"}</div>}
+          {(st.need||(l&&!l.draft))&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:6,marginTop:10}}>
+            {needBtn(sel,st)}
+            {l&&!l.draft&&<button onClick={()=>sendExecLogWA(l,sel.phone)} style={{...ab,justifyContent:"center",color:"#15803d",borderColor:"#bbf7d0"}}>📤 שלח יומן ביצוע</button>}
+          </div>}
+        </div>; })()}
+      {(()=>{ const T={go:["#16a34a","#fff","#16a34a"],inv:["#0f766e","#fff","#0f766e"],sent:["#bbf7d0","#14532d","#4ade80"],plain:["#fff","#0f172a","#e2e8f0"]};
+        const tile=(icon,label,sub,on,tone)=>{ const c=T[tone||"plain"]; return <button key={label} type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:c[0],color:c[1],border:"1px solid "+c[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
+          <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub}</div>}</span></button>; };
+        const mgr=currentUser.role!=="מדביר"; const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const rv=sel.reviewRequestedAt;
+        return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+          {tile("📋","יומן ביצוע",st.log?"יומן ביצוע נוסף":"יומן ביצוע חדש",()=>goNewLog(sel),"go")}
+          {mgr&&tile("🧾","חשבונית / קבלה","הפקת מסמך ללקוח",()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""}),"inv")}
+          {mgr&&tile("💳","קישור לתשלום","שליחת קישור בוואטסאפ",()=>setCustPayReq(true))}
+          {tile("⭐","ביקורת בגוגל",rv?"נשלחה · "+fmtDate(String(rv).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>{ if(!sel.phone) return alert("אין טלפון ללקוח הזה"); setCustRevReq(true); },rv?"sent":undefined)}
+          {mgr&&tile("📅","שבץ תור","קביעת תור ביומן",()=>{setSchedFor(sel);setSel(null);})}
+          {mgr&&tile("📝","הזמנת עבודה","פתיחת הזמנה חדשה",()=>{ window.__h360PendingOrder=sel; setSel(null); window.__h360Nav&&window.__h360Nav("neworder"); })}
+        </div>; })()}
+      {custRevReq&&<TextSendModal title="⭐ בקשת ביקורת בגוגל" text={reviewText(sel.contactName||(sel.bizName||/\d/.test(sel.name||"")||String(sel.name||"").trim().split(/\s+/).length>2?"":sel.name))} phone={sel.phone} onClose={()=>setCustRevReq(false)}
+        onSent={()=>{ const now=new Date().toISOString(); setCustomers(cs=>cs.map(c=>String(c.id)===String(sel.id)?{...c,reviewRequestedAt:now,updatedAt:now}:c)); setSel(s=>s?{...s,reviewRequestedAt:now}:s); }}/>}
+      {custPayReq&&(()=>{ const debtAmt=finance.filter(f=>f.customerId===sel.id&&f.status==="חוב").reduce((s,f)=>s+(f.amount||0),0);
+        return <PayRequestModal amount={debtAmt||sel.lastPrice||""} desc={sel.pestType?"הדברת "+sel.pestType:"טיפול הדברה"}
+          cust={{name:custDocName(sel)||sel.name,contactName:sel.contactName||"",phone:sel.phone||"",email:sel.email||"",taxId:sel.taxId||"",address:sel.address||""}}
+          onClose={()=>setCustPayReq(false)}/>; })()}
+      {(()=>{ const c=sel; const has=v=>v!=null&&String(v).trim()!==""&&String(v)!=="—";
+        const row=(k,v,href)=>has(v)?<div key={k} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:"1px solid #f1f5f9",fontSize:14}}><span style={{color:CLR.muted,flexShrink:0}}>{k}</span>{href?<a href={href} style={{fontWeight:600,color:"#1d4ed8",textAlign:"left",wordBreak:"break-word"}}>{v}</a>:<span style={{fontWeight:600,textAlign:"left",wordBreak:"break-word"}}>{v}</span>}</div>:null;
+        const box=(t,rows)=>{ const r=rows.filter(Boolean); return r.length?<div style={{background:CLR.surface,borderRadius:12,padding:"8px 14px",marginBottom:10}}><div style={{fontWeight:800,fontSize:14,color:CLR.primary,margin:"4px 0 2px"}}>{t}</div>{r}</div>:null; };
+        const tel=p=>"tel:"+String(p||"").replace(/[^\d+]/g,"");
+        const isBizC=!!c.contactName; const docN=c.bizName||c.name;
+        const unit=[c.entrance&&"כניסה "+c.entrance,c.floor&&(c.floor==="קרקע"?"קומת קרקע":String(c.floor).startsWith("-")?"קומה מינוס "+String(c.floor).slice(1):"קומה "+c.floor),c.aptNum&&((c.propertyType==="דירה"?"דירה ":"יחידה ")+c.aptNum)].filter(Boolean).join(" · ");
+        const nav=navAddr(c.address||"");
+        return <>
           {box("📍 כתובת",[row("כתובת",c.address),row(isBizC||c.propertyType==="חנות"?"קומה / יחידה":"כניסה / קומה / דירה",unit),row("פרטים נוספים",c.addrMore),row("קוד בניין",c.buildingCode),row("חניה",c.parking===true?"יש":c.parking===false?"אין":""),row("מעלית",c.elevator===true?"יש":c.elevator===false?"אין":"")])}
           {has(c.address)&&<div style={{display:"flex",gap:8,margin:"-4px 0 10px"}}><a href={"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(nav)} target="_blank" rel="noreferrer" style={{flex:1,textAlign:"center",padding:"8px",borderRadius:10,background:"#ecfdf5",color:"#166534",fontWeight:700,textDecoration:"none",fontSize:13}}>🗺️ פתח במפה</a></div>}
           {box("🏠 פרטי הנכס",[
@@ -9022,33 +9036,9 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
             row("איך הגיע",c.source),
           ])}
         </>; })()}
-      {(()=>{
-        const custFinance=finance.filter(f=>f.customerId===sel.id);
-        const totalDebt=custFinance.filter(f=>f.status==="חוב").reduce((s,f)=>s+f.amount,0);
-        const pendingAppts=appointments.filter(a=>a.customerId===sel.id&&a.status!=="בוצע"&&a.status!=="בוטל");
-        const pendingValue=pendingAppts.reduce((s,a)=>s+a.price,0);
-        return <>
-          {totalDebt>0&&<div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 14px",margin:"8px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span>⚠️ <b>חוב פתוח:</b></span>
-            <span style={{fontWeight:700,color:CLR.danger,fontSize:15}}>₪{totalDebt.toLocaleString()}</span>
-          </div>}
-          {pendingValue>0&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"10px 14px",margin:"8px 0",fontSize:13,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span>📅 <b>תורים עתידיים ({pendingAppts.length}):</b></span>
-            <span style={{fontWeight:700,color:CLR.info,fontSize:15}}>₪{pendingValue.toLocaleString()}</span>
-          </div>}
-        </>;
-      })()}
       {(()=>{ const L=(yeshArch||[]).filter(x=>String(x.custId)===String(sel.id)).sort((a,b)=>String(b.date).localeCompare(String(a.date))); if(!L.length) return null;
         return <details style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"8px 12px",margin:"8px 0"}}><summary style={{cursor:"pointer",fontSize:13,fontWeight:700}}>📁 מסמכים מיש חשבונית ({L.length})</summary>{L.map(x=><YeshDocRow key={x.k} x={x}/>)}</details>; })()}
-      {sel.notes&&<div style={{background:"#fef9c3",borderRadius:8,padding:"10px 14px",margin:"12px 0",fontSize:13}}>⚠️ <b>הערות:</b> {sel.notes}</div>}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"16px 0 8px"}}>
-        <h3 style={{fontSize:14,color:CLR.primary,margin:0}}>📋 ציר זמן טיפולים</h3>
-        {currentUser.role!=="מדביר"&&<Btn sm onClick={()=>{setSchedFor(sel);setSel(null);}}>📅 שבץ תור ליומן</Btn>}
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})}>🧾 חשבונית / קבלה</Btn>}
-        {currentUser.role!=="מדביר"&&<Btn sm v="secondary" style={{flex:"1 1 140px"}} onClick={()=>{ window.__h360PendingOrder=sel; setSel(null); window.__h360Nav&&window.__h360Nav("neworder"); }}>📝 הזמנת עבודה</Btn>}
-      </div>
+      <h3 style={{fontSize:14,color:CLR.primary,margin:"16px 0 8px"}}>📋 ציר זמן טיפולים</h3>
       {(()=>{
         const custAppts=[...appointments.filter(a=>a.customerId===sel.id)].sort((a,b)=>a.date.localeCompare(b.date));
         if(custAppts.length>=2){
@@ -9086,7 +9076,7 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           <button onClick={()=>printExecLog(l)} style={{padding:"4px 10px",borderRadius:6,border:"1px solid "+CLR.border,background:"#f9fafb",fontSize:12,cursor:"pointer",color:"#475569"}}>📄 PDF</button>
           <button onClick={()=>goLog("dup",l)} style={{padding:"4px 10px",borderRadius:6,border:"1px solid "+CLR.border,background:"#f9fafb",fontSize:12,cursor:"pointer",color:"#475569"}}>⧉ שכפל</button>
         </div>;
-        if(allAppts.length===0) return <p style={{color:CLR.muted,fontSize:13}}>אין טיפולים — לחץ "שבץ תור ליומן" כדי לקבוע</p>;
+        if(allAppts.length===0) return <p style={{color:CLR.muted,fontSize:13}}>אין טיפולים — לחץ "שבץ תור" למעלה כדי לקבוע</p>;
         const statusColor={ממתין:"#f59e0b",בוצע:"#16a34a",בדרך:"#2563eb",בוטל:"#9ca3af"};
         return <div style={{position:"relative"}}>
           {/* Vertical line */}
@@ -9135,6 +9125,35 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           })}
         </div>;
       })()}
+      <div style={{borderTop:"1px solid #e2e8f0",marginTop:14,paddingTop:12}}>
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+        <Badge status={sel.status}/>
+        <span style={{fontSize:13,color:CLR.muted}}>{sel.phone}</span>
+        {sel.email&&<span style={{fontSize:13,color:CLR.muted}}>| {sel.email}</span>}
+        {isArchived(sel)&&<span style={{background:"#fef9c3",color:"#92400e",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>📦 בארכיון</span>}
+        {sel.source&&<span style={{background:"#ede9fe",color:"#6d28d9",padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600}}>📣 {sel.source}</span>}
+        <select value={sel.tag||""} onChange={e=>{const tag=e.target.value;setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,tag}:c));setSel({...sel,tag});}}
+          style={{padding:"2px 8px",borderRadius:20,border:"1px solid #e5e7eb",fontSize:11,cursor:"pointer",background:"#f9fafb"}}>
+          <option value="">🏷️ תגית</option>
+          <option value="vip">⭐ VIP</option>
+          <option value="new">🆕 חדש</option>
+          <option value="problem">⚠️ בעייתי</option>
+          <option value="loyal">💚 נאמן</option>
+        </select>
+        <button onClick={()=>{setCustomers(cs=>cs.map(c=>c.id===sel.id?{...c,archived:!isArchived(c)}:c));setSel(null);}}
+          style={{padding:"3px 10px",borderRadius:8,border:"1px solid "+(isArchived(sel)?"#86efac":"#fcd34d"),background:isArchived(sel)?"#dcfce7":"#fef9c3",color:isArchived(sel)?"#166534":"#92400e",fontSize:11,cursor:"pointer",fontWeight:600}}>
+          {isArchived(sel)?"↩️ הוצא מארכיון":"📦 העבר לארכיון"}
+        </button>
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}><Btn sm v="ghost" onClick={()=>setEditingCust(true)}>✏️ ערוך פרטים</Btn>
+        {currentUser&&currentUser.role==="מנהל"&&<Btn sm v="ghost" onClick={()=>{ if(window.confirm(`למחוק את ${sel.name}?\nהלקוח יעבור לסל המחזור ואפשר יהיה לשחזר אותו.`)){ softDelete(setCustomers, sel.id); setSel(null); } }} style={{color:CLR.danger,border:`1px solid ${CLR.danger}`}}>🗑️ מחק לקוח</Btn>}
+      </div>
+      <CustHistory c={customers.find(x=>String(x.id)===String(sel.id))||sel} onRestore={(k,v)=>{ const cur=customers.find(x=>String(x.id)===String(sel.id))||sel; const lbl=CUST_HIST_FIELDS[k]||k;
+          if(!confirm(`להחזיר את "${lbl}" ל: ${v||"(ריק)"}?`)) return;
+          const val=v;
+          const up={...cur,[k]:val,updatedAt:new Date().toISOString(),__histNote:"שוחזר: "+lbl};
+          setCustomers(cs=>cs.map(x=>String(x.id)===String(cur.id)?up:x)); setSel({...up}); showToast("↩ "+lbl+" שוחזר"); }}/>
+      </div>
     </Modal>}
     {nextFor&&<Modal title={"✅ "+nextFor.name+" נשמר בלקוחות — מה עכשיו?"} onClose={()=>setNextFor(null)} width={460}>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -14812,7 +14831,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "263";
+const APP_BUILD = "264";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
