@@ -72,10 +72,63 @@ const SCHEMA = {
   required: ["apptId", "wantLog", "wantInvoice", "wantAppt", "apptDate", "apptTime", "customerId", "newName", "pests", "materials", "price", "summary"],
 };
 
+const PROOF_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    issues: { type: "ARRAY", items: { type: "OBJECT", properties: {
+      k: S("the key of the item where the mistake is"),
+      wrong: S("the misspelled word exactly as written in the text"),
+      fix: S("the corrected word"),
+    }, required: ["k", "wrong", "fix"] } },
+  },
+  required: ["issues"],
+};
+const PROOF_SYSTEM = [
+  "You proofread short Hebrew texts written by an Israeli pest-control technician (הדברה) for customer documents: invoices and treatment logs.",
+  "Find ONLY clear spelling mistakes and typos — a word that is misspelled or a wrong letter that makes a different/meaningless word in context (e.g. 'הדברת חתר משרד' → 'חתר' should be 'חצר'; 'תיקנים בממטבח' → 'במטבח').",
+  "Do NOT flag: correct words, style, punctuation, grammar choices, slang, abbreviations, numbers, product/chemical names, brand names, people or business names, street names, English words, and the professional terms list given.",
+  "If unsure, do not flag. An empty list is the normal answer.",
+  "'wrong' must appear exactly in the item's text. 'fix' is the single corrected word (or two words if a space is missing).",
+].join("\n");
+
 async function requireUser(req) {
   const tok = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const { data, error } = await sb.auth.getUser(tok);
   if (error || !data || !data.user) throw new Error("צריך להיות מחובר למערכת");
+}
+
+async function gemini(key, system, text, schema) {
+    const errors = []; const tried = new Set();
+    const queue = [...(cachedModel ? [cachedModel] : []), ...PREFERRED];
+    while (queue.length) {
+      const model = queue.shift(); if (tried.has(model)) continue; tried.add(model);
+      let r;
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: "POST", signal: AbortSignal.timeout(20000),
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: "user", parts: [{ text }] }],
+            generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: schema, ...(noThink.has(model) ? {} : thinkOff(model)) },
+          }),
+        });
+      } catch (_e) { errors.push(model + ": timeout"); if (cachedModel === model) cachedModel = ""; continue; }
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const out = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
+        let data; try { data = JSON.parse(out); } catch { errors.push(model + ": bad json"); continue; }
+        cachedModel = model;
+        return json({ ok: true, data, model });
+      }
+      const msg = j?.error?.message || `HTTP ${r.status}`;
+      if (r.status === 400 && /thinking/i.test(msg) && !noThink.has(model)) { noThink.add(model); tried.delete(model); queue.unshift(model); continue; }
+      if (cachedModel === model) cachedModel = "";
+      errors.push(model + ": " + r.status + " " + msg.slice(0, 90));
+      if (r.status === 400 && /API key/i.test(msg)) return json({ error: "מפתח Gemini לא תקין" }, 401);
+      if (r.status === 429 && !queue.length) return json({ error: "quota: " + msg }, 429);
+    }
+    return json({ error: "gemini error", skipped: errors }, 502);
 }
 
 Deno.serve(async (req) => {
@@ -84,6 +137,15 @@ Deno.serve(async (req) => {
   try {
     try { await requireUser(req); } catch (e) { return json({ error: String(e.message || e) }, 401); }
     const body = await req.json();
+    if (body.task === "proofread") {
+      const key0 = Deno.env.get("GEMINI_API_KEY");
+      if (!key0) return json({ error: "missing key: GEMINI_API_KEY" }, 500);
+      const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40)
+        .map((x) => ({ k: String(x && x.k || "").slice(0, 40), t: String(x && x.t || "").slice(0, 1500) })).filter((x) => x.k && x.t.trim());
+      if (!items.length) return json({ ok: true, data: { issues: [] } });
+      const terms = (Array.isArray(body.terms) ? body.terms : []).slice(0, 300).map(String).join(" | ");
+      return await gemini(key0, PROOF_SYSTEM + "\nProfessional terms (never flag): " + terms, JSON.stringify(items), PROOF_SCHEMA);
+    }
     const text = String(body.text || "").slice(0, 3000).trim();
     if (!text) return json({ error: "אין טקסט" }, 400);
     const c = body.ctx || {};
@@ -126,37 +188,7 @@ Deno.serve(async (req) => {
       "Methods: " + L(c.methods),
       "Payment methods: " + L(c.payMethods),
     ].join("\n");
-    const errors = []; const tried = new Set();
-    const queue = [...(cachedModel ? [cachedModel] : []), ...PREFERRED];
-    while (queue.length) {
-      const model = queue.shift(); if (tried.has(model)) continue; tried.add(model);
-      let r;
-      try {
-        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-          method: "POST", signal: AbortSignal.timeout(20000),
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: "user", parts: [{ text }] }],
-            generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA, ...(noThink.has(model) ? {} : thinkOff(model)) },
-          }),
-        });
-      } catch (_e) { errors.push(model + ": timeout"); if (cachedModel === model) cachedModel = ""; continue; }
-      const j = await r.json().catch(() => ({}));
-      if (r.ok) {
-        const out = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("").trim();
-        let data; try { data = JSON.parse(out); } catch { errors.push(model + ": bad json"); continue; }
-        cachedModel = model;
-        return json({ ok: true, data, model });
-      }
-      const msg = j?.error?.message || `HTTP ${r.status}`;
-      if (r.status === 400 && /thinking/i.test(msg) && !noThink.has(model)) { noThink.add(model); tried.delete(model); queue.unshift(model); continue; }
-      if (cachedModel === model) cachedModel = "";
-      errors.push(model + ": " + r.status + " " + msg.slice(0, 90));
-      if (r.status === 400 && /API key/i.test(msg)) return json({ error: "מפתח Gemini לא תקין" }, 401);
-      if (r.status === 429 && !queue.length) return json({ error: "quota: " + msg }, 429);
-    }
-    return json({ error: "gemini error", skipped: errors }, 502);
+    return await gemini(key, system, text, SCHEMA);
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
