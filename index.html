@@ -2095,13 +2095,18 @@ function sendLinks(ph,em,{text,subject}){
     sms: "sms:"+local+(ios?"&":"?")+"body="+t,
     mail: "mailto:"+String(em||"").replace(/[^A-Za-z0-9@._+\-]/g,"")+"?subject="+encodeURIComponent(subject)+"&body="+t };
 }
-function SendModal({log,doc,phone,customers=[],saved,onClose}){
+function SendModal({log:logIn,doc,phone,customers=[],saved,onClose}){
+  // חשבונית שהופקה מיומן ביצוע — מציעים לשלוח את שניהם יחד בהודעה אחת
+  const linkedLog=React.useMemo(()=>{ if(logIn||!doc) return null; const ids=[doc.execLogId,...(doc.execLogIds||[])].filter(x=>x!=null).map(String); if(!ids.length) return null;
+    return (window.__h360ExecLogs||[]).find(l=>l&&!l.deleted&&!l.draft&&ids.includes(String(l.id)))||null; },[]);
+  const [withLog,setWithLog]=useState(()=>!!(linkedLog&&!linkedLog.sentAt));
+  const log=logIn||(withLog?linkedLog:null);
   const cid=(log&&log.customerId)||(doc&&doc.customerId);
   const c=(customers||[]).find(x=>cid!=null&&String(x.id)===String(cid))||(customers||[]).find(x=>log&&x.name===log.clientName)||(customers||[]).find(x=>doc&&x.name===doc.customer)||{};
   const opts=[...new Set([phone,log&&log.phone,c.phone,c.phone2,c.contactPhone,doc&&(doc.cust||{}).phone].map(x=>String(x||"").trim()).filter(Boolean))];
   const [ph,setPh]=useState(opts[0]||""); const [em,setEm]=useState(c.email||(doc&&(doc.cust||{}).email)||""); const [other,setOther]=useState(!opts.length);
   const [ready,setReady]=useState(null); const [err,setErr]=useState("");
-  React.useEffect(()=>{ let off=false; (async()=>{ try{ if(doc&&docNeedsSig(doc)&&!sigUnlockedPem()&&sigKey()) await sigEnsureUnlocked(); const r=await prepareSendText(log,doc); if(!off) setReady(r); }catch(e){ if(off) return; setErr(e.message||String(e)); if(log&&!doc) setReady({text:execLogWAText(log),subject:"יומן ביצוע — "+COMPANY.name}); } })(); return ()=>{off=true;}; },[]);
+  React.useEffect(()=>{ let off=false; (async()=>{ try{ if(doc&&docNeedsSig(doc)&&!sigUnlockedPem()&&sigKey()) await sigEnsureUnlocked(); setReady(null); setErr(""); const r=await prepareSendText(log,doc); if(!off) setReady(r); }catch(e){ if(off) return; setErr(e.message||String(e)); if(log&&!doc) setReady({text:execLogWAText(log),subject:"יומן ביצוע — "+COMPANY.name}); } })(); return ()=>{off=true;}; },[withLog]);
   const name=(log&&log.clientName)||(doc&&(doc.customer||(doc.cust&&doc.cust.name)))||"";
   const what=log&&doc?"יומן ביצוע + "+doc.docType:log?"יומן ביצוע "+(log.docNum||""):doc.docType;
   const okPh=ph.replace(/\D/g,"").length>=9, okEm=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em.trim());
@@ -2118,6 +2123,10 @@ function SendModal({log,doc,phone,customers=[],saved,onClose}){
     <div style={{fontSize:14,marginBottom:12}}>שליחה ל<b>{name||"הלקוח"}</b>
       <div style={{fontSize:12,marginTop:4,color:ready?"#15803d":err?"#b91c1c":"#64748b"}}>{ready?(err?"⚠️ ה-PDF לא נוצר — יישלח סיכום בטקסט":"✓ הקישור ל-PDF מוכן"):err?"⚠️ "+err:"⏳ מכין את ה-PDF והקישור…"}</div>
     </div>
+    {linkedLog&&<label style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 12px",padding:"10px 11px",borderRadius:10,background:withLog?"#dcfce7":"#f8fafc",border:"1px solid "+(withLog?"#4ade80":"#e2e8f0"),cursor:"pointer",fontSize:14,fontWeight:700,color:"#14532d"}}>
+      <input type="checkbox" checked={withLog} onChange={e=>setWithLog(e.target.checked)} style={{width:18,height:18}}/>
+      <span>📋 לשלוח יחד גם את יומן הביצוע מס׳ {linkedLog.docNum||""}{linkedLog.sentAt?<span style={{fontWeight:400,color:"#64748b",fontSize:12}}> · כבר נשלח ב־{fmtDate(String(linkedLog.sentAt).slice(0,10))}</span>:null}</span>
+    </label>}
     <label style={lab}>📞 לאיזה מספר</label>
     <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
       {opts.map(o=><button key={o} type="button" onClick={()=>{setPh(o);setOther(false);}} style={chip(!other&&ph===o)}>{o}{String(o)===String(c.phone||"")?" · הלקוח":""}</button>)}
@@ -14828,7 +14837,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "265";
+const APP_BUILD = "266";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
@@ -15132,6 +15141,7 @@ function App(){
     {id:4,name:"תזכורת תשלום",emoji:"💳",text:"שלום *{שם}* 👋\n\nבהתאם לבדיקתנו, ישנו חוב פתוח עבור הטיפול שביצענו.\nנשמח להסדיר את התשלום בהקדם.\n\n"+COMPANY.name+" 🦟"},
   ]);
   const [execLogsAll,setExecLogs]=useLS("execLogs", []);
+  window.__h360ExecLogs=execLogsAll;
   const execLogs = React.useMemo(()=>activeOnly(execLogsAll),[execLogsAll]);
   // 🔗 קישור אוטומטי: יומן ביצוע / חשבונית שנעשו בלי לפתוח מהתור — מתחברים לתור של אותו לקוח באותו יום
   const _unlinkSig=(execLogs||[]).filter(l=>!l.deleted&&!l.apptId).map(l=>l.id).join(",")+"|"+(finance||[]).filter(f=>f&&!f.deleted&&f.category==="חשבונית"&&!f.apptId&&!f.execLogId).map(f=>f.id).join(",");
