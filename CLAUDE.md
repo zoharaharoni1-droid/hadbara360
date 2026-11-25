@@ -18,7 +18,7 @@ Phone (<900px) = clean, minimal (extra actions behind +, explanations only with 
 | Quick entry / task | `FreeNoteForm`, `QuickAddModal`, `PersonalTaskForm`, `parseTask` |
 | Exec log (יומן ביצוע) | `function ExecLogForm(`, `applySmart`, `ExecSmartFill`, `elParse`, `ExecLogModalInline`, `execLogHtml` |
 | Exec log templates (📌) | `logTplSnap`, `logTplApply`, `LogTplBar`, `LogTplScreen` (tab `logtpl`), `aiTplFind`/`aiTplFindAll`, combining `tplCompose`/`logTplMerge` (multi-select, no duplicates), numbering `logTplNums` (user-chosen `num`), `LogTplDetails`; cloud file `contracts/company/logtpl-*.json` |
-| Instruction blocks (🧩) | `BLK_DEFAULT` (lines from `TERMS_DEFAULT` + conditions m/nm/all/pl, drafts `st:"draft"` wait for approval), `blkCtx`, `blkAssemble` (builds terms g_spray/g_safety/p_* from what was done), `BlkScreen` (tab `instrblk`); cloud file `contracts/company/instrblk-*.json` |
+| Instruction blocks (🧩) | `BLK_DEFAULT` (v2: lines per zone — conditions m/nm/all + places pl (any) / npl (none) from `BLK_PLACES`: apt, panels, drains, stair, sewer, yard, parking, bld, outonly…; token `{אזורים}`; drafts `st:"draft"` wait for approval; old untouched lines migrate via `BLK_OLD_H`/`blkMig`), `blkCtx` (zones from the material areas, else place extras), `blkAssemble` (builds terms g_spray/g_safety/p_* from what was done), `BlkScreen` (tab `instrblk`); cloud file `contracts/company/instrblk-*.json` |
 | Instructions presets | `INSTR_BASE`, `INSTR_BY_PEST`, `INSTR_PETS`, `INSTR_BABY`, `INSTR_RODENT_BAIT` |
 | Monitoring findings | `MONITOR_SIGNS`, `monitorSigns`, `monitorText` |
 | Invoices / receipts | `function DocModal(`, `printDoc`, `docPrefillFromLog`, `LOG_PAY_TO_DOC`, `PAY_METHODS_DOC` |
