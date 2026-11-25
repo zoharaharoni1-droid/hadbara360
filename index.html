@@ -5580,8 +5580,8 @@ function ApptDetailModal({appt,customers,workers,currentUser,execLogs,finance,on
         return null; })()}
       {freeBlk}
       {appt.status!=="בוטל"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-        {lg?tile("📋","יומן ביצוע",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(sent?"נשלח ללקוח":"עוד לא נשלח"),()=>onFillLog(appt),sent?"sent":"ok",sent?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>onFillLog(appt))}
-        {isStaff&&(()=>{ const d0=docs[0]; const dSent=docs.some(d=>d.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||"")+" · "+(dSent?"נשלח ללקוח":"עוד לא נשלח"),()=>tog("doc"),dSent?"sent":"ok",dSent?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>onInvoice(appt)); })()}
+        {lg?tile("📋","יומן ביצוע",(lg.docNum?"מס׳ "+lg.docNum+" · ":"")+(lg.draft?"טיוטה":"👁 לחץ לצפייה"),()=>lg.draft?onFillLog(appt,{edit:true}):printExecLog(lg),sent?"sent":"ok",sent?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>onFillLog(appt))}
+        {isStaff&&(()=>{ const d0=docs[0]; const dSent=docs.some(d=>d.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||"")+" · 👁 לחץ לצפייה",()=>printInvoice(d0),dSent?"sent":"ok",dSent?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>onInvoice(appt)); })()}
         {canQuick&&tile("🕐","שינוי מועד","תאריך · שעה · מדביר",openQuick)}
         {isStaff&&tile("💳","קישור לתשלום","ביט · העברה · פרטים לחשבונית",()=>setPayReq(true))}
         {tile("⭐","ביקורת בגוגל",appt.reviewRequestedAt?"נשלחה · "+fmtDate(String(appt.reviewRequestedAt).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>setRevReq(true),appt.reviewRequestedAt?"sent":undefined,appt.reviewRequestedAt?2:0)}
@@ -9042,12 +9042,12 @@ function Customers({customers,setCustomers,appointments,setAppointments,workers,
           </div>}
         </div>; })()}
       {(()=>{ const T={ok:["#dcfce7","#166534","#86efac"],sent:["#bbf7d0","#14532d","#4ade80"],plain:["#fff","#0f172a","#e2e8f0"]};
-        const tile=(icon,label,sub,on,tone,checks=0)=>{ const c=T[tone||"plain"]; return <button key={label} type="button" onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:c[0],color:c[1],border:"1px solid "+c[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0}}>
-          <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,lineHeight:1.3}}>{sub}</div>}</span>{checks>0&&<span title={checks>1?"מולא ונשלח":"מולא"} style={{flexShrink:0,background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:12,fontWeight:900,letterSpacing:-2}}>{checks>1?"✓✓":"✓"}</span>}</button>; };
+        const tile=(icon,label,sub,on,tone,checks=0,plus=null)=>{ const c=T[tone||"plain"]; return <div key={label} role="button" tabIndex={0} onClick={on} style={{display:"flex",alignItems:"center",gap:10,padding:"12px",borderRadius:14,background:c[0],color:c[1],border:"1px solid "+c[2],cursor:"pointer",fontFamily:"inherit",textAlign:"right",minWidth:0,position:"relative"}}>
+          <span style={{fontSize:22,lineHeight:1}}>{icon}</span><span style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:800,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}</div>{sub&&<div style={{fontSize:11,opacity:.8,lineHeight:1.3}}>{sub}</div>}</span>{checks>0&&<span title={checks>1?"מולא ונשלח":"מולא"} style={{flexShrink:0,background:"#16a34a",color:"#fff",borderRadius:20,padding:"1px 7px",fontSize:12,fontWeight:900,letterSpacing:-2}}>{checks>1?"✓✓":"✓"}</span>}{plus&&<button type="button" title="חדש" onClick={e=>{e.stopPropagation();plus();}} style={{position:"absolute",top:-8,left:-6,border:"1px solid #cbd5e1",background:"#fff",color:"#0f172a",borderRadius:20,padding:"1px 8px",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 1px 3px rgba(0,0,0,.12)"}}>+ חדש</button>}</div>; };
         const mgr=currentUser.role!=="מדביר"; const st=jobSt[String(sel.id)]||custJobState(sel,appointments,execLogs,finance); const rv=sel.reviewRequestedAt;
         return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-          {(()=>{ const l=st.log&&!st.log.draft?st.log:null; const sn=!!(l&&l.sentAt); return l?tile("📋","יומן ביצוע",(l.docNum?"מס׳ "+l.docNum+" · ":"")+(sn?"נשלח":"לא נשלח"),()=>goNewLog(sel),sn?"sent":"ok",sn?2:1):tile("✍️","יומן ביצוע","עוד לא מולא",()=>goNewLog(sel)); })()}
-          {mgr&&(()=>{ const d0=(finance||[]).filter(f=>String(f.customerId)===String(sel.id)&&!f.deleted&&(f.invoiceNum||f.docSeq)).sort((x,y)=>String(y.date||"").localeCompare(String(x.date||"")))[0]; const dS=!!(d0&&d0.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||d0.docSeq||"")+" · "+(dS?"נשלחה":"לא נשלחה"),()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""}),dS?"sent":"ok",dS?2:1):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})); })()}
+          {(()=>{ const l=st.log&&!st.log.draft?st.log:null; const sn=!!(l&&l.sentAt); return l?tile("📋","יומן ביצוע",(l.docNum?"מס׳ "+l.docNum+" · ":"")+"👁 צפייה",()=>printExecLog(l),sn?"sent":"ok",sn?2:1,()=>goNewLog(sel)):tile("✍️","יומן ביצוע","עוד לא מולא",()=>goNewLog(sel)); })()}
+          {mgr&&(()=>{ const d0=(finance||[]).filter(f=>String(f.customerId)===String(sel.id)&&!f.deleted&&(f.invoiceNum||f.docSeq)).sort((x,y)=>String(y.date||"").localeCompare(String(x.date||"")))[0]; const dS=!!(d0&&d0.sentAt); return d0?tile("🧾",(d0.docType||"חשבונית").replace("חשבונית מס/קבלה","חשבונית"),(d0.invoiceNum||d0.docSeq||"")+" · 👁 צפייה",()=>printInvoice(d0),dS?"sent":"ok",dS?2:1,()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})):tile("🧾","חשבונית / קבלה","עוד לא הופקה",()=>setInvAppt({id:null,customerId:sel.id,customerName:sel.name,pestType:sel.pestType||"",address:sel.address||"",price:parseFloat(sel.lastPrice)||""})); })()}
           {mgr&&tile("💳","קישור לתשלום","שליחת קישור בוואטסאפ",()=>setCustPayReq(true))}
           {tile("⭐","ביקורת בגוגל",rv?"נשלחה · "+fmtDate(String(rv).slice(0,10)):"בקשה מהלקוח לכתוב ביקורת",()=>{ if(!sel.phone) return alert("אין טלפון ללקוח הזה"); setCustRevReq(true); },rv?"sent":undefined,rv?2:0)}
           {mgr&&tile("📅","שבץ תור","קביעת תור ביומן",()=>{setSchedFor(sel);setSel(null);})}
@@ -9933,9 +9933,11 @@ function docOrigCopy(doc,copy){ if(!doc||!doc.official||copy) return !!copy; if(
 function printDoc(doc, copy){ const c=docOrigCopy(doc,copy); openPrintWindow(doc.docType+" "+String(doc.docSeq||"").padStart(4,"0")+(c?" - העתק":""), docHtml({...doc,copy:c})); }
 
 // ── טופס הפקת מסמך ──
+const P0lock=p=>!!(p&&(p.lockType||p.typeChosen||p.refund||p.refDocId||(p.aiR&&p.aiR.docType)));
 function DocModal({type:initType="חשבונית מס/קבלה",customers=[],setCustomers,appointments=[],finance=[],prefill={},onClose,onSave}){
   const P=prefill||{};
   const [type,setType]=useState(initType);
+  const [picked,setPicked]=useState(()=>!!(P0lock(prefill)));
   const T=DOC_TYPES[type];
   const [custId,setCustId]=useState(P.custId!=null?String(P.custId):"");
   const cust=customers.find(c=>String(c.id)===String(custId))||null;
@@ -10054,6 +10056,18 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       setPayments([{method,amount:amt,date:r.date||date,details:r.payment.payments&&method==="כרטיס אשראי"?{payments:r.payment.payments}:{}}]); }
     if(r.notes) setNotes(n=>mergeNotes(n,r.notes));
   };
+  if(!picked){ const sugg=initType; const fromLog=!!(P.execLogId||P.apptId); const why=!fromLog?"":sugg==="חשבונית מס/קבלה"?"לפי היומן: שולם":sugg==="חשבונית מס"?"לפי היומן: לא שולם":"";
+    const OPTS=[["חשבונית מס/קבלה","הלקוח שילם עכשיו — חשבונית וקבלה במסמך אחד"],["חשבונית מס","הלקוח ישלם אחר כך (משרד, ועד בית, חברה)"],["קבלה","רק אישור על תשלום — למשל אחרי חשבונית מס"],["חשבון עסקה","בקשת תשלום — לא מסמך מס"]];
+    return <Modal title={"🧾 איזה מסמך להפיק?"+(P.custName?" — "+P.custName:"")} onClose={onClose} width={520}>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {OPTS.map(([t,sub])=>{ const c=DOC_TYPES[t].color; const rec=t===sugg&&fromLog; return <button key={t} type="button" onClick={()=>{setType(t);setPicked(true);}} style={{display:"flex",alignItems:"center",gap:12,textAlign:"right",padding:"14px 14px",borderRadius:14,border:(rec?"2.5px solid ":"1.5px solid ")+(rec?c:c+"55"),background:rec?c+"14":"#fff",cursor:"pointer",fontFamily:"inherit"}}>
+          <span style={{width:12,height:12,borderRadius:6,background:c,flexShrink:0}}/>
+          <span style={{flex:1}}><span style={{display:"block",fontSize:17,fontWeight:800,color:c}}>{t}</span><span style={{fontSize:13,color:"#475569"}}>{sub}</span></span>
+          {rec&&<span style={{fontSize:11,fontWeight:800,color:"#fff",background:c,borderRadius:20,padding:"3px 9px",whiteSpace:"nowrap"}}>⭐ {why||"מומלץ"}</span>}
+        </button>; })}
+      </div>
+    </Modal>; }
+  const TC=(DOC_TYPES[type]||{}).color||CLR.primary;
   return <Modal title={"🧾 "+(P.refund?"קבלה על החזר כספי ללקוח":type)+(official&&T.accounting?"":" (טיוטה)")} onClose={onClose} width={720}>
     {P.aiR&&<AiFillSummary r={P.aiR} kind="invoice"/>}
     {P.refund&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#991b1b",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:10}}>↩ <b>החזר כספי:</b> הסכום בקבלה הזו במינוס — הוא מתעד שהחזרת ללקוח כסף בעקבות {P.refText||"חשבונית הזיכוי"}. בחר איך החזרת (מזומן, העברה, ביט…) והקלד את הסכום עם מינוס.</div>}
@@ -10061,7 +10075,11 @@ function DocModal({type:initType="חשבונית מס/קבלה",customers=[],set
       hint='ספר: לאיזה לקוח, על מה וכמה, ואיך שילם. למשל "חשבונית ליוסי כהן על הדברת תיקנים 350 שקל, שילם במזומן".'
       placeholder={"למשל: חשבונית ליוסי כהן על הדברת תיקנים 350 שקל, שילם בביט"}
       chips={r=>[spChip("מסמך",r.docType),spChip("לקוח",r.customerName&&r.customerName+(r.customerId?" ✓":" (לקוח מזדמן)")),spChip("ח.פ",r.taxId),spChip("מע״מ",r.inclVat===false?"לפני מע״מ":""),...(r.lines||[]).map(l=>spChip("שורה",l.desc+" · "+(+l.qty>1?l.qty+" × ":"")+"₪"+l.price)),r.payment&&spChip("תשלום",r.payment.method+(r.payment.amount?" ₪"+r.payment.amount:"")+(r.payment.payments?" · "+r.payment.payments+" תשלומים":"")),spChip("תאריך",r.date&&fmtDate(r.date)),spChip("תנאים",r.payTerms),...(r.notes||[]).map(n=>spChip("📝",n))]}/>
-    {!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,background:TC+"14",border:"2px solid "+TC,borderRadius:12,padding:"10px 12px",marginBottom:10}}>
+      <span style={{fontSize:13,color:"#475569"}}>אתה מפיק:</span><b style={{fontSize:17,color:TC,flex:1}}>{P.refund?"קבלה על החזר כספי":type}</b>
+      {!P.lockType&&<button type="button" onClick={()=>setPicked(false)} style={{border:"1px solid "+TC,background:"#fff",color:TC,borderRadius:20,padding:"5px 12px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🔁 החלף סוג</button>}
+    </div>
+    {false&&!P.lockType&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
       {Object.keys(DOC_TYPES).filter(t=>t!=="חשבונית זיכוי"||P.refDocId).map(t=>{const on=t===type;return <button key={t} type="button" onClick={()=>setType(t)} style={{padding:"7px 12px",borderRadius:20,border:`1.5px solid ${on?DOC_TYPES[t].color:CLR.border}`,background:on?DOC_TYPES[t].color:"#fff",color:on?"#fff":"#334155",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{t}</button>;})}
     </div>}
     <div className="h360-hint" style={{fontSize:12,color:"#475569",background:"#f8fafc",borderRadius:8,padding:"8px 12px",marginBottom:8}}>💡 {T.help}</div>
@@ -10565,11 +10583,11 @@ function Invoices({finance,setFinance,customers,setCustomers,appointments,execLo
     <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:14,marginBottom:14}}>
       <div style={{fontWeight:800,fontSize:15,color:"#0f172a",marginBottom:10}}>מסמך חדש</div>
       {!mineOnly&&<PayReportsPanel customers={customers} onIssue={r=>setDocReq(payRepDocReq(r,customers))}/>}
-      <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false}})} style={{width:"100%",...(window.innerWidth>=900?{border:"none",background:"#1a5c3a",color:"#fff"}:{border:"2px solid #7dd3fc",background:"#e0f2fe",color:"#0c4a6e"}),borderRadius:12,padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
+      <button type="button" onClick={()=>setDocReq({type:"חשבונית מס/קבלה",prefill:{lockType:false,typeChosen:true}})} style={{width:"100%",...(window.innerWidth>=900?{border:"none",background:"#1a5c3a",color:"#fff"}:{border:"2px solid #7dd3fc",background:"#e0f2fe",color:"#0c4a6e"}),borderRadius:12,padding:"14px 16px",cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:10}}>
         <span style={{textAlign:"right"}}><span style={{display:"block",fontSize:17,fontWeight:800}}>+ חשבונית מס/קבלה</span><span className="h360-hint" style={{fontSize:12,color:window.innerWidth>=900?"#d1fae5":"#0369a1"}}>הלקוח שילם עכשיו — הכי נפוץ</span></span><span style={{fontSize:24}}>🧾</span>
       </button>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:8}}>
-        {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
+        {[["חשבונית מס","ישלם אחר כך"],["חשבון עסקה","בקשת תשלום, לא מסמך מס"],["קבלה","רק על תשלום"]].map(([t,sub])=><button key={t} type="button" onClick={()=>setDocReq({type:t,prefill:{lockType:false,typeChosen:true}})} style={{border:"1px solid "+DOC_TYPES[t].color+"55",background:DOC_TYPES[t].color+"0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:DOC_TYPES[t].color}}>+ {t}</span><span style={{fontSize:11,color:"#64748b"}}>{sub}</span></button>)}
         <button type="button" onClick={()=>setCredPick("")} style={{border:"1px solid #dc262655",background:"#dc26260d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#dc2626"}}>+ חשבונית זיכוי</span><span style={{fontSize:11,color:"#64748b"}}>ביטול / הנחה על חשבונית שהופקה</span></button>
         <button type="button" onClick={()=>setPayDoc({})} style={{border:"1px solid #16a34a55",background:"#16a34a0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#15803d"}}>💳 קישור לתשלום</span><span style={{fontSize:11,color:"#64748b"}}>הלקוח משלם ומעדכן פרטים לחשבונית</span></button>
         <button type="button" onClick={()=>setConsol({custKey:"",picked:new Set()})} style={{border:"1px solid #7c3aed55",background:"#7c3aed0d",borderRadius:10,padding:"10px 12px",cursor:"pointer",fontFamily:"inherit",textAlign:"right"}}><span style={{display:"block",fontWeight:800,fontSize:14,color:"#7c3aed"}}>+ חשבונית מרכזת</span><span style={{fontSize:11,color:"#64748b"}}>כמה ביקורים בחשבונית אחת</span></button>
@@ -14882,7 +14900,7 @@ function GcalSettings({workers,appointments,setAppointments,currentUser}){
   </div>;
 }
 
-const APP_BUILD = "267";
+const APP_BUILD = "268";
 // עדכון כפוי: מנקה את העותק השמור במכשיר ומוריד את הגרסה האחרונה (לא נוגע בנתונים)
 async function forceAppUpdate(){
   try{ showToast("⏳ מוריד גרסה אחרונה…"); }catch(e){}
